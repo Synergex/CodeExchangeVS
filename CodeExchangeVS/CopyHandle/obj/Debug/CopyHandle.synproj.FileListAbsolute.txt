@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\CopyHandle\bin\Debug\CopyHandle.exe
+C:\Development\CodeExchangeVS\CopyHandle\bin\Debug\CopyHandle.pdb
+C:\Development\CodeExchangeVS\CopyHandle\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\CopyHandle\obj\Debug\CopyHandle.exe
+C:\Development\CodeExchangeVS\CopyHandle\obj\Debug\CopyHandle.pdb

@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{BBD0F5D1-1CC4-42FD-BA4C-A96779C64378}") = "dtkproto", "dtkproto.synproj", "{F76E552F-F2CD-405A-964F-90C75A76D87A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F76E552F-F2CD-405A-964F-90C75A76D87A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F76E552F-F2CD-405A-964F-90C75A76D87A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F76E552F-F2CD-405A-964F-90C75A76D87A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F76E552F-F2CD-405A-964F-90C75A76D87A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

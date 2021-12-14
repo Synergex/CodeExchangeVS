@@ -1,0 +1,6 @@
+"C:\Development\CodeExchange\creditCard\CCutils.dbc"(279):         ;;; <param name="
+%DBL-W-XMLDOC, SynPSG.Core.Utilities.CreditCard.getCCname has a parameter tag for  but there is no parameter by that name
+"C:\Development\CodeExchange\creditCard\Encryption.dbc"(633):         ;;; <param name="
+%DBL-W-XMLDOC, SynPSG.Core.Utilities.Encryption.dbg_data_saltiv has a parameter tag for aSaltLEn but there is no parameter by that name
+Warnings:       2
+

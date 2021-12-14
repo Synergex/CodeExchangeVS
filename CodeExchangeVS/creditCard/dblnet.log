@@ -1,0 +1,7 @@
+"C:\Development\CodeExchange\creditCard\CCtest.dbl"(178):         l_select(lstid, req, ccData,,,,,,,,,,,,, Encryption)
+%DBL-E-NETSUPRT, Passing objects to ANY type not supported in .NET
+%DBL-E-NOASM, No assembly file created
+
+Errors:         1
+
+

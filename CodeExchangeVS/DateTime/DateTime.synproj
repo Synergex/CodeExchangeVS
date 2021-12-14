@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!--<Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>-->
+    <Name>"DateTime"</Name>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{37c5b952-1081-4869-9d5d-ae81dfeafe65}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DateTime</RootNamespace>
+    <AssemblyName>DateTime</AssemblyName>
+    <MainFile>Program.dbl</MainFile>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetPlatform>v4</TargetPlatform>
+    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
+    <DBL_qWarnLevel>3 - Don't display warnings levels higher than 3</DBL_qWarnLevel>
+    <DBL_qWarn>True</DBL_qWarn>
+    <DBLCmdOptions> -W3 -qstack</DBLCmdOptions>
+    <Language>Synergy</Language>
+    <DBL_unQulRecStm>Stack</DBL_unQulRecStm>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <IncludeDebugInformation>true</IncludeDebugInformation>
+    <OutputPath>bin\Debug\</OutputPath>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+    <DebugOptimize>Debug</DebugOptimize>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <IncludeDebugInformation>true</IncludeDebugInformation>
+    <OutputPath>bin\Release\</OutputPath>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="mscorlib" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="C:\Development\CodeExchange\DateTime\SynDatetime.dbc" />
+    <Compile Include="C:\Development\CodeExchange\DateTime\datetime_test.dbl" />
+    <Compile Include="C:\Development\CodeExchange\DateTime\StopMessage.dbl" />
+    <Compile Include="Properties\AssemblyInfo.dbl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="C:\Development\CodeExchange\DateTime" />
+    <Folder Include="Properties\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\Synergex\VS2010\Synergex.SynergyDE.targets" />
+</Project>

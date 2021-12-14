@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\BatchFileConversion\bin\Debug\BatchFileConversion.exe
+C:\Development\CodeExchangeVS\BatchFileConversion\bin\Debug\BatchFileConversion.pdb
+C:\Development\CodeExchangeVS\BatchFileConversion\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\BatchFileConversion\obj\Debug\BatchFileConversion.exe
+C:\Development\CodeExchangeVS\BatchFileConversion\obj\Debug\BatchFileConversion.pdb
