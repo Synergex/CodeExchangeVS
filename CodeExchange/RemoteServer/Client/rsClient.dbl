@@ -1,0 +1,766 @@
+;;***********************************************************************************
+;;
+;; Title:       rsClient.dbl
+;;
+;; Type:        Application
+;;
+;; Description:
+;;
+;; Author:      William Hawkins, Synergex Professional Services Group
+;;
+;; Copyright    © 2010 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+
+import SynPSG.System.Net
+import SynPSG.System.Net.Sockets
+
+namespace SynPSG.Utilities.RemoteServer
+
+.include 'DEF:RemoteServer.def'
+.include 'DBLDIR:synsock.def'
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+main rsClient
+
+.define MAX_ARGS    20
+
+.define M_LOGGING       %datetime+":rsClient:"
+
+external function
+    locase              ,a
+    loggerStart         ,int
+    loggerInfoMessage   ,^val
+endexternal
+
+record
+    nws             ,@SynPSG.System.Net.Sockets.NetworkStream   ;network stream
+    tcpClient       ,@SynPSG.System.Net.Sockets.TcpClient
+    tcpListener     ,@TcpListener
+    listenHost      ,string
+    listenPort      ,i4
+    sourceFile      ,string
+    childPort       ,i4
+    chTT            ,i4
+    offset          ,int
+    response        ,a10000
+    responseSize    ,int
+    request         ,string
+    connected       ,boolean
+    ok              ,boolean
+    shutdownServer  ,boolean
+    remoteOStype    ,int
+    remoteMap       ,a256
+    localMap        ,a256
+    mapping         ,a256
+    sts             ,int
+endrecord
+
+proc
+
+    ok = TRUE
+    call decodeCommandLine
+    if(ok == FALSE)
+        goto exitprog
+
+
+    begin
+        data logical    ,a20
+        data length     ,int
+
+        getlog('REMOTESERVERDBG', logical, length)
+        if(length > 0)
+        begin
+            ;;sts = loggerStart(logical(1:length), 'REMOTESERVERLOG:rs_client.log')
+            sts = loggerStart('1') ;force output to TT:
+        end
+    end
+
+    loggerInfoMessage(M_LOGGING+"Started")
+
+    try
+    begin
+        begin
+            data hostEntry      ,@IPHostEntry
+            data inAddr         ,int
+            data ipAddress      ,string
+            data ipAddrListItem ,@object
+            hostEntry = dns.GetHostEntry(listenHost)
+            foreach ipAddrListItem in hostEntry.AddressList
+            begin
+                ipAddress = (a)ipAddrListItem
+                if(%ss_inet_addr(ipAddress, inAddr) != SS_SUCCESS)
+                    clear inAddr
+                loggerInfoMessage(M_LOGGING+"Host "+%atrim(listenHost)+" inAddr="+%string(inAddr)+" DNS="+hostEntry.HostName+" "+ipAddress)
+            end
+        end
+
+        connected = FALSE
+        if(shutdownServer == FALSE)
+        begin
+            loggerInfoMessage(M_LOGGING+"connecting to server "+%atrim(listenHost)+":"+%string(listenPort))
+            tcpClient = new TcpClient(listenHost, listenPort)
+            nws = tcpClient.GetStream()
+            nws.ReadTimeout = 30000 ;wait for 30 seconds
+.ifdef DEBUG_MODE
+            nws.ReadTimeout = 2400000 ;wait for 20 minutes
+.endc ;DEBUG_MODE
+
+            request = D_RS_NEWCONNECT + D_LINE_TERMINATOR
+            offset = 0
+            loggerInfoMessage(M_LOGGING+"Send ["+request+"]")
+            nws.write(request, offset, request.Length)
+            connected = TRUE
+
+            offset = 0
+            responseSize = nws.read(response, offset, ^size(response))
+
+            if(responseSize > 0) then
+            begin
+                loggerInfoMessage(M_LOGGING+"Recv "+%string(responseSize)+" chars:"+response(1:responseSize)) ;already has line terminators
+
+                ;; close connection to RemoteServer
+                loggerInfoMessage(M_LOGGING+"disconnecting from server "+%atrim(listenHost)+":"+%string(listenPort))
+
+                using response select
+                (D_RS_CONNECTON),
+                begin
+                    ;decode response
+                    data pos    ,int
+                    data pos2   ,int
+                    data pos3   ,int
+
+                    ;; decode response
+                    pos = %instr(1, response, ':')
+                    if(!pos)
+                        exit
+                    pos2 = %instr(pos+1, response, ':')
+                    if(pos2 < pos+2)
+                        exit ;;no port
+
+                    sts = 0
+                    for pos3 from pos+1 thru pos-1
+                    begin
+                        using response(pos3:1) select
+                        ('0' thru '9'),
+                            nop
+                        (),
+                            sts = 1
+                        endusing
+                    end
+                    if(sts != 0)
+                        throw new Exception("Invalid Child Port")
+
+                    childPort = response(pos+1,pos2-1)
+                    pos = pos2
+                    pos2 = %instr(pos+1, response, ':')
+                    if(pos2 < pos+2) then
+                        remoteOStype = 0
+                    else
+                        remoteOStype = response(pos+1,pos2-1)
+
+                    if(childPort == 0)
+                        exit
+
+                    if(childPort < 1 || childPort > 65535)
+                        throw new Exception("Invalid Child Port")
+
+                    ;; disconnect from RemoteServer
+                    nws.close()
+                    clear nws
+                    clear tcpClient
+                    connected = FALSE
+
+                    ;; connect to rsProcess
+                    loggerInfoMessage(M_LOGGING+"connecting to "+%atrim(listenHost)+":"+%string(childPort))
+                    tcpClient = new TcpClient(listenHost, childPort)
+                    nws = tcpClient.GetStream()
+                    nws.ReadTimeout = 20000 ;wait for 20 seconds
+                    connected = TRUE
+
+                    request = D_RS_HELLO + D_LINE_TERMINATOR
+                    offset = 0
+                    loggerInfoMessage(M_LOGGING+"Send ["+request+"]")
+                    nws.write(request, offset, request.Length)
+                    connected = TRUE
+
+                    offset = 0
+                    responseSize = nws.read(response, offset, ^size(response))
+
+                    if(response == D_RS_RESPOND_HELLO) then
+                    begin
+                        if(sourceFile != ^null && sourceFile.Length>0)
+                            response = workbench(sourceFile, nws, %atrim(localMap), %atrim(remoteMap), remoteOStype)
+                    end
+                    else
+                    begin
+                        if(responseSize > 0) then
+                            loggerInfoMessage(M_LOGGING+"Unexpected response from rsProcess []")
+                        else
+                            loggerInfoMessage(M_LOGGING+"Unexpected response from rsProcess ["+response(1:responseSize)+"]")
+                    end
+                end
+                (D_RS_RESPOND_HELLO),
+                begin ;;will only get here, if talking directly to rsProcess
+                    if(sourceFile != ^null && sourceFile.Length>0)
+                        response = workbench(sourceFile, nws, %atrim(localMap), %atrim(remoteMap), remoteOStype)
+                end
+                (),
+                begin
+                    ;; unknown response
+                    loggerInfoMessage(M_LOGGING+"Unknown response from server "+response)
+                end
+                endusing
+            end
+            else
+                loggerInfoMessage(M_LOGGING+"Recv : nothing")
+        end
+    end
+    catch (e)
+        loggerInfoMessage(M_LOGGING+"caught error "+e.Message+" "+e.StackTrace)
+    finally
+    begin
+        if(connected == TRUE)
+        begin
+            request = D_RS_SHUTDOWN + D_LINE_TERMINATOR
+            offset = 0
+            loggerInfoMessage(M_LOGGING+"Send ["+request+"]")
+            nws.write(request, offset, request.Length)
+
+            loggerInfoMessage(M_LOGGING+"disconnecting from "+%atrim(listenHost)+":"+%string(childPort))
+            nws.close()
+            clear nws
+        end
+
+        if(shutdownServer == TRUE)
+        begin
+            loggerInfoMessage(M_LOGGING+"connecting to server "+%atrim(listenHost)+":"+%string(listenPort))
+            tcpClient = new TcpClient(listenHost, listenPort)
+            nws = tcpClient.GetStream()
+            nws.ReadTimeout = 20000 ;;wait for 20 seconds
+
+            request = D_RS_SHUTDOWN + D_LINE_TERMINATOR
+            offset = 0
+            loggerInfoMessage(M_LOGGING+"Send ["+request+"]")
+            nws.write(request, offset, request.Length)
+
+            loggerInfoMessage(M_LOGGING+"disconnecting from server "+%atrim(listenHost)+":"+%string(listenPort))
+            nws.close()
+            clear nws
+            clear tcpClient
+        end
+    end
+    endtry
+
+exitprog,
+    if(chTT)
+    begin
+.ifdef D_GUI
+        try
+        begin
+            accept(chTT, offset, done, WAIT:10)
+        end
+        catch (e)
+            nop
+        endtry
+done,
+.endc ;D_GUI
+        close chTT
+        clear chTT
+    end
+    xcall flags(7000000, 1)
+    stop D_EXIT_SUCCESS
+
+;----------------------------------------------------------------------------
+
+decodeCommandLine,
+    try
+    begin
+        data cmdlin          ,a1024
+        data pos             ,int
+        data num_args        ,int
+        data arg_pos         ,[MAX_ARGS]i4
+        data arg_len         ,[MAX_ARGS]i4
+        cmdln(cmdlin, num_args, arg_pos, arg_len)
+        clear pos
+        while(pos < num_args)
+        begin
+            pos += 1
+            using %locase(cmdlin(arg_pos[pos]:arg_len[pos])) select
+            ('-f '),
+            begin
+                pos += 1
+                if(pos>MAX_ARGS || arg_pos[pos]<1 || arg_len[pos]<1)
+                    throw new applicationException("Missing -f parameter")
+                sourceFile = cmdlin(arg_pos[pos]:arg_len[pos])
+            end
+            ('-s '),
+            begin
+                pos += 1
+                if(pos>MAX_ARGS || arg_pos[pos]<1 || arg_len[pos]<1)
+                    throw new applicationException("Missing -s parameter")
+                listenHost = cmdlin(arg_pos[pos]:arg_len[pos])
+            end
+            ('-p '),
+            begin
+                pos += 1
+                if(pos>MAX_ARGS || arg_pos[pos]<1 || arg_len[pos]<1)
+                    throw new applicationException("Missing -p parameter")
+                listenPort = ^d(cmdlin(arg_pos[pos]:arg_len[pos]))
+                if(listenPort < 1 || listenPort > 65535)
+                    throw new applicationException("Invalid -p parameter")
+            end
+            ('-m '),
+            begin
+                data pos2 ,int
+                pos += 1
+                if(pos>MAX_ARGS || arg_pos[pos]<1 || arg_len[pos]<1)
+                    throw new applicationException("Missing -m parameter")
+                mapping = cmdlin(arg_pos[pos]:arg_len[pos])
+                if(!(pos2=%instr(1, mapping, '+')))
+                    throw new applicationException("Invalid -m parameter")
+                try
+                begin
+                    localMap = mapping(1:pos2-1)
+                    remoteMap = mapping(pos2+1,^size(mapping))
+                end
+                catch (e)
+                    throw new applicationException("Invalid -m parameter")
+                endtry
+            end
+            ('-shutdown '),
+                shutdownServer = TRUE
+            ('-h ','-? '),
+            begin
+                rs_help(chTT)
+                ok = FALSE
+            end
+            endusing
+        end
+
+        if(ok == TRUE)
+        begin
+.ifdef DEBUG_MODE
+            if(shutdownServer == FALSE && (sourceFile == ^null || sourceFile.Length<1))
+            begin
+                getlog('REMOTESERVERFILE', cmdlin, pos)
+                if(pos>0) then
+                begin
+                    if(%locase(cmdlin(1:pos)) == 'shutdown') then
+                        shutdownServer = TRUE
+                    else
+                        sourceFile = cmdlin(1:pos)
+                end
+                else
+                    throw new applicationException("Missing -f parameter")
+            end
+.else ;DEBUG_MODE
+            if(shutdownServer == FALSE && (sourceFile == ^null || sourceFile.Length<1))
+                throw new applicationException("Missing -f parameter")
+.endc ;DEBUG_MODE
+            if(listenhost == ^null || listenHost.Length<1)
+            begin
+                getlog('REMOTESERVERHOST', cmdlin, pos)
+                if(pos>0) then
+                    listenHost = cmdlin(1:pos)
+                else
+                    throw new applicationException("Missing -s parameter")
+            end
+            if(listenPort < 1)
+            begin
+                getlog('REMOTESERVERPORT', cmdlin, pos)
+                if(pos>0) then
+                    listenPort = ^d(cmdlin(1:pos))
+                else
+                    throw new applicationException("Missing -p parameter")
+            end
+            if(!LocalMap || !remoteMap)
+            begin
+                getlog('REMOTESERVERMAPPING', mapping, pos)
+                if(pos>0)
+                begin
+                    data pos2 ,int
+                    if(!(pos2=%instr(1, mapping, '+')))
+                        throw new applicationException("Invalid REMOTESERVERMAPPING logical")
+                    try
+                    begin
+                        localMap = mapping(1:pos2-1)
+                        remoteMap = mapping(pos2+1,^size(mapping))
+                    end
+                    catch (e)
+                        throw new applicationException("Invalid REMOTESERVERMAPPING logical")
+                    endtry
+
+                end
+            end
+        end
+    end
+    catch (e)
+    begin
+        if(!chTT)
+            open(chTT=%syn_freechn(), O, 'TT:')
+        writes(chTT, "")
+        writes(chTT, e.Message)
+        rs_help(chTT)
+        ok = FALSE
+    end
+    endtry
+
+    return
+
+endmain
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine rs_help
+    req inout   chTT    ,int
+    endparams
+proc
+
+    if(!chTT)
+        open(chTT=%syn_freechn(), O, 'TT:')
+    writes(chTT, "")
+    writes(chTT, "dbr rsClient -f <filename> [-s <server>] [-p <port>] [-m <local>+<remote>] [-shutdown]")
+    writes(chTT, "")
+    writes(chTT, "if -s is not passed, REMOTESERVERHOST: is used")
+    writes(chTT, "if -p is not passed, REMOTESERVERPORT: is used")
+    writes(chTT, "if -m is not passed, REMOTESERVERMAPPING: is used")
+    writes(chTT, "")
+    writes(chTT, " -m <local>+<remote>  e.g.  +m S:\+/usr/myapp/src/")
+    writes(chTT, "     note both <local> and <remote> must have trailing directory delimiters")
+    writes(chTT, "")
+    writes(chTT, "if -shutdown is passed, the remote server will be told to shutdown")
+    writes(chTT, "")
+
+    return
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Workbench would logically stay in this routine, until a disconnect is requested
+
+function workbench ,string
+    req in  sourceFile  ,a
+    req in  nws         ,@SynPSG.System.Net.Sockets.NetworkStream
+    req in  localMap    ,a
+    req in  remoteMap   ,a
+    req in  remoteOStype,int
+    endparams
+record
+    request             ,string
+endrecord
+proc
+
+    ;; send command(s)
+    request = D_RS_COMPILE+' '+%windows2remote(sourceFile, localMap, remoteMap, remoteOStype)+D_LINE_TERMINATOR
+    freturn %processRequest(request, nws, localMap, remoteMap, remoteOStype)
+
+end
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function processRequest ,string
+    req in      request     ,string
+    req in      nws         ,@SynPSG.System.Net.Sockets.NetworkStream
+    req in      localMap    ,a
+    req in      remoteMap   ,a
+    req in      remoteOStype,int
+    endparams
+external function
+    loggerInfoMessage   ,^val
+    translateResponse   ,a
+endexternal
+record
+    offset              ,int
+    response            ,a10000
+    responseSize        ,int
+    chOutput            ,int
+endrecord
+proc
+    offset = 0
+    loggerInfoMessage(M_LOGGING+"processRequest Send ["+request+"]")
+    nws.write(request, offset, request.Length)
+
+    clear response, offset
+    responseSize = nws.read(response, offset, ^size(response))
+    if(responseSize == 0)
+    begin
+        loggerInfoMessage(M_LOGGING+"Recv : nothing")
+        freturn ''
+    end
+    if(response(responseSize-1:^size(D_LINE_TERMINATOR)) == D_LINE_TERMINATOR)
+        responseSize -= ^size(D_LINE_TERMINATOR) ;ignore trailing line terminators
+    loggerInfoMessage(M_LOGGING+"Recv "+%string(responseSize)+" chars ["+response(1:responseSize)+"]")
+    response = %translateResponse(response(1:responseSize),%atrim(localMap),%atrim(remoteMap),remoteOStype)
+    responseSize = %trim(response)
+
+    open(chOutput=%syn_freechn(), O, 'TT:')
+    writes(chOutput, response(1:responseSize))
+    close chOutput
+
+    freturn response(1:responseSize)
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function translateResponse ,a
+    req in  aResponse       ,a
+    req in  localMap        ,a
+    req in  remoteMap       ,a
+    req in  remoteOStype    ,int
+    endparams
+
+external function
+    isNumeric           ,boolean
+endexternal
+
+record
+    response            ,string
+    pipeResponse        ,string
+    spos                ,int
+    epos                ,int
+    requestSize         ,int
+endrecord
+proc
+
+    requestSize = %trimz(aResponse)
+    response = ''
+
+    spos = 1
+    while(spos < requestSize)
+    begin
+        epos = %instr(spos, aResponse, D_LINE_TERMINATOR)
+        if(!epos)
+            epos = requestSize
+
+        pipeResponse = aResponse(spos,epos)
+
+        using pipeResponse select
+        ('"'),
+        begin
+            ;;look for: "<filename>"(<line#>):
+            data endQuotePos    ,int
+            data bepos          ,int
+
+            endQuotePos = %instr(2, aResponse(spos,epos), '"(')
+            if(!endQuotePos)
+                exit
+
+            ;;check for line number (to make sure it's really a SLKRUNS output string
+            bepos = %instr(endQuotePos+2, aResponse(spos,epos), '):')
+            if(!bepos)
+                exit
+            ;; check for line number
+            if(%isNumeric(aResponse(endQuotePos+2, bepos-1)) == FALSE)
+                exit
+
+            pipeResponse = '"' + %remote2windows(aResponse(2, endQuotePos), localMap, remoteMap, remoteOStype)
+            &               + pipeResponse(endQuotePos,pipeResponse.Length)
+        end
+        endusing
+
+        if(pipeResponse != ^null && pipeResponse.Length)
+        begin
+            response = response + pipeResponse
+        end
+
+        spos = epos + ^size(D_LINE_TERMINATOR)
+    end
+
+    freturn response
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function isNumeric ,boolean
+    req in  aText   ,a
+    endparams
+record
+    fstatus         ,boolean
+    ctr             ,int
+endrecord
+proc
+    fstatus = TRUE
+    while(fstatus == TRUE && ctr < ^size(aText))
+    begin
+        ctr += 1
+        if(aText(ctr:1) < '0' || aText(ctr:1) > '9')
+            fstatus = FALSE
+    end
+    freturn fstatus
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; remote filename to windows filename
+function remote2windows ,string
+    req in  aFilename       ,a
+    req in  localMap        ,a          ;Windows mapping (no trailing spaces)
+    req in  remoteMap       ,a          ;remote mapping (no trailing spaces)
+    req in  remoteOStype    ,int        ;remote OS
+    endparams
+
+record
+    fpos                ,int
+    pos                 ,int
+    filename            ,string
+endrecord
+proc
+
+    filename = aFilename
+
+    if(remoteOStype && remoteMap && localMap && filename.Length > ^size(remoteMap))
+    begin
+        ;rooted directory?
+        if(remoteMap(%trim(remoteMap)-1:2) == '.]') then
+        begin
+            if(filename == remoteMap(1, %trim(remoteMap)-2))
+                filename = localMap + filename(^size(remoteMap)+1, filename.Length)
+        end
+        else
+        begin
+            if(filename == remoteMap)
+                filename = localMap + filename(^size(remoteMap)+1, filename.Length)
+        end
+
+        using remoteOStype select
+        (D_RS_OpenVMS),
+        begin
+            pos = 1
+            while(pos <= fpos)
+            begin
+                using filename(pos:1) select
+                ('[', '.', ']'),
+                begin
+                    filename = filename(1:pos-1) + '\' + filename(pos+1, filename.Length)
+                end
+                endusing
+            end
+        end
+        (D_RS_UNIX),
+        begin
+            pos = %instr(1, filename, '/')
+            while(pos && pos < fpos)
+            begin
+                using pos select
+                (1),
+                    filename = '\' + filename(pos+1, filename.Length)
+                (filename.Length),
+                    filename = filename(1:pos-1) + '\'
+                (),
+                    filename = filename(1:pos-1) + '\' + filename(pos+1, filename.Length)
+                endusing
+                pos = %instr(1, filename, '/')
+            end
+        end
+        endusing
+    end
+
+    freturn filename
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; windows filename to remote filename
+
+function windows2remote ,string
+    req in  aFilename       ,a
+    req in  localMap        ,a          ;Windows mapping (no trailing spaces)
+    req in  remoteMap       ,a          ;remote mapping (no trailing spaces)
+    req in  remoteOStype    ,int        ;remote OS
+    endparams
+
+record
+    fpos                ,int
+    pos                 ,int
+    firstPos            ,int
+    lastPos             ,int
+    filename            ,string
+endrecord
+proc
+
+    filename = aFilename
+
+    if(remoteOStype && localMap && remoteMap && filename.Length > ^size(localMap))
+    begin
+        ;rooted directory?
+        if(remoteMap(%trim(remoteMap)-1:2) == '.]') then
+        begin
+            if(filename(1:^size(localMap)) ==  localMap)
+                filename = remoteMap(1, %trim(remoteMap)-2) + ']' + filename(^size(localMap)+1, filename.Length)
+        end
+        else
+        begin
+            if(filename(1:^size(localMap)) == localMap)
+                filename = remoteMap + filename(^size(localMap)+1, filename.Length)
+        end
+
+        using remoteOStype select
+        (D_RS_OpenVMS),
+        begin
+            pos = 1
+            while(pos <= fpos)
+            begin
+                using filename(pos:1) select
+                ('\'),
+                begin
+                    if(!firstPos) then
+                    begin
+                        firstPos = pos
+                        filename = filename(1:pos-1) + '[' + filename(pos+1, filename.Length)
+                    end
+                    else
+                        filename = filename(1:pos-1) + '.' + filename(pos+1, filename.Length)
+                    lastPos = pos
+                end
+                endusing
+            end
+            if(lastPos > 1 && lastPos < filename.Length)
+                filename = filename(1:lastPos-1) + ']' + filename(lastPos+1, filename.Length)
+        end
+        (D_RS_UNIX),
+        begin
+            pos = %instr(1, filename, '\')
+            while(pos && pos < fpos)
+            begin
+                using pos select
+                (1),
+                    filename = '\' + filename(pos+1, filename.Length)
+                (filename.Length),
+                    filename = filename(1:pos-1) + '/'
+                (),
+                    filename = filename(1:pos-1) + '/' + filename(pos+1, filename.Length)
+                endusing
+                pos = %instr(1, filename, '\')
+            end
+        end
+        endusing
+    end
+
+    freturn filename
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+endnamespace
+

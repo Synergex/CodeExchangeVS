@@ -1,0 +1,1200 @@
+;======================================================================
+;
+;           Copyright 2000 by Synergex, International
+;
+;   Synergex provides this software under a license and may only be
+;     used in accordance with the terms and conditions of such
+;    license and with the inclusion of the above Copyright notice.
+;======================================================================
+; Module:       rpschk
+;
+; Facility:     DBL ISAM v Synergy/DE Repository comparison routine
+;
+; Description:  Routine to compare the physical characteristics of an
+;               isam file with those stored in the Repository
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:33-07:00 $
+;
+; 1.0.1  24-Aug-99  WJH  Initial Version
+; 1.0.2  12-Oct-99  WJH  Improved comments, added -t option and now
+;                         releases memory if an error condition occurs
+; 1.0.3  01-Dec-99  WJH  Changed -t option to -f
+; 1.0.4  10-Mar-00  WJH  Added support for all file level features
+; 1.0.5  03-May-00  WJH  Added support for segment type/order when merging
+; 1.0.6  12-Jul-00  WJH  Added checks for default page_size / file_density
+; 1.0.7  17-Oct-00  WJH  Added structure name to log file
+; 1.0.8  23-Oct-00  WJH  Removed Create option in mainline program
+;
+;
+; Requires Synergy/DE 7.0.1 (or later)
+;
+;
+; Assumptions:
+;
+;  The at least one structure assigned to a file must have key definitions.
+;
+;  Only DBL ISAM files/structures with key definitions are checked.
+;
+;  If the file does not exist and the structure is not marked as temporary,
+;   an error will be generated
+;
+;  Only access keys are checked
+;
+;  If the number of key segments do not match, there will be more key
+;   segments in the repository than ISAM, and an attempt will be made
+;   to make the repository segment details match the isam details
+;
+;  Repository key fields are not part of a group (they can be a group)
+;
+;  If the first segment in a key is not the entire key,
+;   the key is of type : alpha
+;
+;  If the first field in a segment is not the entire segment,
+;   the segment is of type : alpha
+;
+;  Key names are only checked if the key is named in the ISAM file.
+;
+;
+; Logicals used
+;
+; RPSCHK_LOGFILE        Name of error log file
+;
+;======================================================================
+
+.function rpschk ,^VAL
+
+    a_dcs                   ,a              ;ddlib control block
+    a_filename              ,a              ;repository file name
+    a_logfile               ,a              ;log filename
+
+; Function return value :
+;
+;        0  No differences
+;        1      File differences
+;       -1      File could not be compared
+;
+;======================================================================
+
+.include 'RPSLIB:ddinfo.def'
+.include 'DBLDIR:apmisc.def'
+
+.define D_C_ISM                 1               ;array pointer for isam
+.define D_C_RPS                 2               ;array pointer for rps
+
+.define D_ER_DIFFERENCES        1
+.define D_ER_NOCOMPARE          -1
+
+.define D_NOT_USED              -9              ;parameter not used
+
+.define D_RPS_DBL_ISAM          "DBL ISAM"
+
+.define D_ERR_NO_DD_FILE        "Could not read RPS (DD_FILE)"
+.define D_ERR_NO_ASS_STRUCTS    "No structures assigned to file"
+.define D_ERR_NOT_DBL_ISAM      "Not '" + D_RPS_DBL_ISAM +"'"
+.define D_ERR_NO_DD_STRUCT      "Could not read RPS (DD_STRUCT)"
+.define D_ERR_NOT_STR_ISAM      "Structure not '" + D_RPS_DBL_ISAM +"'"
+.define D_ERR_NO_KEYS           "No Keys"
+.define D_ERR_OPEN_ERROR        "Cannot open ISAM file [%a]"
+
+.define D_ERR_REC_LEN   "Record Length  ISAM:%a RPS:%a"
+.define D_ERR_KEY_NUM   "Number of Keys ISAM:%a RPS:%a"
+.define D_ERR_FIL_DEN   "File Density   ISAM:%a RPS:%a"
+.define D_ERR_FIL_TYP   "File Type      ISAM:%a RPS:%a"
+.define D_ERR_FIL_PAG   "Page Size      ISAM:%a RPS:%a"
+.define D_ERR_FIL_ADD   "Addressing     ISAM:%a RPS:%a"
+.define D_ERR_FIL_COM   "Compression    ISAM:%a RPS:%a"
+.define D_ERR_FIL_RFA   "Static RFAs    ISAM:%a RPS:%a"
+.define D_ERR_FIL_INT   "Portable Int's ISAM:%a RPS:%a"
+
+.define D_ERR_KEY_LIST  "RPS error getting list of keys"
+
+.define D_ERR_KEY_MULDEF "Key %a, [%a] Multiply defined in RPS [%a]"
+.define D_ERR_KEY_NOTDEF "Key %a, Not defined in RPS"
+.define D_ERR_KEY_RPSDEF "Key %a, Defined in RPS, but not in ISAM"
+.define D_ERR_KEY_NOSEG "Key %a, No segments to compare"
+.define D_ERR_KEY_LEN   "Key %a, Length             ISAM:%a RPS:%a"
+.define D_ERR_KEY_POS   "Key %a, Position           ISAM:%a RPS:%a"
+.define D_ERR_KEY_TYP   "Key %a, Type               ISAM:%a RPS:%a"
+.define D_ERR_KEY_MOD   "Key %a, Modifiable         ISAM:%a RPS:%a"
+.define D_ERR_KEY_ASC   "Key %a, Ascending          ISAM:%a RPS:%a"
+.define D_ERR_KEY_DUP   "Key %a, Duplicates allowed ISAM:%a RPS:%a"
+.define D_ERR_KEY_ATE   "Key %a, Duplicates at end  ISAM:%a RPS:%a"
+.define D_ERR_KEY_NUL   "Key %a, Null status        ISAM:%a RPS:%a"
+.define D_ERR_KEY_NUV   "Key %a, Null value         ISAM:%a RPS:%a"
+.define D_ERR_KEY_NAM   "Key %a, Name               ISAM:%a RPS:%a"
+.define D_ERR_KEY_DEN   "Key %a, Density            ISAM:%a RPS:%a"
+.define D_ERR_SEG_NUM   "Key %a, Number of segments ISAM:%a RPS:%a"
+
+.define D_ERR_SEG_LEN   "Key %a, Segment %a Length    ISAM:%a RPS:%a"
+.define D_ERR_SEG_POS   "Key %a, Segment %a Position  ISAM:%a RPS:%a"
+.define D_ERR_SEG_TYP   "Key %a, Segment %a Type      ISAM:%a RPS:%a"
+.define D_ERR_SEG_ASC   "Key %a, Segment %a Ascending ISAM:%a RPS:%a"
+
+.define D_TXT_FILE      "File:"
+.define D_TXT_STRUCTURE "Structure:"
+.define D_TXT_KEY       "Key:"
+.define D_TXT_FIELD     "Field:"
+.define D_TXT_KEY_FIELD "Key field:"
+
+    literal
+        key_null_type   ,4a11   ,"NONE       "
+&           ,"REPLICATE  "
+&           ,"NOREPLICATE"
+&           ,"SHORT      "
+
+.align
+    record clr_i
+        status                  ,i4             ;freturn status
+        stat                    ,i4             ;dummy status
+        chan                    ,i4             ;channel
+        num_keys                ,i4             ;number of keys to compare
+        num_segs                ,i4             ;number of segments to compare
+        key_ctr                 ,i4             ;key counter
+        seg_ctr                 ,i4             ;segment counter
+        rps_seg_ctr             ,i4             ;segment counter
+        k_hdl                   ,D_HANDLE       ;memory handle for list of rps key names
+        ks_hdl                  ,D_HANDLE       ;memory handle for list of access rps key names
+        str_hdl                 ,D_HANDLE       ;memory handle for list of structures
+        str_ctr                 ,i4             ;structure counter
+
+        rev_typ                 ,i4             ;ISAM revision type
+        num_recs                ,i8             ;number of records in ISAM file
+
+        rec_len                 ,2i4            ;record length
+        key_num                 ,2i4            ;number of keys
+        key_hdl                 ,2 D_HANDLE     ;memory handle of key array
+
+        fil_den                 ,2i4            ;file density
+        fil_typ                 ,2i4            ;record tyep (variable, fixed, multi)
+        fil_pag                 ,2i4            ;pagesize
+        fil_add                 ,2i4            ;addressing
+        fil_com                 ,2i4            ;compressed
+        fil_rfa                 ,2i4            ;static rfa
+        fil_int                 ,2a120          ;portable integer string
+
+.align
+    record clr
+        struct_name             ,a30            ;structure name
+        file_string             ,a512           ;file options string
+
+    structure key_dets
+        key_len                 ,i4             ;is key modifiable
+        key_asc                 ,i4             ;is key ascending
+        key_dup                 ,i4             ;are duplicate keys allowed
+        key_ate                 ,i4             ;are duplicates at end
+        key_nul                 ,a10            ;null key status
+        key_nuv                 ,a10            ;null key value
+        key_nam                 ,a30            ;key name
+        key_den                 ,i4             ;key density
+        seg_num                 ,i4             ;number of key segments
+        seg_hdl                 ,i4             ;key length
+        key_pos                 ,i4             ;key position
+        key_typ                 ,a1             ;key type
+        key_mod                 ,i4             ;memory handle of segment array
+
+    structure seg_dets
+        seg_len                 ,i4             ;segment length
+        seg_pos                 ,i4             ;segment position
+        seg_typ                 ,a1             ;segment type
+        seg_asc                 ,i4             ;is key ascending
+
+    structure key_names
+        key_name                ,a30            ;key name
+
+    structure strct_names
+        strct_name              ,a30            ;structure name
+
+
+.define KEY(flg,keynum,fld)  ^m(key_dets[`keynum`].`fld`,key_hdl(`flg`))
+
+.define SEG(flg,keynum,segnum,fld)  ^m(seg_dets[`segnum`].`fld`,^m(key_dets[`keynum`].seg_hdl, key_hdl(`flg`)))
+
+.define COMP(fld)  if(`fld`(D_C_ISM).ne.`fld`(D_C_RPS)) status=%rpschk_log(a_logfile,a_filename,struct_name,D_ERR_`fld`,`fld`(D_C_ISM),`fld`(D_C_RPS))
+
+.define CMP_KEY(fld)  KEY(D_C_ISM,key_ctr,`fld`).ne.KEY(D_C_RPS,key_ctr,`fld`)
+
+.define CMP_SEG(fld)  SEG(D_C_ISM,key_ctr,seg_ctr,`fld`).ne.SEG(D_C_RPS,key_ctr,seg_ctr,`fld`)
+
+.define COMP_KEY(fld)  if(CMP_KEY(`fld`)) status=%rpschk_log(a_logfile,a_filename,struct_name,D_ERR_`fld`,key_ctr-1,KEY(D_C_ISM,key_ctr,`fld`),KEY(D_C_RPS,key_ctr,`fld`))
+
+.define COMP_SEG(fld)  if(CMP_SEG(`fld`)) status=%rpschk_log(a_logfile,a_filename,struct_name,D_ERR_`fld`,key_ctr-1,seg_ctr,SEG(D_C_ISM,key_ctr,seg_ctr,`fld`),SEG(D_C_RPS,key_ctr,seg_ctr,`fld`))
+
+    external function
+        rpschk_log      ,^val
+        order_is_same   ,^val
+        type_is_same    ,^val
+
+.proc
+
+    clear ^i(clr_i)
+
+    dcs = a_dcs
+
+    ; get file details from repository
+    xcall dd_file(dcs, DDL_INFO, a_filename, fl_info)
+
+    ; file error
+    if(error)
+        freturn -%rpschk_log(a_logfile, a_filename,, D_ERR_NO_DD_FILE)
+
+    ; no assigned structures
+    if(.not.fli_nmstructs.or..not.fli_struct)
+        freturn -%rpschk_log(a_logfile, a_filename,, D_ERR_NO_ASS_STRUCTS)
+
+    ; file is not DBL ISAM file
+    if(fli_filtyp.ne.D_RPS_DBL_ISAM)
+        freturn -%rpschk_log(a_logfile, a_filename,, D_ERR_NOT_DBL_ISAM)
+
+    ; only one structure associated with file
+    if(fli_nmstructs.eq.1) then
+    begin
+        struct_name = fli_struct
+        call check_structure
+    end
+    else
+    begin
+        status = D_ER_NOCOMPARE
+
+        onerror nomem0
+        str_hdl = %mem_proc(DM_ALLOC+DM_STATIC, fli_nmstructs*^size(strct_names))
+        offerror
+
+        ; get list of structures
+        xcall dd_file(dcs, DDL_STRS, fli_nmstructs, ^m(strct_names, str_hdl))
+        if(error)
+        begin
+            xcall rpschk_err(error, "List of structures error")
+            clear fli_nmstructs
+        end
+
+        ; check at least one structure has keys
+        clear key_ctr
+        for str_ctr from 1 thru fli_nmstructs
+        begin
+            struct_name = ^m(strct_names[str_ctr], str_hdl)
+            xcall dd_struct(dcs, DDS_INFO, struct_name, s_info)
+            if(error)
+            begin
+                xcall rpschk_err(error, D_TXT_STRUCTURE + %atrim(struct_name))
+                clear si_nmkeys
+            end
+            if(si_nmkeys)
+                key_ctr += 1
+        end
+
+        if(key_ctr) then
+        begin
+            for str_ctr from 1 thru fli_nmstructs
+            begin
+                struct_name = ^m(strct_names[str_ctr], str_hdl)
+                call check_structure
+            end
+        end
+        else
+            status = -%rpschk_log(a_logfile, a_filename,, D_ERR_NO_KEYS)
+
+        str_hdl = %mem_proc(DM_FREE, str_hdl)
+nomem0,
+        offerror
+    end
+
+    freturn status
+
+;--------------------------------------------------------------------
+; process structure
+
+check_structure,
+
+    ; get structure details from repository
+    xcall dd_struct(dcs, DDS_INFO, struct_name, s_info)
+
+    ; structure error
+    if(error)
+    begin
+        status = -%rpschk_log(a_logfile, a_filename, struct_name, D_ERR_NO_DD_STRUCT)
+        return
+    end
+
+    ; no keys
+    if(.not.si_nmkeys)
+    begin
+        ; only got one structure - so it must have keys
+        if(fli_nmstructs.eq.1)
+            status = -%rpschk_log(a_logfile, a_filename, struct_name, D_ERR_NO_KEYS)
+        return
+    end
+
+    ; not DBL ISAM structure
+    if(si_filtyp.ne.D_RPS_DBL_ISAM)
+    begin
+        status = -%rpschk_log(a_logfile, a_filename, struct_name, D_ERR_NOT_STR_ISAM)
+        return
+    end
+
+    ; open isam file
+    call open_fli_fname
+
+    if(.not.status)
+    begin
+
+        ; create key name array for access keys
+        status = D_ER_NOCOMPARE
+        onerror nomem1
+        k_hdl = %mem_proc(DM_ALLOC+DM_STATIC, si_nmkeys*^size(key_names))
+        offerror
+
+        clear status
+
+        ; load key names array with access keys
+        ; also adjusts si_nmkeys to match access key count
+        call load_key_names
+
+        if(.not.status)
+        begin
+            call get_file_details
+            if(.not.status) 
+                call get_key_details
+        end
+
+        ; release memory for key list
+        k_hdl = %mem_proc(DM_FREE, k_hdl)
+
+nomem1,
+        offerror
+
+        ; close isam file
+        xcall u_close(chan)
+    end
+
+    return
+
+;--------------------------------------------------------------------
+; process file
+
+get_file_details,
+
+    ; set record information from isam file
+    rev_typ = %isinfo(chan, 'REVISION')
+    num_recs = %isinfo(chan, 'NUMRECS')
+
+    rec_len(D_C_ISM) = %isinfo(chan, 'SIZE')
+    key_num(D_C_ISM) = %isinfo(chan, 'NUMKEYS')
+    fil_den(D_C_ISM) = %isinfo(chan, 'KEYDENSITY')
+
+    file_string = %isinfo(chan, 'FOPTS')
+
+    if(%instr(1, file_string, 'VARIABLE'))
+        fil_typ(D_C_ISM) = FLI_VAR
+    if(%instr(1, file_string, 'MULTIPLE'))
+        fil_typ(D_C_ISM) = FLI_MULT
+    if(%instr(1, file_string, 'FIXED'))
+        fil_typ(D_C_ISM) = FLI_FIXED
+
+    fil_int(D_C_ISM) = 1024
+    if(stat=%instr(1, file_string, 'PAGE='))
+    begin
+        onerror not_num_ps
+        fil_int(D_C_ISM) = file_string(stat+5:4)
+not_num_ps,
+        offerror
+    end
+
+    if(%instr(1, file_string, 'TBYTE')) then
+        fil_add(D_C_ISM) = FLI_40BIT
+    else
+        fil_add(D_C_ISM) = FLI_32BIT
+
+    fil_com(D_C_ISM) = (%instr(1, file_string, 'FIXED').ne.0)
+    fil_rfa(D_C_ISM) = (%instr(1, file_string, 'STATIC_RFA').ne.0)
+    fil_int(D_C_ISM) =
+
+
+    ; get file specifications
+    xcall dd_filespec(dcs, a_filename, struct_name, fls_info, k_info)
+    ; filespec error
+    if(error) then
+    begin
+        ; set structure information from repository (use FL_INFO)
+        rec_len(D_C_RPS) = si_recsz
+        key_num(D_C_RPS) = si_nmkeys
+        fil_den(D_C_RPS) = fli_density
+        fil_typ(D_C_RPS) = fli_rectyp
+        using fli_pagesize select
+        (FLI_PS1024),
+            fil_pag(D_C_RPS) = 1024
+        (FLI_PS512),
+            fil_pag(D_C_RPS) = 512
+        (FLI_PS2048),
+            fil_pag(D_C_RPS) = 2048
+        (FLI_PS4096),
+            fil_pag(D_C_RPS) = 4096
+        (FLI_PS8192),
+            fil_pag(D_C_RPS) = 8192
+        (),
+            fil_pag(D_C_RPS) = 1024
+        endusing
+        fil_add(D_C_RPS) = fli_addressing
+        fil_com(D_C_RPS) = fli_compress
+        fil_rfa(D_C_RPS) = fli_staticrfa
+        if(fli_portable) then
+        begin
+            xcall dd_file(dcs, DDL_TEXT, fli_portable, fil_int(D_C_RPS))
+            if(error)
+                clear fil_int(D_C_RPS)
+        end
+        else
+            clear fil_int(D_C_RPS)
+    end
+    else
+    begin
+        ; set structure information from repository (use FLS_INFO)
+        rec_len(D_C_RPS) = flsi_recsz
+        key_num(D_C_RPS) = flsi_nmkeys
+        fil_den(D_C_RPS) = flsi_density
+        fil_typ(D_C_RPS) = flsi_rectyp
+        using flsi_pagesize select
+        (FLI_PS1024),
+            fil_pag(D_C_RPS) = 1024
+        (FLI_PS512),
+            fil_pag(D_C_RPS) = 512
+        (FLI_PS2048),
+            fil_pag(D_C_RPS) = 2048
+        (FLI_PS4096),
+            fil_pag(D_C_RPS) = 4096
+        (FLI_PS8192),
+            fil_pag(D_C_RPS) = 8192
+        (),
+            fil_pag(D_C_RPS) = 1024
+        endusing
+        fil_add(D_C_RPS) = flsi_addressing
+        fil_com(D_C_RPS) = flsi_compress
+        fil_rfa(D_C_RPS) = flsi_staticrfa
+        fil_int(D_C_RPS) = flsi_portable
+    end
+
+
+    ; compare record length
+    COMP(rec_len)
+
+    ; compare file record type
+    COMP(fil_typ)
+
+    if(rev_typ.ge.4)
+    begin
+
+        ; compare file density
+        COMP(fil_den)
+
+        ; compare pagesize
+        COMP(fil_pag)
+
+        ; compare addressing mode
+        COMP(fil_add)
+
+    end
+
+    ; compare gression
+    COMP(fil_com)
+
+    ;compare static rfa's
+    COMP(fil_rfa)
+
+    ;compare portable integer format
+    COMP(fil_int)
+
+    ;compare the number of keys
+    ;   COMP(key_num)
+
+    ; calculate the last key to compare
+    if(key_num(D_C_RPS).ge.key_num(D_C_ISM)) then
+    begin
+        num_keys = key_num(D_C_ISM)
+    end
+    else
+    begin
+        ; not enough keys defined in rps
+
+        num_keys = key_num(D_C_RPS)
+
+        key_ctr = key_num(D_C_RPS)
+        while(key_ctr.lt.key_num(D_C_ISM))
+        begin
+
+            ; log missing key
+            stat = %rpschk_log(a_logfile, a_filename, struct_name, D_ERR_KEY_NOTDEF, key_ctr-1)
+
+            incr key_ctr
+        end
+    end
+
+    if(.not.num_keys)
+        status = D_ER_DIFFERENCES
+
+    return
+
+;--------------------------------------------------------------------
+; process keys
+
+get_key_details,
+
+    ; create memory arrays for keys
+    onerror nomem2
+    key_hdl(D_C_ISM) = %mem_proc(DM_ALLOC+DM_STATIC, key_num(D_C_ISM)*^size(key_dets))
+    key_hdl(D_C_RPS) = %mem_proc(DM_ALLOC+DM_STATIC, key_num(D_C_RPS)*^size(key_dets))
+    offerror
+
+    for key_ctr from 1 thru num_keys
+    begin
+
+        ; get key information from repository
+        call rps_key
+
+        if(.not.error) then
+        begin
+
+            ; get key information from isam file
+            call ism_key
+
+            ; ensure the RPS segments match ISAM definition as closely as possible
+            ; this is done by combining RPS segments
+            call check_segments
+
+            ; compare RPS and isam details
+            call compare
+
+            ;release memory used by isam segment array
+            KEY(D_C_ISM, key_ctr, seg_hdl) = %mem_proc(DM_FREE, KEY(D_C_ISM, key_ctr, seg_hdl))
+        end
+        else
+        begin
+            ; key missing from RPS
+            status = %rpschk_log(a_logfile, a_filename, struct_name, D_ERR_KEY_NOTDEF, key_ctr-1)
+        end
+
+        ; release memory used by rps segment array
+        if KEY(D_C_RPS, key_ctr, seg_hdl)
+            KEY(D_C_RPS, key_ctr, seg_hdl) = %mem_proc(DM_FREE, KEY(D_C_RPS, key_ctr, seg_hdl))
+    end
+
+
+    ; release memory used by key arrays
+    key_hdl(D_C_RPS) = %mem_proc(DM_FREE, key_hdl(D_C_RPS))
+    key_hdl(D_C_ISM) = %mem_proc(DM_FREE, key_hdl(D_C_ISM))
+    return
+
+nomem2,
+    offerror
+    if key_hdl(D_C_RPS)
+        key_hdl(D_C_RPS) = %mem_proc(DM_FREE, key_hdl(D_C_RPS))
+    if key_hdl(D_C_ISM)
+        key_hdl(D_C_ISM) = %mem_proc(DM_FREE, key_hdl(D_C_ISM))
+
+    if(.not.status) 
+        status = D_ER_NOCOMPARE
+    return
+
+;--------------------------------------------------------------------
+; get file information using ISINFO
+
+ism_key,
+
+    KEY(D_C_ISM, key_ctr, key_len) = %isinfo(chan, 'KEYLENGTH', key_ctr-1)
+    KEY(D_C_ISM, key_ctr, key_pos) = %isinfo(chan, 'KPOSITION', key_ctr-1)
+    KEY(D_C_ISM, key_ctr, key_typ) = %isinfo(chan, 'KTYPE', key_ctr-1)
+    KEY(D_C_ISM, key_ctr, key_mod) = %isinfo(chan, 'MODIFY', key_ctr-1)
+    KEY(D_C_ISM, key_ctr, key_asc) = %isinfo(chan, 'ASCEND', key_ctr-1)
+    KEY(D_C_ISM, key_ctr, key_dup) = %isinfo(chan, 'DUPS', key_ctr-1)
+    if(KEY(D_C_ISM, key_ctr, key_dup)) then
+        KEY(D_C_ISM, key_ctr, key_ate) = %isinfo(chan, 'ATEND', key_ctr-1)
+    else
+        KEY(D_C_ISM, key_ctr, key_ate) = D_NOT_USED
+    KEY(D_C_ISM, key_ctr, key_nul) = %isinfo(chan, 'NULL', key_ctr-1)
+
+    using KEY(D_C_ISM, key_ctr, key_nul) select
+    (key_null_type(ki_rep+1), key_null_type(ki_nonrep+1)),
+        KEY(D_C_ISM, key_ctr, key_nul) = %isinfo(chan, 'NULLVALUE', key_ctr-1)
+    (),
+        clear KEY(D_C_ISM, key_ctr, key_nuv)
+    endusing
+
+    KEY(D_C_ISM, key_ctr, key_nam) = %isinfo(chan, 'KEYNAME', key_ctr-1)
+    KEY(D_C_ISM, key_ctr, key_den) = %isinfo(chan, 'KEYDENSITY', key_ctr-1)
+
+    KEY(D_C_ISM, key_ctr, seg_num) = %isinfo(chan, 'KEYSEGMENTS', key_ctr-1)
+
+    onerror nomem3
+    KEY(D_C_ISM, key_ctr, seg_hdl) =
+&       %mem_proc(DM_ALLOC+DM_STATIC, KEY(D_C_ISM, key_ctr, seg_num)*^size(seg_dets))
+    offerror
+
+    for seg_ctr from 1 thru KEY(D_C_ISM, key_ctr, seg_num)
+    begin
+        SEG(D_C_ISM, key_ctr, seg_ctr, seg_len) = %isinfo(chan, 'SEGLENGTH', key_ctr-1, seg_ctr)
+        SEG(D_C_ISM, key_ctr, seg_ctr, seg_pos) = %isinfo(chan, 'KPOSITION', key_ctr-1, seg_ctr)
+        SEG(D_C_ISM, key_ctr, seg_ctr, seg_typ) = %isinfo(chan, 'KTYPE', key_ctr-1, seg_ctr)
+        SEG(D_C_ISM, key_ctr, seg_ctr, seg_asc) = %isinfo(chan, 'ASCEND', key_ctr-1, seg_ctr)
+    end
+
+    return
+
+nomem3,
+    offerror
+
+    if(.not.status)
+        status = D_ER_NOCOMPARE
+    return
+
+;--------------------------------------------------------------------
+; get file information from repository
+; make sure that RPS values match ISINFO values
+
+rps_key,
+    xcall dd_key(dcs, DDK_INFO, ^m(key_names[key_ctr].key_name, k_hdl), k_info)
+    if(error)
+    begin
+        status = %rpschk_log(a_logfile, a_filename, struct_name, D_ERR_KEY_NOSEG, key_ctr)
+
+        clear KEY(D_C_RPS, key_ctr, seg_hdl)
+        return
+    end
+
+    KEY(D_C_RPS, key_ctr, key_len) = ki_size
+    KEY(D_C_RPS, key_ctr, key_pos) = ki_segpos(1)
+
+    using ki_segtyp(1) select
+    (KI_SG_FLD),
+    begin
+        xcall dd_field(dcs, DDF_INFO, ki_fldnam(1), f_info)
+        if(error)
+        begin
+            xcall rpschk_err(error, D_TXT_FIELD + %atrim(ki_fldnam(1)))
+            clear f_info
+        end
+        if(ki_size.eq.fi_size) then
+            KEY(D_C_RPS, key_ctr, key_typ) = fi_type
+        else
+            KEY(D_C_RPS, key_ctr, key_typ) = T_ALP
+    end
+    (KI_SG_EXT),
+    begin
+        if(ki_strnam(1).ne.struct_name.and.ki_strnam(1)) then
+        begin
+            xcall dd_struct(dcs, DDS_INFO, ki_strnam(1), s_info)
+            if(error) then
+                xcall rpschk_err(error, D_TXT_STRUCTURE + %atrim(ki_strnam(1)))
+            else
+            begin
+                xcall dd_field(dcs, DDF_INFO, ki_fldnam(1), f_info)
+                if(error)
+                begin
+                    xcall rpschk_err(error, D_TXT_KEY_FIELD + %atrim(ki_fldnam(1)))
+                    clear f_info
+                end
+            end
+            xcall dd_struct(dcs, DDS_INFO, struct_name, s_info)
+        end
+        else
+        begin
+            xcall dd_field(dcs, DDF_INFO, ki_fldnam(1), f_info)
+            if(error)
+            begin
+                xcall rpschk_err(error, D_TXT_KEY_FIELD + %atrim(ki_fldnam(1)))
+                clear f_info
+            end
+        end
+        if(ki_size.eq.fi_size) then
+            KEY(D_C_RPS, key_ctr, key_typ) = fi_type
+        else
+            KEY(D_C_RPS, key_ctr, key_typ) = T_ALP
+    end
+    (KI_SG_LIT),
+        KEY(D_C_RPS, key_ctr, key_typ) = T_ALP
+    (KI_SG_REC),
+        KEY(D_C_RPS, key_ctr, key_typ) = T_DEC
+    (),
+        KEY(D_C_RPS, key_ctr, key_typ) = T_ALP
+    endusing
+
+    KEY(D_C_RPS, key_ctr, key_mod) = ki_mod
+
+    using ki_order select
+    (KI_ASC),
+        KEY(D_C_RPS, key_ctr, key_asc) = 1
+    (KI_DES),
+        KEY(D_C_RPS, key_ctr, key_asc) = 0
+    endusing
+
+    KEY(D_C_RPS, key_ctr, key_dup) = ki_dups
+    if(ki_dups) then
+        KEY(D_C_RPS, key_ctr, key_ate) = ki_insert
+    else
+        KEY(D_C_RPS, key_ctr, key_ate) = D_NOT_USED
+
+    KEY(D_C_RPS, key_ctr, key_nul) = key_null_type(ki_null+1)
+
+    using KEY(D_C_RPS, key_ctr, key_nul) select
+    (key_null_type(ki_rep+1), key_null_type(ki_nonrep+1)),
+    begin
+        xcall dd_key(dcs, DDK_TEXT, ki_nullval, KEY(D_C_RPS, key_ctr, key_nuv))
+        if(error)
+            clear KEY(D_C_RPS, key_ctr, key_nuv)
+    end
+    (),
+        clear KEY(D_C_RPS, key_ctr, key_nuv)
+    endusing
+
+    KEY(D_C_RPS, key_ctr, key_nam) = ki_name
+    KEY(D_C_RPS, key_ctr, key_den) = ki_density
+
+    KEY(D_C_RPS, key_ctr, seg_num) = ki_nmseg
+    onerror nomem4
+    KEY(D_C_RPS, key_ctr, seg_hdl) =
+&       %mem_proc(DM_ALLOC+DM_STATIC, KEY(D_C_RPS, key_ctr, seg_num)*^size(seg_dets))
+    offerror
+
+    for seg_ctr from 1 thru KEY(D_C_RPS, key_ctr, seg_num)
+    begin
+        SEG(D_C_RPS, key_ctr, seg_ctr, seg_len) = ki_seglen(seg_ctr)
+        SEG(D_C_RPS, key_ctr, seg_ctr, seg_pos) = ki_segpos(seg_ctr)
+
+        using ki_segtyp(seg_ctr) select
+        (KI_SG_FLD),
+        begin
+            xcall dd_field(dcs, DDF_INFO, ki_fldnam(seg_ctr), f_info)
+            SEG(D_C_RPS, key_ctr, seg_ctr, seg_typ) = fi_type
+        end
+        (KI_SG_EXT),
+        begin
+            if(ki_strnam(seg_ctr).ne.struct_name.and.ki_strnam(seg_ctr)) then
+            begin
+                xcall dd_struct(dcs, DDS_INFO, ki_strnam(seg_ctr), s_info)
+                if(error)
+                begin
+                    xcall rpschk_err(error, D_TXT_KEY_FIELD + %atrim(ki_strnam(seg_ctr)))
+                    clear f_info
+                end
+                xcall dd_field(dcs, DDF_INFO, ki_fldnam(seg_ctr), f_info)
+                if(error)
+                begin
+                    xcall rpschk_err(error, D_TXT_KEY_FIELD + %atrim(ki_fldnam(seg_ctr)))
+                    clear f_info
+                end
+                xcall dd_struct(dcs, DDS_INFO, struct_name, s_info)
+            end
+            else
+            begin
+                xcall dd_field(dcs, DDF_INFO, ki_fldnam(seg_ctr), f_info)
+                if(error)
+                begin
+                    xcall rpschk_err(error, D_TXT_KEY_FIELD + %atrim(ki_fldnam(1)))
+                    clear f_info
+                end
+            end
+            SEG(D_C_RPS, key_ctr, seg_ctr, seg_typ) = fi_type
+        end
+        (KI_SG_LIT),
+            SEG(D_C_RPS, key_ctr, seg_ctr, seg_typ) = T_ALP
+        (KI_SG_REC),
+            SEG(D_C_RPS, key_ctr, seg_ctr, seg_typ) = T_DEC
+        (),
+            SEG(D_C_RPS, key_ctr, seg_ctr, seg_typ) = T_ALP
+        endusing
+
+    end
+
+    return
+
+nomem4,
+    offerror
+
+    if(.not.status) 
+        status = D_ER_NOCOMPARE
+    return
+
+;--------------------------------------------------------------------
+
+compare,
+
+    ; compare key
+
+    COMP_KEY(key_len)
+
+    COMP_KEY(key_pos)
+
+    COMP_KEY(key_typ)
+
+    COMP_KEY(key_mod)
+
+    COMP_KEY(key_asc)
+
+    COMP_KEY(key_dup)
+
+    COMP_KEY(key_ate)
+
+    COMP_KEY(key_nul)
+
+    COMP_KEY(key_nuv)
+
+    ; only check names if we have one
+    if(KEY(D_C_ISM, key_ctr, key_nam))
+        COMP_KEY(key_nam)
+
+    if(rev_typ.ge.4)
+        COMP_KEY(key_den)
+
+    COMP_KEY(seg_num)
+
+    ; calculate the last segment to compare
+    if(KEY(D_C_RPS, key_ctr, seg_num).ge.KEY(D_C_ISM, key_ctr, seg_num)) then
+        num_segs = KEY(D_C_ISM, key_ctr, seg_num)
+    else
+        num_segs = KEY(D_C_RPS, key_ctr, seg_num)
+
+    if(num_segs) then
+    begin
+        ; compare segment(s)
+
+        for seg_ctr from 1 thru num_segs
+        begin
+
+            COMP_SEG(seg_len)
+
+            COMP_SEG(seg_pos)
+
+            if(rev_typ.ge.4)
+            begin
+                COMP_SEG(seg_typ)
+                COMP_SEG(seg_asc)
+            end
+        end
+    end
+    else
+    begin
+        status = %rpschk_log(a_logfile, a_filename, struct_name, D_ERR_KEY_NOSEG, key_ctr)
+    end
+
+    return
+
+
+;--------------------------------------------------------------------
+; check the key segments match.
+; if not, try to make the RPS segments match the ISAM segments.
+
+check_segments,
+
+
+    rps_seg_ctr = 1
+
+cs_loop,
+
+    ; do key segments start in different places
+    if(SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_pos).ne.SEG(D_C_ISM,key_ctr,rps_seg_ctr,seg_pos))
+        return
+
+    onerror cs_error
+
+cs_loop2,
+
+    ; are segments different length
+    if(SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_len).lt.SEG(D_C_ISM,key_ctr,rps_seg_ctr,seg_len))
+    begin
+
+        ;are segments consecutive
+        if(SEG(D_C_RPS,key_ctr,rps_seg_ctr+1,seg_pos).eq.
+&           SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_pos)+SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_len))
+        begin
+            if(rev_typ.lt.4
+&               .or.(%type_is_same(SEG(D_C_RPS,key_ctr,rps_seg_ctr+1,seg_typ),
+&               SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_typ)).and.
+&               %order_is_same(SEG(D_C_RPS,key_ctr,rps_seg_ctr+1,seg_asc),
+&               SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_asc),
+&               KEY(D_C_RPS, key_ctr, key_asc))))
+
+            begin
+
+                ; add two segments together
+                SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_len) += SEG(D_C_RPS,key_ctr,rps_seg_ctr+1,seg_len)
+
+                ; check segment types are the same, else set segment to ALPHA
+                if(rev_typ.lt.4.or.
+&                   SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_typ).ne.SEG(D_C_RPS,key_ctr,rps_seg_ctr+1,seg_typ))
+                    SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_typ) = T_ALP
+
+                ; check key type is the same as the segment type, else set key to ALPHA
+                if(rev_typ.lt.4.or.
+&                   KEY(D_C_RPS,key_ctr,key_typ).ne.SEG(D_C_RPS,key_ctr,rps_seg_ctr,seg_typ))
+                    KEY(D_C_RPS,key_ctr,key_typ) = T_ALP
+
+                ; one less segment to worry about
+                KEY(D_C_RPS,key_ctr,seg_num) -= 1
+
+                ; move segments closer to the start of the array
+                for seg_ctr from rps_seg_ctr+1 thru KEY(D_C_RPS, key_ctr, seg_num)
+                begin
+                    ^m(seg_dets[seg_ctr], KEY(D_C_RPS, key_ctr, seg_hdl)) =
+&                       ^m(seg_dets[seg_ctr+1], KEY(D_C_RPS, key_ctr, seg_hdl))
+                end
+
+                ; test same segment again - now it's been modified
+                if(rps_seg_ctr.lt.KEY(D_C_RPS,key_ctr,seg_num))
+                    goto cs_loop2
+            end
+        end
+    end
+
+    ; reached a logical segment break - try next segment
+    rps_seg_ctr += 1
+    if(rps_seg_ctr.le.KEY(D_C_ISM, key_ctr, seg_num)) goto cs_loop
+
+cs_error,
+    offerror
+    return
+
+;--------------------------------------------------------------------
+
+open_fli_fname,
+
+    ;open isam file
+    xcall u_open(chan, 'I:I', fli_fname,,, status)
+
+    ; could not open file, and it is not a temporary file
+    if(status.and..not.fli_temp)
+        status = -%rpschk_log(a_logfile, a_filename, struct_name, D_ERR_OPEN_ERROR, fli_fname)
+
+    return
+
+;--------------------------------------------------------------------
+
+load_key_names,
+
+    ; clear key names array
+    for seg_ctr from 1 thru si_nmkeys
+        clear ^m(key_names[seg_ctr], k_hdl)
+
+    onerror nomem5
+    ; create memory array for all keynames
+    ks_hdl = %mem_proc(DM_ALLOC+DM_STATIC, si_nmkeys*^size(key_names))
+    offerror
+
+    xcall dd_key(dcs, DDK_LIST, si_nmkeys, ^m(key_names, ks_hdl))
+    if(error) then
+    begin
+        status = %rpschk_log(a_logfile, a_filename, struct_name, D_ERR_KEY_LIST)
+    end
+    else
+    begin
+        num_keys = -1
+        for seg_ctr from 1 thru si_nmkeys
+        begin
+
+            ; get key information
+            xcall dd_key(dcs, DDK_INFO, ^m(key_names[seg_ctr].key_name, ks_hdl), k_info)
+            if(error)
+            begin
+                xcall rpschk_err(error, D_TXT_KEY + %atrim(^m(key_names[seg_ctr].key_name, ks_hdl)))
+                clear k_info
+            end
+
+            ; is key an access key
+            if(ki_ktype.eq.KI_ACC)
+            begin
+                if(ki_krf.lt.si_nmkeys) then
+                begin
+                    if(.not.^m(key_names[ki_krf+1].key_name,k_hdl)) then
+                        ^m(key_names[ki_krf+1].key_name,k_hdl) = ^m(key_names[seg_ctr].key_name,ks_hdl)
+                    else
+                    begin
+                        ; this key is defined twice
+                        status = %rpschk_log(a_logfile, a_filename, struct_name, D_ERR_KEY_MULDEF, ki_krf,
+&                           ^m(key_names[ki_krf+1].key_name,k_hdl), ^m(key_names[seg_ctr].key_name,ks_hdl))
+                    end
+                    ; upper key number
+                    if(num_keys.lt.ki_krf) num_keys = ki_krf
+                end
+                else
+                begin
+                    ; this key is defined in RPS, but not in ISAM
+                    status = %rpschk_log(a_logfile, a_filename, struct_name, D_ERR_KEY_RPSDEF, ki_krf)
+                end
+            end
+        end
+
+        ; new upper key limit (without foreign keys)
+        si_nmkeys = num_keys+1
+    end
+
+    ; release memory
+    ks_hdl = %mem_proc(DM_FREE, ks_hdl)
+
+    return
+
+nomem5,
+    offerror
+
+    ; no pre-existing error - set error return value
+    if(.not.status) 
+        status = D_ER_NOCOMPARE
+    return
+
+end
+
+;======================================================================
+; log isam/rps status to log file
+
+function rpschk_log ,^VAL
+
+    a_logfile               ,a
+    a_filename              ,a
+    a_struct                ,a
+    a_error                 ,a
+    mismatch        a_arg5                  ,a
+    mismatch        a_arg6                  ,a
+    mismatch        a_arg7                  ,a
+    mismatch        a_arg8                  ,a
+
+.define ARGS_OFFSET             ,4
+.define ARGS_MAX                ,8
+.define MAX_ARGS                ,ARGS_MAX - ARGS_OFFSET
+
+.align
+    record
+        e1                      ,i4
+        chan                    ,i4             ;channel
+        ctr                     ,i4             ;counter
+        arg_max                 ,i4             ;maximum number of arguments
+        buffer                  ,a256           ;output buffer
+        buff                    ,MAX_ARGS a40   ;output buffer
+        filename                ,a30            ;output filename
+        struct                  ,a30            ;output astructure
+
+proc
+
+    if(^passed(a_logfile).and.a_logfile)
+    begin
+        arg_max = %numargs
+        if(arg_max.gt.ARGS_MAX) arg_max = ARGS_MAX
+
+        for ctr from ARGS_OFFSET+1 thru arg_max
+        begin
+            if(^passed(^arg(ctr))) then
+            begin
+                using ^datatype(ctr) select
+                (D_TYPE_D, D_TYPE_ID, D_TYPE_I),
+                    buff(ctr-ARGS_OFFSET) = %string(^argn(ctr))
+                (),
+                    buff(ctr-ARGS_OFFSET) = ^arga(ctr)
+                endusing
+            end
+            else
+                clear buff(ctr)
+        end
+
+        xcall s_bld(buffer,, a_error, buff(1), buff(2), buff(3), buff(4))
+
+        ;open log file
+        xcall u_open(chan, 'A', a_logfile,,, e1)
+        if(e1) xcall u_open(chan, 'O', a_logfile,,, e1)
+        if(.not.e1)
+        begin
+            filename = a_filename
+            if(^passed(a_struct).and.a_struct) then
+            begin
+                struct = a_struct
+                writes(chan, D_TXT_FILE+filename+' '+D_TXT_STRUCTURE+struct
+&                   +' '+%atrim(buffer))
+            end
+            else
+            begin
+                writes(chan, D_TXT_FILE+filename+' '+%atrim(buffer))
+            end
+
+            xcall u_close(chan)
+        end
+    end
+
+    freturn D_ER_DIFFERENCES
+
+end
+
+;======================================================================
+; write errors to audit file
+
+subroutine rpschk_err
+
+    a_error         ,n
+    a_ermsg         ,a
+
+.align
+    static record
+        len             ,i4
+        filename        ,a255
+
+proc
+
+    if(.not.len)
+    begin
+        xcall getlog('RPSCHK_LOGFILE', filename, len)
+
+        if(.not.len) 
+            xreturn            ;no error log file required
+    end
+
+    xcall log_error(a_error, a_ermsg, filename(1:len))
+    xreturn
+end
+
+;======================================================================
+
+function order_is_same ,^VAL
+
+    next_order  ,n                          ;next segment order
+    curr_order  ,n                          ;current segment order
+    def_order   ,n                          ;default order (from key)
+
+proc
+
+    if(next_order.eq.curr_order) freturn 1
+
+    using next_order select
+    (KI_SG_ASC),
+        if(def_order.eq.KI_ASC.and.curr_order.ne.KI_SG_DES) freturn 1
+    (KI_SG_DES),
+        if(def_order.eq.KI_DES.and.curr_order.ne.KI_SG_ASC) freturn 1
+    (),
+        if((def_order.eq.KI_ASC.and.curr_order.eq.KI_SG_ASC).or.
+&           (def_order.eq.KI_DES.and.curr_order.eq.KI_SG_DES)) freturn 1
+    endusing
+
+    freturn 0
+end
+
+;======================================================================
+
+function type_is_same ,^VAL
+
+    next_type   ,n                          ;next segment type
+    curr_type   ,n                          ;current segment type
+
+; routine should really check the data type of the fields that make up the segment
+; for now - assume that keys are alpha
+
+proc
+
+    if(next_type.eq.curr_type) freturn 1
+
+    using next_type select
+    (KI_SG_ALP),    nop
+    (KI_SG_NOC),    nop
+    (KI_SG_DEC),    nop
+    (KI_SG_INT),    nop
+    (KI_SG_UNS),    nop
+    (),             if(curr_type.eq.KI_SG_ALP) freturn 1
+    endusing
+
+    freturn 0
+end
+
+;======================================================================
+

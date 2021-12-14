@@ -1,0 +1,147 @@
+;;**********************************************************************
+;;
+;; Title:       pipe.dbc
+;;
+;; Type:        Class
+;;
+;; Description: Process a pipe command
+;;
+;; Author:      William Hawkins, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;**********************************************************************
+
+import SynPSG.Core.Utilities
+
+namespace SynPSG.Core.Utilities
+
+.define D_LINE_TERMINATOR       %char(13)+%char(10)
+
+    public class pipe
+
+        private mPipeChannel    ,int
+        private mEndOfFile      ,boolean
+
+        public property EOF ,boolean
+            method get
+            proc
+                mreturn mEndOfFile
+            endmethod
+        endproperty
+
+        ;; Default constructor
+        public method pipe
+            req in  pipeCommand ,string
+            endparams
+        proc
+            mPipeChannel = %syn_freechn()
+            if(!mPipeChannel)
+                throw new applicationException("No Channels available")
+            mEndOfFile = FALSE
+            try
+                open(mPipeChannel, I, '|' + pipeCommand)
+            catch(e, @Synergex.SynergyDE.NoFileFoundException)
+                throw new applicationException("Invalid Command "+pipeCommand)
+            catch (e)
+                throw
+            endtry
+        endmethod
+
+        ;; destructor
+        method ~pipe
+            endparams
+        proc
+            if(mPipeChannel>0 && mPipeChannel <= 1024 && %chopen(mPipeChannel))
+                close mPipeChannel
+            clear mPipeChannel
+            mreturn
+        endmethod
+
+        ;;; <summary>
+        ;;; Get the entire results, from the command issued in the constructor
+        ;;; </summary>
+        ;;; <remarks>
+        ;;; Get the entire results, from the command issued in the constructor
+        ;;; </remarks>
+        public method getResponse ,string
+            endparams
+            record misc
+                response    ,string
+            endrecord
+        proc
+            if(mPipeChannel<1 || mPipeChannel>1024)
+                throw new applicationException("Invalid Channel number "+%string(mPipeChannel))
+            if(mEndOfFile == TRUE)
+                throw new Synergex.SynergyDE.EndOfFileException()
+            while(mEndOfFile == FALSE)
+                response = response + readLine()
+            mreturn response
+        endmethod
+
+        ;;; <summary>
+        ;;; Get a line of the results, from the command issued in the constructor
+        ;;; </summary>
+        ;;; <remarks>
+        ;;; Get a line of the results, from the command issued in the constructor
+        ;;; </remarks>
+        public method readLine ,string
+            endparams
+            record
+                buff        ,a1024
+                response    ,string
+                respSize    ,int
+            endrecord
+        proc
+            if(mPipeChannel<1 || mPipeChannel>1024)
+                throw new applicationException("Invalid Channel number "+%string(mPipeChannel))
+            if(mEndOfFile == TRUE)
+                throw new Synergex.SynergyDE.EndOfFileException()
+            try
+                reads(mPipeChannel,buff)
+            catch(e, @Synergex.SynergyDE.EndOfFileException)
+                mEndOfFile = TRUE
+            catch(e)
+                throw
+            endtry
+            respSize = %rsize
+            if(respSize > 0)
+            begin
+                respSize = %trimz(buff(1:respSize))
+                ;; if end of response is already a line terminator, don't add another line terminator
+                if(respSize >= ^size(D_LINE_TERMINATOR) &&
+                &  buff(respSize+1-^size(D_LINE_TERMINATOR):^size(D_LINE_TERMINATOR)) == D_LINE_TERMINATOR)
+                    exit
+                if(respSize > 0) then
+                    response = buff(1:respSize) + D_LINE_TERMINATOR
+                else
+                    response = D_LINE_TERMINATOR
+            end
+            mreturn response
+        endmethod
+
+    endclass
+
+endnamespace

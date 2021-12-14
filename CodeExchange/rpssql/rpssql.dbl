@@ -1,0 +1,1849 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; RPSSQL.DBL
+;
+; This routine uses the Synergy/DE Repository to produce an SQL schema
+;
+; Requires with Synergy/DE version 7 or later
+;
+; Version :
+;
+.define D_APP       ,"RPSSQL"
+.define D_VERSION   ,"1.1.5"
+;
+; Date : 9th November 2001
+;
+; Export does not support :
+;  Tags
+;
+; Requires Repository :
+;  Files, Structures, Keys
+;
+; Uses :
+;  Relations (for foreign keys)
+;
+; Notes :
+;  Gets an array of field names in ^m(fld_array, f_ptr)
+;  Gets an array of field details in ^m(fld_dets, fd_ptr)
+;
+;  The field details array contain:
+;  field name, group prefix, field position (in structure) and f_info.
+;
+;  The field details array contains entries for every field and every element
+;  of a group array (where the group prefix is modified), but does not contain
+;  every element of field array.
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+; in test mode, defaults are provided
+.define D_TEST_MODE     1
+
+; log any errors to this file
+.define D_LOG_FILE      'C:\errors.log'
+
+; RPSSQL uses UI toolkit
+.define D_UI_OUTPUT     1
+
+; size if filename fields
+.define D_FILENAME_SIZE 255
+
+; SQL delimeters
+.define D_DELIM_OP      '"'
+.define D_DELIM_CL      '"'
+
+; SQL commands
+.define D_SQL_START     'BEGIN TRANSACTION'
+.define D_SQL_COMMIT    'COMMIT'
+
+main
+.include 'RPSLIB:ddinfo.def'
+.include 'INC:rpssql.def'
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.include 'WND:tools.def'
+.include 'WND:windows.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:rpssql.def'
+
+.align
+    record clr_i
+        status          ,i4                     ;function return status
+        f_ptr           ,D_HANDLE               ;filename array memory handle
+        fil_ctr         ,i4                     ;file counter
+        chan            ,i4                     ;log channel
+        bld_id          ,i4                     ;build window id
+        tab_id          ,i4                     ;tab id
+        wndids          ,i4                     ;smc window
+        wndidr          ,i4                     ;rps window
+
+.align
+    record clr
+        num_files       ,d5                     ;number of files
+        mbuffer         ,a1024                  ;menu buffer build buffer
+
+.proc
+
+    xcall u_start
+
+    xcall e_sect("RPSSQL v"+D_VERSION, D_HEADER, D_LEFT, D_CLEAR)
+    xcall u_update
+
+    xcall flags(7000000,1)
+
+    clear clr, ^I(clr_i)
+
+    call setup
+
+    do  begin
+;;      xcall ts_process(tab_id, input_rps)
+        xcall bld_from_rps(wndidr, input_rps)
+        if(g_select)
+        begin
+            call process_menu
+        end
+    end
+    until(g_entnam.eq.'O_QUIT')
+
+    xcall u_finish
+
+    freturn D_EXIT_SUCCESS
+
+;----------------------------------------------------------------------------
+
+process_menu,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        xcall log_error(-1)                 ;delete log file
+        xcall dd_init(dcs, rps_main, rps_text)
+        using error select
+        (E_OK), begin
+            xcall dd_name(dcs, DDN_COUNT, DDN_FILE, num_files)
+            if (error)
+            begin
+                xcall log_error(error, "DD_NAME error")
+                clear num_files
+            end
+
+            if (num_files.gt.0) then
+                call build_list
+            else
+                xcall u_message("No Files in Repository")
+
+            xcall dd_exit(dcs)
+        end
+        (E_NOFIND),
+            xcall u_message("Record not found")
+        (E_OPNERR),
+            xcall u_message("Cannot open RPS")
+        (E_INVFNC),
+            xcall u_message("Invalid Function")
+        (E_OPNERRM),
+            xcall u_message("Cannot open RPS main file")
+        (E_OPNERRT),
+            xcall u_message("Cannot open RPS text file")
+        (E_BADVERS),
+            xcall u_message("Incompatible Repository version")
+        (),
+            xcall u_message("DD_INIT error "+%string(error))
+        endusing
+
+        g_entnam = 'O_QUIT'
+    end
+    endusing
+    return
+
+;----------------------------------------------------------------------------
+
+setup,
+
+    xcall mb_column(mbuffer, 'input_col', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'I_FRST', "First field")
+    xcall mb_entry(mbuffer, 'I_LAST', "Last field")
+    xcall mb_entry(mbuffer, 'I_NEXT', "Next field")
+    xcall mb_entry(mbuffer, 'I_PREV', "Prev field")
+    xcall mb_entry(mbuffer, 'E_LEFT', "Left 1 character")
+    xcall mb_entry(mbuffer, 'E_RIGHT', "Right 1 character")
+    xcall mb_entry(mbuffer, 'E_CDEL', "Delete character")
+    xcall mb_end(mbuffer, colid(1))
+
+    xcall mb_column(mbuffer, 'select_col', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'S_DOWN', "Next item")
+    xcall mb_entry(mbuffer, 'S_UP', "Prev item")
+    xcall mb_end(mbuffer, colid(2))
+
+    xcall mb_column(mbuffer, 'Options', "File  ")
+    xcall mb_entry(mbuffer, 'O_EXIT', "OK")
+    xcall mb_entry(mbuffer, 'O_QUIT', "Quit")
+    xcall mb_entry(mbuffer, 'O_ABOUT', "About")
+    xcall mb_end(mbuffer, colid(3))
+
+
+    xcall ib_input(bld_id, 'INPUT_RPS', 12, 73)
+
+    tab_id = 2
+    xcall ib_field(bld_id, 'exportfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(export_file),
+&       D_FLD_INFO, "Enter SQL schema export file",
+&       D_FLD_POS, tab_id, 2, D_FLD_FPOS, tab_id, 22,
+&       D_FLD_PROMPT, "Export File")
+    tab_id += 1
+    xcall ib_field(bld_id, 'rpsmfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(rps_main),
+&       D_FLD_INFO, "Enter name and location of RPS main file",
+&       D_FLD_POS, tab_id, 2, D_FLD_FPOS, tab_id, 22,
+&       D_FLD_PROMPT, "RPSMFIL")
+    tab_id += 1
+    xcall ib_field(bld_id, 'rpstfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(rps_text),
+&       D_FLD_INFO, "Enter name and location of RPS text file",
+&       D_FLD_POS, tab_id, 2, D_FLD_FPOS, tab_id, 22,
+&       D_FLD_PROMPT, "RPSTFIL")
+    tab_id += 1
+    xcall ib_field(bld_id, 'logfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(log_rps),
+&       D_FLD_INFO, "Enter name of log file, or leave blank",
+&       D_FLD_POS, tab_id, 2, D_FLD_FPOS, tab_id, 22,
+&       D_FLD_PROMPT, "Log File")
+    tab_id += 2
+    xcall ib_field(bld_id, 'incl_rw', D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(incl_rw),
+&       D_FLD_INFO, "Override the Excluded by ReportWriter flag",
+&       D_FLD_FPOS, tab_id, 22, D_FLD_CHECKBOX,
+&       D_FLD_PROMPT, "Override Excluded by ReportWriter flag")
+    tab_id += 1
+    xcall ib_field(bld_id, 'use_odbc', D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(use_odbc),
+&       D_FLD_INFO, "Use ODBC names for fields and files",
+&       D_FLD_FPOS, tab_id, 22, D_FLD_CHECKBOX,
+&       D_FLD_PROMPT, "Use ODBC names")
+    tab_id += 2
+    xcall ib_field(bld_id, 'db_syntax', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(db_syntax),
+&       D_FLD_INFO, "e.g. "+D_DELIM_OP+"server"+D_DELIM_CL+"."+D_DELIM_OP+
+&       "database"+D_DELIM_CL+"."+D_DELIM_OP+"owner"+D_DELIM_CL,
+&       D_FLD_POS, tab_id, 2, D_FLD_FPOS, tab_id, 22, D_FLD_BREAK,
+&       D_FLD_PROMPT, "Table details")
+    tab_id += 1
+    xcall ib_field(bld_id, 'use_char', D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(incl_rw),
+&       D_FLD_INFO, "Use CHAR for Synergy Alpha fields (default is VARCHAR)",
+&       D_FLD_FPOS, tab_id, 22, D_FLD_CHECKBOX,
+&       D_FLD_PROMPT, "Use CHAR for Synergy Alpha")
+
+    xcall ib_button(bld_id, 'O_EXIT', DSB_TEXT, "OK",,, "O")
+    xcall ib_button(bld_id, 'O_QUIT', DSB_TEXT, "Cancel",,, "N")
+
+    xcall ib_end(bld_id, wndidr)
+
+    xcall w_brdr(wndidr, WB_TITLE, "RPS Export")
+
+    ;place the window, coz we're not doing tab processing
+    xcall u_window(D_PLACE, wndidr, 1, 4)
+    xcall w_brdr(wndidr, WB_DRAGOFF)
+
+;;  tab_id = %ts_tabset(DTS_CREATE, 'BLD', 15, 76,,, DTS_NONE)
+
+;;  xcall ts_tabset(DTS_WINDOW, tab_id, wndidr, 'bld_from_rps',, "Export SQL Schema from RPS")
+
+    return
+
+;----------------------------------------------------------------------------
+
+build_list,
+    xcall e_sect(" ", D_INFO, D_LEFT, D_CLEAR)
+    xcall u_update
+
+    f_ptr = %mem_proc(DM_ALLOC+DM_STATIC, num_files*^size(fil_array))
+    ;allocate memory
+
+    xcall dd_name(dcs, DDN_LIST, DDN_FILE, num_files, ^m(fil_array, f_ptr))
+    if (error) then
+    begin
+        xcall log_error(error, "Number of files")
+    end
+    else
+    begin
+        call build_list2
+    end
+
+    f_ptr = %mem_proc(DM_FREE, f_ptr)
+    return
+
+;----------------------------------------------------------------------------
+
+build_list2,
+    xcall export_open(chan, export_file)
+
+    ;save log filename to common data
+    error_log = log_rps
+
+    if(chan)
+    begin
+.ifdef D_SQL_START
+        ;write out start transaction
+        writes(chan, D_SQL_START)
+        writes(chan, ' ')
+.endc ;D_SQL_START
+
+        chan = -chan                        ;make channel -ve to signal that
+        ; there have been no updates to file
+        for fil_ctr from 1 thru num_files
+        begin
+            xcall dd_file(dcs, DDL_INFO, ^m(fil_array[fil_ctr].fil_name, f_ptr), fl_info)
+            if(error)
+            begin
+                xcall log_error(error, "File:" + %atrim(^m(fil_array[fil_ctr].fil_name, f_ptr)) + " DDL_INFO error")
+                clear fli_nmstructs
+            end
+
+            if(fli_nmstructs)
+                xcall rpssql_file(dcs, fl_info, chan, input_rps)
+        end
+    end
+
+    using chan select
+    (.gt.0),
+    begin
+        xcall export_close(chan)
+        if(invalid) then
+            xcall u_message("Warning - unsupported feature used - Check log file")
+        else
+            xcall u_message("Export file OK")
+    end
+    (.lt.0),
+    begin
+        xcall export_close(-chan)
+        xcall delet(export_file)
+        xcall u_message("No Export file")
+    end
+    (), begin
+        xcall u_message("Error creating Export file")
+    end
+    endusing
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine rpssql_file
+
+    a_dcs           ,a                      ;DCS
+    a_fl_info       ,a                      ;file to export
+    a_chan          ,n                      ;log channel
+    a_input_rps     ,a                      ;input_rps
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:rpssql.def'
+
+.align
+    record
+        s_ptr           ,D_HANDLE               ;structure list handle
+        o_ptr           ,D_HANDLE               ;odbc names list handle
+        str_ctr         ,i4                     ;structure array counter
+        filename        ,a30                    ;filename
+
+.proc
+
+    dcs = a_dcs
+    fl_info = a_fl_info
+
+    s_ptr = %mem_proc(DM_ALLOC+DM_STATIC, fli_nmstructs*^size(str_array))
+    o_ptr = %mem_proc(DM_ALLOC+DM_STATIC, fli_nmstructs*^size(odbc_array))
+
+    xcall dd_file(dcs, DDL_STRS, fli_nmstructs, ^m(str_array, s_ptr),,, ^m(odbc_array, o_ptr))
+    if(error)
+    begin
+        xcall log_error(error, "No structures")
+        clear fli_nmstructs
+    end
+
+    ;no invalid / unsupported features used
+    clear invalid
+
+    for str_ctr from 1 thru fli_nmstructs
+    begin
+        xcall dd_struct(dcs, DDS_INFO, ^m(str_array[str_ctr].str_name, s_ptr), s_info)
+        if(error) then
+        begin
+            xcall log_error(error, "Structure:" + %atrim(^m(str_array[str_ctr].str_name, s_ptr)) + " DDS_INFO error")
+        end
+        else
+        begin
+            if(use_odbc.and.^m(odbc_array[str_ctr].odbc_name, o_ptr)) then
+                filename = ^m(odbc_array[str_ctr].odbc_name, o_ptr)
+            else
+                filename = ^m(str_array[str_ctr].str_name, s_ptr)
+
+.ifdef D_UI_OUTPUT
+            xcall e_sect("File:"+%atrim(filename)+" Structure:"+%atrim(sname)
+&               , D_INFO, D_LEFT, D_CLEAR)
+            xcall u_update
+.endc
+            xcall rpssql_str(dcs, fl_info, s_info, a_chan, a_input_rps, ^m(odbc_array[str_ctr].odbc_name, o_ptr))
+        end
+    end
+
+.ifdef D_UI_OUTPUT
+    xcall e_sect(" ", D_INFO, D_LEFT, D_CLEAR)
+    xcall u_update
+.endc
+
+    o_ptr = %mem_proc(DM_FREE, o_ptr)
+    s_ptr = %mem_proc(DM_FREE, s_ptr)
+
+;;  a_dcs = dcs
+;;  a_fl_info = fl_info
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine rpssql_str
+
+    a_dcs           ,a                      ;DCS
+    a_fl_info       ,a                      ;file info record
+    a_s_info        ,a                      ;structure info record
+    a_chan          ,n                      ;log channel [optional]
+    a_input_rps     ,a                      ;input data
+    a_odbcname      ,a                      ;odbc structure name
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:rpssql.def'
+
+.align
+    record clr_i
+        f_ptr           ,D_HANDLE               ;fieldnames list handle
+        fd_ptr          ,D_HANDLE               ;field data list handle
+        fld_ctr         ,i4                     ;field array counter
+        k_ptr           ,D_HANDLE               ;key names list handle
+        kd_ptr          ,D_HANDLE               ;key details array handle
+        key_ctr         ,i4                     ;key array pointer
+        r_ptr           ,D_HANDLE               ;relations list handle
+        rel_ctr         ,i4                     ;relations array pointer
+        ctr             ,i4                     ;general purpose counter
+        field_num       ,i4                     ;field number in fd_ptr array
+        curr_fld        ,i4                     ;field number in f_ptr array
+        field_pos       ,i4                     ;position of field in structure
+        status          ,i4                     ;function status
+        arr1            ,i4                     ;array 1 counter
+        arr2            ,i4                     ;array 2 counter
+        arr3            ,i4                     ;array 3 counter
+        arr4            ,i4                     ;array 4 counter
+        fld_num         ,i4                     ;field number
+
+.align
+    record clr
+        rel_from_key    ,a30                    ;relationship from key name
+        rel_to_str      ,a30                    ;relationship to structure name
+        rel_to_key      ,a30                    ;relationship to key name
+        file_name       ,a61                    ;logical file name + "_" + structure name
+        struct_name     ,a30                    ;structure name
+        field_name      ,a30                    ;field name
+        group_prefix    ,a30                    ;group prefix
+        odbc_field_name ,a30                    ;odbc field name
+        char            ,a7                     ;CHAR or VARCHAR
+
+.align
+    record
+        o_buff          ,a4096                  ;output buffer
+
+.proc
+
+    dcs = a_dcs
+    fl_info = a_fl_info
+    s_info = a_s_info
+    input_rps = a_input_rps
+
+    clear clr, ^I(clr_i)
+
+    if(use_char) then
+        char = 'char'
+    else
+        char = 'varchar'
+
+    file_name = flname
+    struct_name = sname
+
+    ; only 1 structure assigned to file, or this is primary structure
+    if(fli_nmstructs.eq.1.or.struct_name.ne.fli_struct) then
+    begin
+        if(use_odbc)
+        begin
+            if(a_odbcname)
+                file_name = %atrim(flname) + '_' + a_odbcname
+        end
+    end
+    else
+    begin
+        if(use_odbc.and.a_odbcname) then
+            file_name = %atrim(flname) + '_' + a_odbcname
+        else
+            file_name = %atrim(flname) + '_' + sname
+    end
+
+    f_ptr = %mem_proc(DM_ALLOC+DM_STATIC, si_nmflds*^size(fld_array))
+    fd_ptr = %mem_proc(DM_ALLOC+DM_STATIC, si_nmflds*^size(fld_dets))
+
+    call build_key_dets
+
+    xcall dd_field(dcs, DDF_SLIST, si_nmflds, ^m(fld_array, f_ptr))
+    if(error)
+    begin
+        xcall log_error(error, "Structure:" + %atrim(struct_name) + " DDS_LIST error")
+        clear si_nmflds
+    end
+
+    clear field_num, group_prefix, curr_fld, field_pos
+    xcall get_all_fields(dcs, f_ptr, fd_ptr, curr_fld, field_num, group_prefix, field_pos)
+
+    call export_hdr
+
+    for fld_ctr from 1 thru field_num
+    begin
+        group_prefix = ^m(fld_dets[fld_ctr].grp_prefix, fd_ptr)
+        field_name = ^m(fld_dets[fld_ctr].fld_name, fd_ptr)
+        f_info = ^m(fld_dets[fld_ctr].fld_info, fd_ptr)
+
+        call construct_field_name           ;modify field name for odbc
+
+        status = 1                          ;we want this field!
+
+        if(fi_ovrfld)
+            clear status                    ;overlay field
+        if(fi_rptvw.and..not.incl_rw)
+            clear status                    ;not available through RW/ODBC
+        if(fi_group.eq.F_GROUPOVRFLD)
+            clear status                    ;group overlay
+
+        ;don't want to include the group itself, just the fields within the group
+        if(fi_group.eq.F_GROUPFLD)
+            clear status                    ;group
+
+        if(status)
+        begin
+            call export_field
+        end
+    end
+
+    if(o_buff)
+    begin
+        call xport
+    end
+
+    call export_ftr
+
+    ;clear field name modifers
+    clear group_prefix, arr1, arr2, arr3, arr4, f_info
+
+    for key_ctr from 1 thru si_nmkeys
+    begin
+        k_info = ^m(key_dets[key_ctr].key_info, kd_ptr)
+
+        if (ki_name)
+            call export_key
+    end
+
+    if(si_nmrels)
+        call export_foreign_keys
+
+    f_ptr = %mem_proc(DM_FREE, f_ptr)
+    fd_ptr = %mem_proc(DM_FREE, fd_ptr)
+
+;;  a_dcs = dcs
+;;  a_s_info = s_info
+    xreturn
+
+;----------------------------------------------------------------------------
+
+export_field,
+    ;is this a field array
+    if(fi_dim(1).gt.1) then
+        arr1 = 1
+    else
+        clear arr1, arr2, arr3, arr4
+    ;is this a multi-dimensional field array
+    if(fi_dim(2)) then
+    begin
+        arr1 = 1
+        arr2 = 1
+        if(fi_dim(3)) then
+        begin
+            arr3 = 1
+            if(fi_dim(4)) then
+                arr4 = 1
+            else
+                clear arr4
+        end
+        else
+            clear arr3, arr4
+    end
+    else
+        clear arr2, arr3, arr4
+
+    if(arr1) then
+    begin
+        field_pos = ^m(fld_dets[fld_ctr].fld_pos, fd_ptr)
+        while(arr1)
+        begin
+            field_name = ^m(fld_dets[fld_ctr].fld_name, fd_ptr)
+
+            call construct_field_name       ;modify field name for odbc & groups
+            call construct_field_name_array ;modify field name for arrays
+            call export_fld
+
+            ;ready for next loop
+            field_pos += fi_size
+
+            ;next element of array
+            if(arr4)
+            begin
+                if(arr4.lt.fi_dim(4)) then
+                begin
+                    arr4 += 1
+                    nextloop
+                end
+                else
+                    arr4 = 1
+            end
+            if(arr3)
+            begin
+                if(arr3.lt.fi_dim(3)) then
+                begin
+                    arr3 += 1
+                    nextloop
+                end
+                else
+                    arr3 = 1
+            end
+            if(arr2)
+            begin
+                if(arr2.lt.fi_dim(2)) then
+                begin
+                    arr2 += 1
+                    nextloop
+                end
+                else
+                    arr2 = 1
+            end
+            if(arr1)
+            begin
+                if(arr1.lt.fi_dim(1)) then
+                    arr1 += 1
+                else
+                    clear arr1, arr2, arr3, arr4
+            end
+        end
+    end
+    else
+    begin
+        field_pos = ^m(fld_dets[fld_ctr].fld_pos, fd_ptr)
+
+        call export_fld
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_hdr,
+
+    o_buff = 'CREATE TABLE ' + %atrim(db_syntax) + '.' + D_DELIM_OP + %atrim(file_name) + D_DELIM_CL + ' ('
+    call xport
+
+    clear o_buff
+    return
+
+;----------------------------------------------------------------------------
+
+export_fld,
+    ;put a comma on the end of the
+    ; previous line
+    if(o_buff)
+    begin
+        o_buff = %atrim(o_buff) + ' ,'
+        call xport
+    end
+
+    ;build new line
+    o_buff = ' ' + D_DELIM_OP + %atrim(field_name) + D_DELIM_CL
+
+;;[datetime] is not supported for Synergy data
+;;.define SQL_DATETIME ' [datetime]'
+.define SQL_DATETIME ' decimal (' + %string(fi_size) + ')'
+
+
+    using fi_type select
+    (T_ALP),
+    begin
+        o_buff = %atrim(o_buff) + ' '+%atrim(char)+' (' + %string(fi_size) + ')'
+;;      using fi_class select
+;;      (C_BINARY),
+;;          o_buff = %atrim(o_buff) + ' binary (' + %string(fi_size) + ')'
+;;      (),
+;;          o_buff = %atrim(o_buff) + ' char (' + %string(fi_size) + ')'
+;;      endusing
+    end
+    (T_DEC),
+    begin
+        using fi_class select
+        (C_YYMMDD),
+            o_buff = %atrim(o_buff) + SQL_DATETIME
+        (C_YYYYMMDD),
+            o_buff = %atrim(o_buff) + SQL_DATETIME
+        (C_YYJJJ),
+            o_buff = %atrim(o_buff) + SQL_DATETIME
+        (C_YYYYJJJ),
+            o_buff = %atrim(o_buff) + SQL_DATETIME
+        (C_YYPP),
+            o_buff = %atrim(o_buff) + SQL_DATETIME
+        (C_YYYYPP),
+            o_buff = %atrim(o_buff) + SQL_DATETIME
+        (C_HHMMSS),
+            o_buff = %atrim(o_buff) + SQL_DATETIME
+        (C_HHMM),
+            o_buff = %atrim(o_buff) + SQL_DATETIME
+        (),
+        begin
+            o_buff = %atrim(o_buff) + ' decimal'
+            if(fi_prec) then
+                o_buff = %atrim(o_buff) + ' (' + %string(fi_size) + ', '
+&                   + %string(fi_prec) + ')'
+            else
+                o_buff = %atrim(o_buff) + ' (' + %string(fi_size) + ')'
+        end
+        endusing
+    end
+    (T_INT),
+    begin
+        using fi_size select
+        (4,2,1),
+            o_buff = %atrim(o_buff) + ' smallint'
+        (),
+            o_buff = %atrim(o_buff) + ' int'
+        endusing
+    end
+    (),     begin
+        using fi_class select
+        (C_ALPHA),
+            o_buff = %atrim(o_buff) + ' '+%atrim(char)+' (' + %string(fi_size) + ')'
+        (C_NUMERIC),
+            o_buff = %atrim(o_buff) + ' decimal (' + %string(fi_size) + ')'
+        (C_DATE),
+            o_buff = %atrim(o_buff) + SQL_DATETIME
+        (),
+            o_buff = %atrim(o_buff) + ' '+%atrim(char)+' (' + %string(fi_size) + ')'
+        endusing
+    end
+    endusing
+
+    ;assume that field cannot be null
+    o_buff = %atrim(o_buff) + ' NOT NULL'
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_ftr,
+
+    o_buff = ')'
+    call xport
+
+    o_buff = D_SQL_COMMIT
+    call xport
+
+    clear o_buff
+    call xport
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_key,
+
+    clear status
+    for ctr from 1 thru ki_nmseg
+    begin
+        if(ki_segtyp(ctr).ne.KI_SG_FLD) status = 1
+    end
+    if(status)
+    begin
+        xcall log_error(901, "Invalid KEY " + %atrim(ki_name) + " Structure " + %atrim(sname))
+        return
+    end
+
+    o_buff = 'CREATE INDEX ' + D_DELIM_OP + %atrim(ki_name) + D_DELIM_CL + ' ON '
+&       + %atrim(db_syntax) + '.' + D_DELIM_OP + %atrim(file_name) + D_DELIM_CL + ' ('
+    call xport
+
+    for ctr from 1 thru ki_nmseg
+    begin
+        using ki_segtyp(ctr) select
+        (KI_SG_LIT),
+            o_buff = ' ' + D_DELIM_OP + %atrim(ki_litval(ctr)) + D_DELIM_CL
+        (),
+        begin
+            field_name = ki_fldnam(ctr)
+            call get_f_info                 ;populate f_info for this field
+            call construct_field_name       ;modify field name
+            o_buff = ' ' + D_DELIM_OP + %atrim(field_name) + D_DELIM_CL
+        end
+        endusing
+        if(ctr.lt.ki_nmseg)
+            o_buff = %atrim(o_buff) + ' ,'
+        call xport
+    end
+
+    o_buff = ')'
+    call xport
+
+    o_buff = D_SQL_COMMIT
+    call xport
+
+    clear o_buff
+    call xport
+
+
+    o_buff = 'ALTER TABLE ' + %atrim(db_syntax) + '.' + D_DELIM_OP + %atrim(file_name) + D_DELIM_CL + ' ADD'
+    call xport
+    o_buff = ' PRIMARY KEY ('
+    call xport
+
+    for ctr from 1 thru ki_nmseg
+    begin
+        using ki_segtyp(ctr) select
+        (KI_SG_LIT),
+            o_buff = ' ' + D_DELIM_OP + %atrim(ki_litval(ctr)) + D_DELIM_CL
+        (),
+        begin
+            field_name = ki_fldnam(ctr)
+            call get_f_info                 ;populate f_info for this field
+            call construct_field_name       ;modify field name
+            o_buff = ' ' + D_DELIM_OP + %atrim(field_name) + D_DELIM_CL
+        end
+        endusing
+        if(ctr.lt.ki_nmseg)
+            o_buff = %atrim(o_buff) + ' ,'
+        call xport
+    end
+
+    o_buff = ' )'
+    call xport
+
+    o_buff = D_SQL_COMMIT
+    call xport
+
+    clear o_buff
+    call xport
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_foreign_keys,
+
+    r_ptr = %mem_proc(DM_ALLOC+DM_STATIC, (si_nmrels*^size(rels)))
+    ;allocate memory
+
+    xcall dd_relation(dcs, DDR_LIST, si_nmrels, ^m(rels, r_ptr))
+    if(error)
+    begin
+        xcall log_error(error, "Structure:" + %atrim(struct_name) + " No Relations")
+        clear si_nmrels
+    end
+
+    for rel_ctr from 1 thru si_nmrels
+    begin
+        xcall dd_struct(dcs, DDS_INFO, struct_name, s_info)
+        if(error)
+        begin
+            xcall log_error(error, "Structure:" + %atrim(struct_name) + " DDS_INFO error")
+        end
+
+        xcall dd_relation(dcs, DDR_INFO, ^m(rels[rel_ctr], r_ptr), rel_from_key, rel_to_str, rel_to_key)
+        if (error)
+        begin
+            xcall log_error(error, "Structure:" + %atrim(struct_name) + " relation:" + ^m(rels[rel_ctr], r_ptr))
+        end
+
+        o_buff = 'ALTER TABLE ' + %atrim(db_syntax) + '.' + D_DELIM_OP + %atrim(file_name) + D_DELIM_CL + ' ADD'
+        call xport
+        o_buff = ' FOREIGN KEY ('
+        call xport
+
+        xcall dd_key(dcs, DDK_INFO, rel_from_key, k_info)
+        if (error.or..not.ki_nmseg)
+        begin
+            xcall log_error(error, "Structure:" + %atrim(struct_name) + " key:" + rel_from_key + " DDK_INFO error")
+            exit
+        end
+
+        clear status
+        for key_ctr from 1 thru ki_nmseg
+        begin
+            if(ki_segtyp(key_ctr).ne.KI_SG_FLD) status = 1
+        end
+        if(status)
+        begin
+            xcall log_error(902, "Invalid KEY " + %atrim(ki_name) + " Structure " + %atrim(struct_name))
+        end
+
+        for key_ctr from 1 thru ki_nmseg
+        begin
+            using ki_segtyp(key_ctr) select
+            (KI_SG_LIT),
+                o_buff = ' ' + D_DELIM_OP + %atrim(ki_litval(key_ctr)) + D_DELIM_CL
+            (),
+            begin
+                field_name = ki_fldnam(key_ctr)
+                call get_key_f_info             ;populate f_info for this field
+                call construct_field_name       ;modify field name
+                o_buff = ' ' + D_DELIM_OP + %atrim(field_name) + D_DELIM_CL
+            end
+            endusing
+            if(key_ctr.lt.ki_nmseg)
+                o_buff = %atrim(o_buff) + ' ,'
+            call xport
+        end
+
+        xcall dd_struct(dcs, DDS_INFO, rel_to_str, s_info)
+        if (error)
+        begin
+            xcall log_error(error, "Structure:" + %atrim(rel_to_str) + " No info")
+            exit
+        end
+
+        o_buff = ' ) REFERENCES ' + %atrim(db_syntax) + '.' + D_DELIM_OP + %atrim(rel_to_str) + D_DELIM_CL + ' ('
+        call xport
+
+        xcall dd_key(dcs, DDK_INFO, rel_to_key, k_info)
+        if (error.or..not.ki_nmseg)
+        begin
+            xcall log_error(error, "Structure:" + %atrim(rel_to_str) + " key:" + rel_to_key + " DDK_INFO error")
+            exit
+        end
+
+        clear status
+        for key_ctr from 1 thru ki_nmseg
+        begin
+            if(ki_segtyp(key_ctr).ne.KI_SG_FLD) status = 1
+        end
+        if(status)
+        begin
+            xcall log_error(903, "Invalid KEY " + %atrim(rel_to_key) + " Structure " + %atrim(rel_to_str))
+        end
+
+        for key_ctr from 1 thru ki_nmseg
+        begin
+            using ki_segtyp(key_ctr) select
+            (KI_SG_LIT),
+                o_buff = ' ' + D_DELIM_OP + %atrim(ki_litval(key_ctr)) + D_DELIM_CL
+            (),
+            begin
+                field_name = ki_fldnam(key_ctr)
+                call get_key_f_info             ;populate f_info for this field
+                call construct_field_name       ;modify field name
+                o_buff = ' ' + D_DELIM_OP + %atrim(field_name) + D_DELIM_CL
+            end
+            endusing
+            if(key_ctr.lt.ki_nmseg)
+                o_buff = %atrim(o_buff) + ' ,'
+            call xport
+        end
+
+        o_buff = ' )'
+        call xport
+
+        o_buff = D_SQL_COMMIT
+        call xport
+
+        clear o_buff
+        call xport
+    end
+
+    r_ptr = %mem_proc(DM_FREE, r_ptr)
+    ;release memory
+
+    ;reset back to real structure
+    xcall dd_struct(dcs, DDS_INFO, struct_name, s_info)
+    if (error)
+    begin
+        xcall log_error(error, "Structure:" + %atrim(struct_name) + " DDS_INFO error")
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+xport,
+    if(^passed(a_chan).and.a_chan)
+    begin
+        if(a_chan.lt.0) a_chan = -a_chan    ;make +ve to indicate updated file
+        writes(a_chan, o_buff(1:%trim(o_buff)))
+    end
+    return
+
+;----------------------------------------------------------------------------
+
+build_key_dets,
+
+    if(k_ptr)
+        k_ptr = %mem_proc(DM_FREE, k_ptr)
+    if(kd_ptr)
+        kd_ptr = %mem_proc(DM_FREE, kd_ptr)
+
+    if(si_nmkeys)
+    begin
+
+        onerror nomem_k
+        k_ptr = %mem_proc(DM_ALLOC+DM_STATIC, (si_nmkeys*^size(keys)))
+        kd_ptr = %mem_proc(DM_ALLOC+DM_STATIC, (si_nmkeys*^size(key_dets)))
+        offerror
+
+        for key_ctr from 1 thru si_nmkeys
+            clear ^m(key_dets[key_ctr], kd_ptr)
+
+        xcall dd_key(dcs, DDK_LIST, si_nmkeys, ^m(keys, k_ptr))
+        if (error)
+        begin
+            xcall log_error(error, "Structure:" + %atrim(struct_name) + " No key list")
+        end
+
+        for key_ctr from 1 thru si_nmkeys
+        begin
+            xcall dd_key(dcs, DDK_INFO, ^m(keys[key_ctr], k_ptr), k_info)
+            if (error)
+            begin
+                xcall log_error(error, "Structure:" + %atrim(struct_name) + " key:" + ^m(keys[key_ctr], k_ptr) + " DDK_INFO error")
+            end
+            ^m(key_dets[ki_seqnm].key_info, kd_ptr) = k_info
+        end
+    end
+
+    return
+
+nomem_k,
+    offerror
+    clear si_nmkeys
+    if(k_ptr)
+        k_ptr = %mem_proc(DM_FREE, k_ptr)
+    if(kd_ptr)
+        kd_ptr = %mem_proc(DM_FREE, kd_ptr)
+    return
+
+
+;----------------------------------------------------------------------------
+; return f_info from RPS
+
+get_key_f_info,
+
+    xcall dd_field(dcs, DDF_INFO, field_name, f_info)
+    if(error)
+    begin
+        xcall log_error(error, "Structure:" + %atrim(sname) + " Field:" + %atrim(field_name) + " DDF_INFO error")
+        clear f_info
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+; look for field_name in array, and return f_info
+
+get_f_info,
+
+    fld_num = field_num
+    while(fld_num.and.field_name.ne.^m(fld_dets[fld_num].fld_name, fd_ptr))
+        fld_num -= 1
+    if(fld_num) then
+        f_info = ^m(fld_dets[fld_num].fld_info, fd_ptr)
+    else
+        clear f_info
+    return
+
+;----------------------------------------------------------------------------
+; change field name to ODBC field name (if appropriate)
+; and adjust for group prefix
+
+construct_field_name,
+
+    if (fi_odbcnm.and.use_odbc)
+    begin
+        xcall dd_field(dcs, DDF_TEXT, fi_odbcnm, odbc_field_name)
+        if (error.or..not.odbc_field_name) then
+        begin
+            xcall log_error(error, "Structure:" + %atrim(sname) + " fld:" + %atrim(field_name) + " no ODBC name")
+            clear odbc_field_name
+        end
+        else
+            field_name = odbc_field_name
+    end
+
+    ;add group prefix (if appropriate)
+    if(group_prefix)
+    begin
+        field_name = %atrim(group_prefix) + %atrim(field_name)
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+; add array suffixes (if appropriate)
+
+construct_field_name_array,
+
+    if(arr1)
+        field_name = %atrim(field_name) + '#' + %string(arr1)
+    if(arr2)
+        field_name = %atrim(field_name) + '#' + %string(arr2)
+    if(arr3)
+        field_name = %atrim(field_name) + '#' + %string(arr3)
+    if(arr4)
+        field_name = %atrim(field_name) + '#' + %string(arr4)
+
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine get_all_fields, reentrant
+
+    a_dcs           ,a                      ;RPS control structure
+    a_f_ptr         ,i                      ;handle to list of field names
+    a_fd_ptr        ,i                      ;handle to list of field data
+    a_curr_fld      ,n                      ;current field number in f_ptr array
+    a_field_num     ,n                      ;current field number in fd_ptr array
+    a_group_prefix  ,a                      ;group prefix
+    a_field_pos     ,n                      ;current field position in structure
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:rpssql.def'
+
+.define MAX_FLDS    ,500
+
+.align
+    stack record clr_i
+        num_flds        ,d4                     ;number of field in structure
+        fld_ctr         ,i4                     ;field counter
+        arr_siz         ,i4                     ;actual number of fields in dynamic memory array
+        field_num       ,i4                     ;field number (starts at a_field_num)
+        field_pos       ,i4                     ;field position
+        arr1            ,i4                     ;array 1 counter
+        arr2            ,i4                     ;array 2 counter
+        arr3            ,i4                     ;array 3 counter
+        arr4            ,i4                     ;array 4 counter
+        orig_field_pos  ,i4                     ;current group field position in structure
+
+.align
+    stack record clr
+        strname         ,a30                    ;current structure
+        old_struct      ,a30                    ;previous structure (for implicit groups)
+        old_dcs         ,a ^size(dcs)           ;previous DCS (for implicit groups)
+        group_prefix    ,a30                    ;group prefix
+        fld_names       ,MAX_FLDS a30           ;list of field names
+        orig_group_prefix ,a30                  ;current group prefix
+
+.proc
+
+    clear clr, ^i(clr_i)
+
+    dcs = a_dcs
+    field_num = a_curr_fld
+
+    xcall dd_field(dcs, DDF_SLIST, MAX_FLDS, fld_names,, num_flds)
+    if (error)
+    begin
+        xcall log_error(error, "Structure:" + %atrim(sname) + " List of fields error")
+        xreturn
+    end
+
+    arr_siz = %mem_proc(DM_GETSIZE, a_fd_ptr) / ^size(fld_dets)
+
+    for fld_ctr from 1 thru num_flds
+    begin
+        a_field_num += 1
+
+        if(a_field_num.gt.arr_siz)
+        begin
+            arr_siz += 100
+            a_fd_ptr = %mem_proc(DM_RESIZ, (arr_siz * ^size(fld_dets)), a_fd_ptr)
+        end
+
+        field_num += 1
+        ;save field name
+        ^m(fld_array[field_num].fld_name, a_f_ptr) = fld_names(fld_ctr)
+
+        xcall dd_field(dcs, DDF_INFO, fld_names(fld_ctr), f_info)
+        if(error)
+        begin
+            xcall log_error(error, "Structure:" + %atrim(sname) + " Field:" + %atrim(fld_names(fld_ctr)) + " DDF_INFO error")
+            clear f_info
+        end
+
+        ;save field info
+        ^m(fld_dets[a_field_num].fld_info, a_fd_ptr) = f_info
+        ^m(fld_dets[a_field_num].fld_name, a_fd_ptr) = fld_names(fld_ctr)
+
+        ;is this field a group
+        using fi_group select
+        (F_GROUPOVRFLD),
+        begin
+            ;don't want this field
+            a_field_num -= 1
+        end
+        (F_GROUPFLD),
+        begin
+            ;work out what the group prefix may be (if any)
+            if(fi_prefix) then
+            begin
+                xcall dd_field(dcs, DDF_TEXT, fi_prefix, group_prefix)
+                if(error)
+                    group_prefix = fld_names(fld_ctr)
+            end
+            else
+            begin
+                group_prefix = fld_names(fld_ctr)
+            end
+
+            if(a_group_prefix) then
+                orig_group_prefix = %atrim(a_group_prefix) + group_prefix
+            else
+                orig_group_prefix = group_prefix
+
+            orig_field_pos = a_field_pos + fi_pos
+
+            ^m(fld_dets[a_field_num].grp_prefix, a_fd_ptr) = orig_group_prefix
+            ^m(fld_dets[a_field_num].fld_pos, a_fd_ptr) = orig_field_pos
+
+            ;is this an implicit group
+            if(fi_struct) then
+            begin
+                ;start of implicit group
+                ;;^m(fld_dets[a_field_num].fld_grp_st, a_fd_ptr) = 2
+                old_dcs = dcs
+                old_struct = sname
+                ;get structure name
+                xcall dd_field(dcs, DDF_TEXT, fi_struct, strname)
+                if(.not.error)
+                begin
+                    ;reset to new structure
+                    xcall dd_struct(dcs, DDS_INFO, strname, s_info)
+                end
+            end
+            else
+            begin
+                ;start of explicit group
+                ;;^m(fld_dets[a_field_num].fld_grp_st, a_fd_ptr) = 1
+                clear old_struct, old_dcs
+                ;start explicit group
+                xcall dd_field(dcs, DDF_GROUP, fld_names(fld_ctr))
+            end
+
+            if(error) then
+            begin
+                xcall log_error(error, "Structure:" + %atrim(sname) + " Group Field:" + %atrim(fld_names(fld_ctr)))
+            end
+            else
+            begin
+                call get_all_fields
+            end
+
+            ;last field in a group
+            ;;^m(fld_dets[a_field_num].fld_grp_end, a_fd_ptr) += 1
+
+            if(old_struct) then
+            begin
+                dcs = old_dcs
+                sname = old_struct
+            end
+            else
+            begin
+                ;end explicit group
+                xcall dd_field(dcs, DDF_ENDGROUP)
+            end
+        end
+        (F_NOGROUP),
+        begin
+            ^m(fld_dets[a_field_num].grp_prefix, a_fd_ptr) = a_group_prefix
+            ^m(fld_dets[a_field_num].fld_pos, a_fd_ptr) = a_field_pos + fi_pos
+            ;not the start of end of a group
+            ;;^m(fld_dets[a_field_num].fld_grp_st, a_fd_ptr) = 0
+            ;;^m(fld_dets[a_field_num].fld_grp_end, a_fd_ptr) = 0
+        end
+        endusing
+    end
+
+    a_dcs = dcs
+    xreturn
+
+;----------------------------------------------------------------------------
+
+get_all_fields,
+
+    ;is this a group array
+    if(fi_dim(1).gt.1) then
+        arr1 = 1
+    else
+        clear arr1, arr2, arr3, arr4
+    ;is this a multi-dimensional group array
+    if(fi_dim(2)) then
+    begin
+        arr1 = 1
+        arr2 = 1
+        if(fi_dim(3)) then
+        begin
+            arr3 = 1
+            if(fi_dim(4)) then
+                arr4 = 1
+            else
+                clear arr4
+        end
+        else
+            clear arr3, arr4
+    end
+    else
+        clear arr2, arr3, arr4
+
+    if(arr1) then
+    begin
+        field_pos = orig_field_pos
+        while(arr1)
+        begin
+            call construct_group_prefix     ;modify group prefix for arrays
+            xcall get_all_fields(dcs, a_f_ptr, a_fd_ptr, a_curr_fld, a_field_num, group_prefix, field_pos-1)
+
+            ;recalculate array size
+            arr_siz = %mem_proc(DM_GETSIZE, a_fd_ptr) / ^size(fld_dets)
+
+            ;ready for next field
+            field_pos += fi_size
+
+            ;next element of array
+            if(arr4)
+            begin
+                if(arr4.lt.fi_dim(4)) then
+                begin
+                    arr4 += 1
+                    nextloop
+                end
+                else
+                    arr4 = 1
+            end
+            if(arr3)
+            begin
+                if(arr3.lt.fi_dim(3)) then
+                begin
+                    arr3 += 1
+                    nextloop
+                end
+                else
+                    arr3 = 1
+            end
+            if(arr2)
+            begin
+                if(arr2.lt.fi_dim(2)) then
+                begin
+                    arr2 += 1
+                    nextloop
+                end
+                else
+                    arr2 = 1
+            end
+            if(arr1)
+            begin
+                if(arr1.lt.fi_dim(1)) then
+                    arr1 += 1
+                else
+                    clear arr1, arr2, arr3, arr4
+            end
+        end
+    end
+    else
+    begin
+        field_pos = orig_field_pos
+        call construct_group_prefix     ;modify group prefix for arrays
+        xcall get_all_fields(dcs, a_f_ptr, a_fd_ptr, a_curr_fld, a_field_num, group_prefix, field_pos-1)
+        ;recalculate array size
+        arr_siz = %mem_proc(DM_GETSIZE, a_fd_ptr) / ^size(fld_dets)
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+; change field name to ODBC field name (if appropriate)
+; and adjust for group prefix
+
+construct_group_prefix,
+
+    ;reset group prefix to "outer" group prefix
+    group_prefix = orig_group_prefix
+
+    if(arr1)
+        group_prefix = %atrim(group_prefix) + '#' + %string(arr1)
+    if(arr2)
+        group_prefix = %atrim(group_prefix) + '#' + %string(arr2)
+    if(arr3)
+        group_prefix = %atrim(group_prefix) + '#' + %string(arr3)
+    if(arr4)
+        group_prefix = %atrim(group_prefix) + '#' + %string(arr4)
+
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine export_select
+
+    a_filename      ,a
+
+.proc
+
+    if(.not.%u_getfilename(a_filename, "Select Export File",,,, 'rpssql', 'sql'
+&       ,,,,, D_OFN_SAVEAS))
+&       clear a_filename
+
+    xreturn
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine export_open
+
+    a_chan          ,n
+    a_filename      ,a
+
+.align
+    record
+        err             ,i4                     ;error flag
+.proc
+
+    xcall u_open(a_chan, 'O', a_filename,,,err)
+    if(err) clear a_chan
+
+    xreturn
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine export_close
+
+    a_chan          ,n
+
+.proc
+
+    xcall u_close(a_chan)                   ;close channel
+    clear a_chan
+
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine log_error
+
+    a_error     ,n
+    a_ermsg     ,a
+
+.include 'DBLDIR:apmisc.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:rpssql.def'
+
+.align
+    record
+        chan        ,i4
+
+.proc
+
+    if(.not.error_log)
+        xreturn
+
+    if(a_error.eq.-1)
+    begin
+        xcall delet(error_log)
+        xreturn
+    end
+
+;;      xcall u_message("Error " + %string(a_error) + " in DD info routines\n" + a_ermsg)
+
+    chan = %syn_freechn()
+
+    open(chan, A, error_log)
+    if(a_error) then
+        writes(chan, %string(a_error)+" "+%atrim(a_ermsg))
+    else
+        writes(chan, %atrim(a_ermsg))
+    close chan
+
+    xreturn
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine bld_from_rps
+
+    wndidp          ,n                      ;window ID
+    a_input_rps     ,a                      ;input record
+
+.include 'WND:tools.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:rpssql.def'
+
+.align
+    record
+        status          ,i4                     ;command line status
+        pos             ,i4                     ;position of directory terminator
+        start           ,i4                     ;start of instr search
+        dir_term        ,a1                     ;directory terminator
+        fld             ,a30                    ;field
+        command_line    ,a D_FILENAME_SIZE
+        ucommand_line   ,a D_FILENAME_SIZE
+
+.proc
+
+    input_rps = a_input_rps
+
+    xcall getlog('RPSMFIL', rps_main, status)
+    if(status) xcall getlog('RPSTFIL', rps_text, status)
+    if(.not.status)
+    begin
+        xcall getlog('RPSDAT', command_line, status)
+        if(status)
+        begin
+            rps_main = 'RPSDAT:' + 'rpsmain.ism'
+            rps_text = 'RPSDAT:' + 'rpstext.ism'
+        end
+    end
+
+    ;check for export filename on command line
+    xcall cmdln(command_line)
+    ucommand_line = command_line
+    upcase ucommand_line
+    status = %instr(1, ucommand_line, 'RPSSQL')
+    if(status)
+    begin
+        export_file = command_line(status+7, D_FILENAME_SIZE)
+        if(export_file)
+        begin
+            ;string leading spaces
+            while(.not.export_file(1:1))
+                export_file = export_file(2, %size(export_file))
+            ;strip double quotes (for long filename support)
+            if(export_file.eq.'"'.and.export_file(%trim(export_file):1).eq.'"')
+            begin
+                if(export_file.eqs.'"') then
+                    clear export_file
+                else
+                    export_file = export_file(2, %trim(export_file)-1)
+            end
+            xcall envrn(status)
+            ;set the directory terminator (based upon OS)
+            using status select
+            (6),
+                dir_term = ']'                      ;VMS
+            (8),
+                dir_term = '/'                      ;UNIX
+            (),
+                dir_term = '\'                      ;WINDOWS
+            endusing
+            ;look for directory terminator
+            pos = %rvstr(1, export_file, dir_term)
+            ;if not terminator, look for colon
+            if(.not.pos)
+                pos = %rvstr(1, export_file, ':')
+            ;look for filetype
+            status = %rvstr(1, export_file, '.')
+            if(status.gt.pos)
+            begin
+                log_rps = export_file(1:status) + 'log'
+            end
+        end
+    end
+
+    ;default owner
+    if(.not.db_syntax)
+        db_syntax = '"dbo"'
+
+    ;default to NOT force RW excluded fields to be included
+    incl_rw = 0
+
+    ;default for "Use ODBC name"
+    xcall getlog('SODBC_ODBCNAME', fld, status)
+    use_odbc = (status.gt.0)
+
+
+.ifdef D_TEST_MODE
+    if(.not.export_file)
+        export_file = 'TMP:export.sql'
+    if(.not.rps_main)
+        rps_main = 'RPS_DAT:rpsmain.ism'
+    if(.not.rps_text)
+        rps_text = 'RPS_DAT:rpstext.ism'
+    if(.not.log_rps)
+        log_rps = 'TMP:error.log'
+.endc
+
+    xcall i_display(wndidp,, input_rps)
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    do  begin
+        xcall i_input(wndidp,, input_rps, colid(1), colid(2),, D_NOTERM)
+        ;process window
+        if (g_select) then
+            call mnu_cols                   ;menu processing
+        else
+        begin
+            if(g_setsts) then
+                call brk_proc               ;break procssing
+            else
+                call set_proc               ;set processing
+        end
+    end
+    until(g_entnam.eq.'O_QUIT'.or.g_entnam.eq.'O_EXIT'.or.g_entnam.eq.'TS_')
+
+    xcall u_update
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call set_return_vars
+    end
+    ('O_QUIT'),
+        nop
+    ('O_ABOUT'),
+        xcall u_about(D_APP, D_VERSION, %datecompiled)
+    endusing
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    using g_fldnam select
+    ('DB_SYNTAX'),
+    begin
+        if(.not.db_syntax) then
+        begin
+            xcall u_message("Cannot be blank")
+            xcall i_next(wndidp,, g_fldnam)
+        end
+        else
+        begin
+            ;check for reserved characters
+;;              pos = %instr(1, db_syntax, "'")
+;;              if(.not.pos)
+;;                  pos = %instr(1, db_syntax, next_reserved_character)
+;;              if(pos)
+;;                  begin
+;;                  xcall u_message("Contains reserved characters")
+;;                  xcall i_next(wndidp,, g_fldnam)
+;;                  end
+
+            ;remove leading spaces
+            while(db_syntax.eq.' ')
+                db_syntax = db_syntax(2,^size(db_syntax))
+            ;remove rest of spaces
+            while(pos=%instr(2, db_syntax(1:%trim(db_syntax)), ' '))
+                db_syntax = db_syntax(1:pos-1) + db_syntax(pos+1,^size(db_syntax))
+            ;remove leading "."
+            while(db_syntax.eq.'.')
+                db_syntax = db_syntax(2,^size(db_syntax))
+            ;remove trailing "."
+            while(db_syntax(%trim(db_syntax):1).eq.'.')
+                db_syntax = db_syntax(1:%trim(db_syntax)-1)
+
+            ;is the field now blank
+            if(.not.db_syntax) then
+            begin
+                xcall u_message("Invalid Input")
+                xcall i_next(wndidp,, g_fldnam)
+            end
+            else
+            begin
+                ;now lets start looking for "."
+                start = 1
+                while(pos = %instr(start, db_syntax, '.'))
+                begin
+                    using pos select
+                    (1),
+                    begin
+                        xcall u_message("Cannot be start with .")
+                        xcall i_next(wndidp,, g_fldnam)
+                        exitloop
+                    end
+                    (0),
+                    begin
+                        exitloop
+                    end
+                    (), begin
+                        if(pos.lt.%trim(db_syntax))
+                        begin
+                            if(db_syntax(pos-1:1).ne.D_DELIM_CL)
+                            begin
+                                db_syntax = db_syntax(1:pos-1) + D_DELIM_CL + db_syntax(pos,^size(db_syntax))
+                                pos += 1
+                            end
+                            if(db_syntax(pos+1:1).ne.D_DELIM_OP)
+                            begin
+                                db_syntax = db_syntax(1:pos) + D_DELIM_OP + db_syntax(pos+1,^size(db_syntax))
+                                pos += 1
+                            end
+                        end
+                        start = pos + 1
+                    end
+                    endusing
+                end
+                if(db_syntax.ne.D_DELIM_OP)
+                    db_syntax = D_DELIM_OP + db_syntax
+                if(db_syntax(%trim(db_syntax):1).ne.D_DELIM_CL)
+                    db_syntax = %atrim(db_syntax) + D_DELIM_CL
+                xcall i_dspfld(wndidp, g_fldnam, db_syntax)
+            end
+        end
+    end
+    endusing
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    call validate_fields
+
+    if(fld)
+    begin
+        xcall u_message("Invalid data")
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+validate_fields,
+
+    clear fld
+    ; check export file
+    if(.not.export_file)
+    begin
+        fld = 'exportfile'
+    end
+    ; check RPSMFIL exists
+    if(.not.fld.and.%file_exists(rps_main, 'I:I'))
+    begin
+        fld = 'rpsmfil'
+    end
+    ; check RPSTFIL exists
+    if(.not.fld.and.%file_exists(rps_text, 'I:I'))
+    begin
+        fld = 'rpstfil'
+    end
+
+    if(.not.fld)
+    begin
+        if(.not.db_syntax)
+            fld = 'db_syntax'
+    end
+
+    if(.not.fld)
+    begin                               ;check log file exists
+        status = %file_exists(log_rps, 'I')
+        using status select
+        (0, 18),
+            nop
+        (),
+        begin
+            fld = 'logfile'
+        end
+        endusing
+    end
+
+    if(fld) then
+        xcall i_next(wndidp,, fld)
+    else
+        xcall i_next(wndidp,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_return_vars,
+
+    call validate_fields
+
+    if(fld) then
+    begin
+        xcall u_message("Invalid data")
+        clear g_entnam
+    end
+    else
+    begin
+        a_input_rps = input_rps
+    end
+
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Check is a file exists.  Uses mode to confirm it's the correct file type
+
+.function file_exists ,^VAL
+
+    a_file          ,a
+    a_mode          ,a
+
+.align
+    record
+        chan            ,i4
+        error           ,i4
+
+.proc
+
+    xcall u_open(chan, a_mode, a_file,,, error)
+    if(.not.error) xcall u_close(chan)
+
+    freturn error
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

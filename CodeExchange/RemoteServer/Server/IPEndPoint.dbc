@@ -1,0 +1,71 @@
+;;***********************************************************************************
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; Title:       IPEndPoint.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+.include "DBLDIR:synsock.def"
+
+namespace SynPSG.System.Net
+    public class IPEndPoint
+        public Address          ,integer
+        public Port             ,integer
+
+        public method IPEndPoint
+            req in address ,integer
+            req in port    ,integer
+            endparams
+        proc
+            this.Address = address
+            this.Port = port
+        endmethod
+
+        public method IPEndPoint
+            endparams
+            this(0,0)
+        proc
+        endmethod
+
+        new public method ToString  ,string
+            endparams
+        proc
+            begin
+                data dotAddress ,a15
+                if (%ss_inet_ntoa(Address, dotAddress) != SS_SUCCESS)
+                    mreturn ("0.0.0.0:" + %string(Port))
+                mreturn (%atrim(dotAddress) + ":" + %string(Port))
+            end
+        endmethod
+    endclass
+endnamespace

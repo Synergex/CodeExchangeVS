@@ -1,0 +1,719 @@
+;======================================================================
+;              Copyright 2000 by Synergex, International
+;
+;   Synergex provides this software under a license and may only be
+;     used in accordance with the terms and conditions of such
+;    license and with the inclusion of the above Copyright notice.
+;======================================================================
+; Module:   RPSXDL
+;
+; Facility: Creates XDL file from Synergy/DE Repository
+;
+; Description:  Routine to an XDL file from the Synergy/DE Repository
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:33-07:00 $
+;
+; 1.0.1   19-Oct-2000 New routine
+; 1.0.2   23-Oct-2000 Added CREATE option to program (using ismkey / isamc)
+; 1.0.3   10-Aug-2001 Added support for ISMKEY 1.0.3
+; 1.0.4   20-Sep-2010 Synergy 9.5 changes
+;
+;
+; Requires Synergy/DE 7.0.1 (or later)
+;
+;
+; Assumptions:
+;
+; if the DCS argument is passed, then it must have been initialized by DD_INIT.
+;
+; If more than 1 structure is assigned to a file,  the first structure is used
+; to create the XDL file.
+;
+;
+; Function return values
+;
+;       0   No error
+;       +ve DCS dd_init error
+;       -ve RPSXDL error (as defined in ISMKEY.DEF)
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.function rpsxdl, ^VAL
+
+; create xdl file from repository
+
+    a_dcs       ,a                          ;[optional] - DCS control structure
+                                            ; if not passed, routine will init DCS
+
+    a_file_name ,a                          ;[optional] - RPS filename
+
+    ; must have one (or both) of the above!!
+
+    a_xdl_file  ,a                          ;[optional] - XDL filename or logical
+
+    a_log_file  ,a                          ;[optional] - log filename
+
+    a_merge     ,n                          ;[optional] - merge adjacent similar segments
+
+
+.include 'INC:ismkey.def'                       ;function return values plus other defines
+
+.include 'WND:tools.def'
+.include 'RPSLIB:ddinfo.def'
+
+    external function
+        type_is_same    ,^val                   ;adjacent segments have same type
+        order_is_same   ,^val                   ;adjacent segments have same order
+        type_seg        ,a                      ;type this segment
+
+.align
+    stack record clr_i
+        status          ,i4                     ;function return status
+        merge_segments  ,i4                     ;merge adjacent similar key segments
+        e1              ,i4                     ;general purpose error flag
+        e2              ,i4                     ;general purpose error flag
+        ctr             ,i4                     ;general purpose counter
+        curr_seg_no     ,i4                     ;current segment number
+        k_ptr           ,D_HANDLE               ;key name array pointer
+        kd_ptr          ,D_HANDLE               ;key info array pointer
+        xdl_ch          ,i4                     ;channel number
+        num_keys        ,i4                     ;upper access key number in use
+        key_no          ,i4                     ;key number counter
+        len             ,i4                     ;segment length
+
+.align
+    stack record clr
+        st              ,a 255                  ;key segment start position string
+        ln              ,a 255                  ;key segment length string
+        ty              ,a 255                  ;key segment type string
+        or              ,a 255                  ;key segment order string
+        port_int        ,a 120                  ;portable integer data
+        temp_file       ,a 255                  ;temporary filename
+        xdl_file        ,a 255                  ;XDL filename
+        group adate     ,a 20
+            group ndate    ,d 8
+                year          ,a 4
+                month         ,d 2
+                day           ,a 2
+            endgroup
+            hours        ,a 2
+            minutes      ,a 2
+            seconds      ,a 2
+        endgroup
+
+    literal
+        weekday         ,7 a 3  ,'Sun' ,'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'
+        mon             ,12 a 3 ,'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'
+        &                       ,'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+
+.align
+    stack record
+        file_name       ,a 30                   ;file name
+        str_name        ,a 30                   ;structure name
+
+.align
+    stack record outb
+                        ,a 8
+        keyword         ,a 20
+                        ,a 1
+        value           ,a 255
+
+    structure key_names_rec
+        key_nam         ,a ^size(kname)         ;key names for structure
+
+    structure key_info_rec
+        key_info        ,a ^size(k_info)        ;key details for structure
+
+    structure key_specs
+        key_spec        ,a KEY_SIZ              ;key specification for structure
+
+.proc
+
+    if(^passed(a_dcs)) then
+    begin
+        dcs = a_dcs
+        if(^passed(a_file_name)) then
+            file_name = a_file_name         ;use specified file
+        else
+            file_name = fname               ;use DCS structure
+    end
+    else
+    begin
+        if(.not.^passed(a_file_name))
+            freturn ERR_NOFILENAME
+
+        xcall dd_init(dcs)
+        if (error)
+        begin
+            xcall log_error(error, "Cannot initialize dcs", a_log_file)
+            freturn error
+        end
+        file_name = a_file_name
+    end
+
+
+    ; get file details from repository
+    xcall dd_file(dcs, DDL_INFO, file_name, fl_info)
+
+    ; file error
+    if(error)
+    begin
+        xcall log_error(error, "Cannot read file for "+file_name)
+        freturn ERR_NOSTRUCT
+    end
+
+    ; no assigned structures
+    if(.not.fli_nmstructs.or..not.fli_struct)
+    begin
+        xcall log_error(0, "No Structures")
+        freturn ERR_NOSTRUCT
+    end
+
+    ; use first structure
+    str_name = fli_struct
+
+
+    xcall dd_struct(dcs, DDS_INFO, str_name, s_info)
+    if (error)
+    begin
+        xcall log_error(error, "Structure:" + %atrim(str_name) + " No info", a_log_file)
+        freturn ERR_NOSTRUCT
+    end
+
+    if(.not.si_nmfils)
+        freturn ERR_NOASS
+    ;must be assigned to a file
+    if(.not.si_nmkeys)
+        freturn ERR_NOKEYS
+    ;no keys defined
+
+; Repository information is valid - now do some real work
+
+    clear clr, ^i(clr_i)
+
+    if(^passed(a_merge))
+        merge_segments = a_merge            ;merge adjacent similar segments (or not)
+
+    status = ERR_NONE                       ;no error
+
+    xcall dd_file(dcs, DDL_INFO, si_file, fl_info)
+    if(error)
+    begin
+        xcall log_error(error, "Structure:" + %atrim(str_name) + " File:" + %atrim(si_file), a_log_file)
+    end
+
+    call build_key_dets
+
+    if(num_keys) call create_xdl
+
+    if(k_ptr) k_ptr = %mem_proc(DM_FREE, k_ptr)
+    if(kd_ptr) kd_ptr = %mem_proc(DM_FREE, kd_ptr)
+
+    if(^passed(a_dcs)) then
+        a_dcs = dcs
+    else
+        xcall dd_exit(dcs)
+
+    freturn status
+
+;----------------------------------------------------------------------------
+
+build_key_dets,
+
+    if(si_nmkeys)
+    begin
+
+        ; allocate memory for key structures
+        onerror nomem_k
+        k_ptr = %mem_proc(DM_ALLOC+DM_STATIC, (si_nmkeys*^size(key_names_rec)))
+        offerror
+
+        onerror nomem_k
+        kd_ptr = %mem_proc(DM_ALLOC+DM_STATIC, (si_nmkeys*^size(k_info)))
+        offerror
+
+        ; initialize key structures
+        for key_no from 1 thru si_nmkeys
+            clear ^m(key_info_rec[key_no], kd_ptr)
+
+        ; get a list of keys
+        xcall dd_key(dcs, DDK_LIST, si_nmkeys, ^m(key_names_rec, k_ptr))
+        if (error)
+        begin
+            xcall log_error(error, "Structure:" + %atrim(str_name) + " No key list", a_log_file)
+            status = ERR_NOKEYLST
+        end
+
+        clear num_keys
+        for key_no from 1 thru si_nmkeys
+        begin
+            ; get key details
+            xcall dd_key(dcs, DDK_INFO, ^m(key_names_rec[key_no], k_ptr), k_info)
+            if (error)
+            begin
+                xcall log_error(error, "Structure:" + %atrim(str_name) + " key:" + ^m(key_names_rec[key_no], k_ptr), a_log_file)
+                ki_ktype = KI_FOR
+            end
+
+            ; is this an access key
+            if (ki_ktype.eq.KI_ACC)
+            begin
+                ; only store the first occurance of a particular key number
+                if(.not.^m(key_info_rec[ki_krf+1].key_info, kd_ptr))
+                begin
+                    ^m(key_info_rec[ki_krf+1].key_info, kd_ptr) = k_info
+                    if(num_keys.lt.ki_krf+1) num_keys = ki_krf+1
+                end
+            end
+        end
+    end
+
+    return
+
+nomem_k,
+    offerror
+    clear num_keys
+    return
+
+;----------------------------------------------------------------------------
+
+create_xdl,
+
+    if(^passed(a_xdl_file)) then
+    begin
+        if(a_xdl_file) then
+        begin
+            ctr = %trim(a_xdl_file)
+            if(ctr.gt.1.and.a_xdl_file(ctr:1).eq.':') then
+            begin
+                temp_file = %atrim(file_name) + '.xdl'
+                locase temp_file
+                xdl_file = %atrim(a_xdl_file) + temp_file
+            end
+            else
+                xdl_file = a_xdl_file
+        end
+        else
+        begin
+            xdl_file = %atrim(file_name) + '.xdl'
+            locase xdl_file
+        end
+    end
+    else
+    begin
+        xdl_file = %atrim(file_name) + '.xdl'
+        locase xdl_file
+    end
+
+    ;add a 'z' to the end of the xdl filename, to make a temporary filename
+    temp_file = xdl_file(1:%trim(xdl_file)) + 'z'
+
+    xcall u_open(xdl_ch, 'O', temp_file)
+
+    call create_file_record
+
+    ; process each key
+    for key_no from 1 thru num_keys
+    begin
+        k_info = ^m(key_info_rec[key_no].key_info, kd_ptr)
+
+        if (ki_name) then
+            call create_key
+        else
+            status = ERR_NOKEYDEF
+    end
+
+
+    if(status.eq.ERR_NONE) then
+    begin
+        xcall u_close(xdl_ch)
+        xcall renam(a_xdl_file, temp_file)
+    end
+    else
+        xcall u_close(D_PURGE, xdl_ch)
+
+    return
+
+;----------------------------------------------------------------------------
+
+create_file_record,
+
+    adate = %datetime
+
+    outb = "!       Synergy ISAM XDL File created "
+&       + weekday(%wkday(ndate)) + " "
+&       + mon(month) + " "
+&       + day + " "
+&       + hours + ":" + minutes + ":" + seconds + " "
+&       + year + " "
+
+    call print
+
+
+    outb = 'FILE'
+    call print
+
+    outb.keyword = 'NAME'
+    outb.value = '"' + %atrim(fli_fname) + '"'
+    call print
+
+
+    outb.keyword = 'ADDRESSING'
+    using fli_addressing select
+    (FLI_32BIT),    outb.value = '32'
+    (FLI_40BIT),    outb.value = '40'
+    (),             outb.value = '32'
+    endusing
+    call print
+
+    outb.keyword = 'PAGE_SIZE'
+    using fli_pagesize select
+    (FLI_PS1024),   outb.value = '1024'
+    (FLI_PS512),    outb.value = '512'
+    (FLI_PS2048),   outb.value = '2048'
+    (FLI_PS4096),   outb.value = '4096'
+    (FLI_PS8192),   outb.value = '8192'
+    (),             outb = '~'
+    endusing
+    call print
+
+    outb.keyword = 'DENSITY'
+    if(fli_density) then
+        outb.keyword = %string(fli_density)
+    else
+        outb = '~'
+    call print
+
+    outb.keyword = 'KEYS'
+    outb.value = %string(num_keys)
+    call print
+
+    call print
+
+    outb = 'RECORD'
+    call print
+
+    outb.keyword = 'SIZE'
+    outb.value = %string(si_recsz)
+    call print
+
+    outb.keyword = 'FORMAT'
+    using fli_rectyp select
+    (FLI_FIXED),    outb.value = 'fixed'
+    (FLI_VAR),      outb.value = 'variable'
+    (FLI_MULT),     outb.value = 'multiple'
+    (),             outb.value = 'fixed'
+    endusing
+    call print
+
+    outb.keyword = 'COMPRESS_DATA'
+    if(fli_compress) then
+        outb.value = 'yes'
+    else
+        outb.value = 'no'
+    call print
+
+
+    outb.keyword = 'STATIC_RFA'
+    if(fli_staticrfa) then
+        outb.value = 'yes'
+    else
+        outb.value = 'no'
+    call print
+
+    if(fli_portable)
+    begin                       ;max 120 chars
+        xcall dd_file(dcs, DDL_INFO, fli_portable, port_int)
+        if(.not.error)
+        begin
+            if(port_int.ne.'I') error = 1
+        end
+        if(.not.error)
+        begin
+            outb.keyword = 'PORT_INT'
+            outb.value = port_int
+            call print
+        end
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+create_key,
+
+    ; make sure that all key segments are fields
+    for ctr from 1 thru ki_nmseg
+    begin
+        if(ki_segtyp(ctr).ne.KI_SG_FLD) status = ERR_INVSEG
+    end
+    if(status.ne.ERR_NONE)
+    begin
+        xcall log_error(status, "Invalid KEY " + %atrim(ki_name)
+&           + " Structure " + %atrim(str_name), a_log_file)
+        return
+    end
+
+
+    st = %string(ki_segpos(1))
+
+    ctr = 1
+    curr_seg_no = ctr
+    len = ki_seglen(ctr)
+
+    if(merge_segments)
+    begin
+        ; concatenate key segments (where same type and direction)
+        while(ctr.lt.ki_nmseg.and.
+&           ki_segpos(ctr+1).eq.(ki_segpos(ctr)+ki_seglen(ctr)).and.
+&           %type_is_same(ki_segdtyp(ctr+1), ki_segdtyp(ctr)).and.
+&           %order_is_same(ki_segord(ctr+1), ki_segord(ctr), ki_order))
+        begin
+            incr ctr
+            len += ki_seglen(ctr)
+        end
+    end
+
+    ln = %string(len)
+
+    using ki_segord(1) select
+    (KI_SG_ASC),    or = 'ascending'
+    (KI_SG_DES),    or = 'descending'
+    (),
+    begin
+        using ki_order select
+        (KI_ASC),   or = 'ascending'
+        (KI_DES),   or = 'descending'
+        (),         or = 'ascending'
+        endusing
+    end
+    endusing
+
+    using ki_segdtyp(1) select
+    (KI_SG_ALP),    ty = 'alpha'
+    (KI_SG_NOC),    ty = 'nocase'
+    (KI_SG_DEC),    ty = 'decimal'
+    (KI_SG_INT),    ty = 'integer'
+    (KI_SG_UNS),    ty = 'unsigned'
+    (),             ty = %type_seg(dcs, ki_fldnam(curr_seg_no))
+    endusing
+
+    ctr+=1
+    while(ctr.le.ki_nmseg)
+    begin
+        st = st(1:%trim(st)) + ':' + %string(ki_segpos(ctr))
+        curr_seg_no = ctr
+        len = ki_seglen(ctr)
+
+        if(merge_segments)
+        begin
+            ; concatenate key segments (where same type and direction)
+            while(ctr.lt.ki_nmseg.and.
+&               ki_segpos(ctr+1).eq.(ki_segpos(ctr)+ki_seglen(ctr)).and.
+&               %type_is_same(ki_segdtyp(ctr+1), ki_segdtyp(ctr)).and.
+&               %order_is_same(ki_segord(ctr+1), ki_segord(ctr), ki_order))
+            begin
+                ctr += 1
+                len += ki_seglen(ctr)
+            end
+        end
+
+        ln = ln(1:%trim(ln)) + ':' + %string(len)
+
+        using ki_segord(ctr) select
+        (KI_SG_ASC),    or = or(1:%trim(or)) + ':ascending'
+        (KI_SG_DES),    or = or(1:%trim(or)) + ':descending'
+        (),
+        begin
+            using ki_order select
+            (KI_ASC),   or = or(1:%trim(or)) + ':ascending'
+            (KI_DES),   or = or(1:%trim(or)) + ':descending'
+            (),         or = or(1:%trim(or)) + ':ascending'
+            endusing
+        end
+        endusing
+
+        using ki_segdtyp(ctr) select
+        (KI_SG_ALP),    ty = ty(1:%trim(ty)) + ':alpha'
+        (KI_SG_NOC),    ty = ty(1:%trim(ty)) + ':nocase'
+        (KI_SG_DEC),    ty = ty(1:%trim(ty)) + ':decimal'
+        (KI_SG_INT),    ty = ty(1:%trim(ty)) + ':integer'
+        (KI_SG_UNS),    ty = ty(1:%trim(ty)) + ':unsigned'
+        (),             ty = ty(1:%trim(ty)) + ':' + %type_seg(dcs, ki_fldnam(curr_seg_no))
+        endusing
+
+        ctr += 1
+    end
+
+    clear outb
+    call print
+
+    outb = 'KEY' + %string(key_no-1)
+    call print
+
+    outb.keyword = 'START'
+    outb.value = st
+    call print
+
+    outb.keyword = 'LENGTH'
+    outb.value = ln
+    call print
+
+    outb.keyword = 'TYPE'
+    outb.value = ty
+    call print
+
+    outb.keyword = 'ORDER'
+    outb.value = or
+    call print
+
+    outb.keyword = 'NAME'
+    outb.value = ki_name
+    call print
+
+    outb.keyword = 'DUPLICATES'
+    using ki_dups select
+    (KI_NDPS),  outb.value = 'no'
+    (KI_DPS),   begin
+        outb.value = 'yes'
+        call print
+
+        outb.keyword = 'DUPLICATE_ORDER'
+        using ki_insert select
+        (KI_FRT),   outb.value = 'lifo'
+        (KI_END),   outb.value = 'fifo'
+        (),         outb.value = 'fifo'
+        endusing
+    end
+    endusing
+    call print
+
+    outb.keyword = 'MODIFIABLE'
+    using ki_mod select
+    (KI_NMDF),  outb.value = 'no'
+    (KI_MDF),   outb.value = 'yes'
+    (),         outb.value = 'no'
+    endusing
+    call print
+
+    outb.keyword = 'DENSITY'
+    if(ki_density) then
+        outb.keyword = %string(ki_density)
+    else
+        outb = '~'
+    call print
+
+    using ki_null select
+    (KI_NONULL),nop
+    (KI_REP),   begin
+        outb.keyword = 'NULL'
+        outb.value = 'replicate'
+        call print
+    end
+    (KI_NONREP),begin
+        outb.keyword = 'NULL'
+        outb.value = 'noreplicate'
+        call print
+    end
+    (KI_SHORT), begin
+        outb.keyword = 'NULL'
+        outb.value = 'short'
+        call print
+    end
+    endusing
+
+    if(ki_nullval)
+    begin
+        xcall dd_key(dcs, DDK_TEXT, ki_nullval, port_int)
+        if(.not.error)
+        begin
+            outb.keyword = 'NULL_VALUE'
+            outb.value = port_int
+            call print
+        end
+    end
+
+.ifdef OS_VMS
+;   if(.not.ki_cmprec.or..not.ki_cmpidx.or..not.ki_cmpkey)
+;   begin
+;       outb.keyword =  'COMPRESS'
+;
+;       if(.not.ki_cmprec) outb.value = outb.value(1:%trim(outb.value)) + '/NORECORD'
+;       if(.not.ki_cmpidx) outb.value = outb.value(1:%trim(outb.value)) + '/NOINDEX'
+;       if(.not.ki_cmpkey) outb.value = outb.value(1:%trim(outb.value)) + '/NOKEY'
+;
+;       ;remove leading "/"
+;       outb.value = outb.value(2,%trim(outb.value))
+;   end
+.endc
+
+    return
+
+;----------------------------------------------------------------------------
+
+print,
+    if(outb.ne.'~')
+        writes(xdl_ch, outb(1:%trim(outb)))
+    clear outb
+    return
+
+.end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; type the key segment field (assumes that it's in the same structure)
+
+.function type_seg
+
+    a_dcs           ,a                      ;DCS
+    a_fldnam        ,a                      ;field
+
+.include 'RPSLIB:ddinfo.def'
+
+.align
+    record
+        type            ,a20
+
+.proc
+
+    freturn 'alpha'
+
+    xcall dd_field(dcs, DDF_INFO, a_fldnam, f_info)
+    if(.not.error) then
+    begin
+        using fi_type select
+        (T_ALP),
+        begin
+            using fi_class select
+            (C_BINARY),     type = 'integer'
+            (),             type = 'alpha'
+            endusing
+        end
+        (T_DEC),            type = 'decimal'
+        (T_INT),            type = 'integer'
+        (T_USR),
+        begin
+            using fi_class select
+            (C_ALPHA),      type = 'alpha'
+            (C_NUMERIC),    type = 'decimal'
+            (C_DATE),       type = 'decimal'
+            (),             type = 'alpha'
+            endusing
+        end
+        (),                 type = 'alpha'
+        endusing
+
+;;      (KI_SG_NOC),        type = 'nocase'
+;;      (KI_SG_UNS),        type = 'unsigned'
+    end
+    else
+        type = 'alpha'
+
+    freturn %atrim(type)
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

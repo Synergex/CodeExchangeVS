@@ -1,0 +1,168 @@
+;;***********************************************************************************
+;;
+;; Title:       logging.dbc
+;;
+;; Type:        subroutines and functions
+;;
+;; Description:
+;;
+;; Author:      William Hawkins, Synergex Professional Services Group
+;;
+;; Copyright    © 2010 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+
+namespace SynPSG.Core.Utilities
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function loggerStart ,int
+        opt in  aMode       ,a
+        opt in  aLogFile    ,a
+        endparams
+record
+        fstatus     ,int
+        mode        ,a4
+endrecord
+
+global common
+        loggerFilename  ,a255
+
+proc
+
+        fstatus = 0
+
+        if(^passed(aMode)) then
+            mode = aMode
+        else
+            mode = '0'
+
+        try
+        begin
+            using mode select
+            ('1 '),
+            begin
+                data logChannel ,int
+                logChannel = %syn_freechn
+                open(logChannel, O, 'TT:')
+                loggerFilename = 'TT:' + %string(logChannel,'XXXX')
+                fstatus = 1
+            end
+            ('2 '),
+            begin
+                if(aLogFile != ' ')
+                    loggerFilename = aLogFile
+                fstatus = 2
+            end
+            (),
+            begin
+                clear loggerFilename
+            end
+            endusing
+        end
+        catch (e)
+        begin
+            clear loggerFilename
+
+            fstatus = 0
+        end
+        endtry
+
+        freturn fstatus
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function loggerInfoMessage  ,^val
+        req in  aMessage    ,a
+        endparams
+
+external common
+        loggerFilename  ,a255
+
+proc
+
+        try
+        begin
+            data logChannel ,int
+
+            using loggerFilename select
+            (' '),
+                nop
+            ('TT:'),
+            begin
+                logChannel = loggerFilename(4:4)
+                if(logChannel>0 && logChannel<=1024)
+                    writes(logChannel, aMessage)
+            end
+            (),
+            begin
+                logChannel = %syn_freechn
+                open(logChannel, A, loggerFilename)
+                writes(logChannel, aMessage)
+                close logChannel
+            end
+            endusing
+        end
+        catch (e)
+            nop
+        endtry
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function loggerOutput   ,^val
+        req in  aFilename   ,a
+        req in  aMessage    ,a
+        endparams
+record
+        fstatus         ,int
+        chan            ,int
+endrecord
+
+proc
+        fstatus = 0
+        try
+        begin
+            open(chan=%syn_freechn, A, aFilename)
+            writes(chan, aMessage)
+            close chan
+        end
+        catch (e)
+        begin
+            fstatus = %error
+        end
+        endtry
+
+        freturn fstatus
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+endnamespace
+

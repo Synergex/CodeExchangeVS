@@ -1,0 +1,73 @@
+.define RFA_SIZE	6
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;convert RFA (a6) to Hex string (a18) (space delimited for display purposes)
+
+function SHOW_RFA ,a
+    req in	a_rfa		,a					; incoming RFA
+    endparams
+.align
+    record
+        ctr			,i4						; loop counter
+        group rfa
+            rfa_i   ,[RFA_SIZE]i1			; rfa
+        endgroup
+    group display_hex
+        group hex2  ,[RFA_SIZE]a3
+            pr			,a2					; rfa hex number
+                        ,a1					; spacing character
+        endgroup
+    endgroup
+proc
+    rfa = a_rfa
+    for ctr from 1 thru RFA_SIZE
+        hex2[ctr].pr = %hex(rfa_i[ctr], 1)
+    freturn display_hex
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;convert Hex string (a12) to RFA (a6)
+
+function HEX_TO_RFA ,a
+    req in	a_hex		,a					; incoming hex
+    endparams
+.align
+    record
+        ctr			,i4						; loop counter
+        group rfa
+            rfa_i     ,[RFA_SIZE]i1			; rfa
+        endgroup
+        group hex
+            pr		  ,[RFA_SIZE]a2			; hex pairs
+        endgroup
+proc
+    hex = a_hex
+    for ctr from 1 thru RFA_SIZE
+        rfa_i[ctr] = ^x(hex.pr[ctr])
+    freturn rfa
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;convert RFA (a6) to Hex string (a12)
+
+function RFA_TO_HEX ,a
+    req in	a_rfa		,a					; incoming RFA
+    endparams
+.align
+    record
+        ctr			,i4						; loop counter
+        group rfa
+            rfa_i	  ,[RFA_SIZE]i1			; rfa
+        endgroup
+        group hex
+          pr		  ,[RFA_SIZE]a2			; hex pairs
+        endgroup
+proc
+    rfa = a_rfa
+    for ctr from 1 thru RFA_SIZE
+        hex.pr[ctr] = %hex(rfa_i[ctr], 1)
+    freturn hex
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

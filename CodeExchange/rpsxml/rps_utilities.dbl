@@ -1,0 +1,314 @@
+;=======================================================================;
+;  Copyright 2001 by Synergex International Corporation                 ;
+;                                                                       ;
+;  Synergex provides this software under a license and may only be      ;
+;  used in accordance with the terms and conditions of such             ;
+;  license and with the inclusion of the above Copyright notice.        ;
+;=======================================================================;
+;
+; Source:  rps_utilities.dbl
+;
+; Function: Synergy/DE Repository utilites
+;
+; Environment: Synergy Development Environment, v7.5
+;
+; $Author: William Hawkins $
+;
+; $Date: 2010-10-19 13:07:35-07:00 $
+;
+; $Revision: 1 $
+;
+; History
+;
+; 21-Sep-2001   WJH     Added get_rps_filenames
+;
+;=======================================================================;
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; function return value
+; 0 = all ok
+; 1 = RPSMAIN unknown
+; 2 = RPSTEXT unknown
+; 3 = Both unknown
+
+.function GET_RPS_FILENAMES ,^VAL
+    a_rpsmfil           ,a              ;REQUIRED RETURNED RPSMAIN filename
+    a_rpstfil           ,a              ;REQUIRED RETURNED RPSTEXT filename
+    a_opencheck         ,n              ;OPTIONAL RETURNED check if RPS files exist
+                                        ; 0 = all ok
+                                        ; 1 = RPSMAIN missing
+                                        ; 2 = RPSTEXT missing
+                                        ; 3 = Both missing
+
+    external function
+        file_exists     ,^val
+
+.align
+    record clr_i
+        fstatus         ,i4                 ;function return status
+        status          ,i4                 ;status flag
+        chan            ,i4                 ;channel
+        fred ,i4
+.proc
+
+    clear ^i(clr_i)
+
+    xcall getlog('RPSMFIL', a_rpsmfil, status)
+    if(.not.status)
+    begin
+        xcall getlog('RPSDAT', a_rpsmfil, status)
+        if(status) then
+            a_rpsmfil = 'RPSDAT:' + 'rpsmain.ism'
+        else
+        begin
+            clear a_rpsmfil
+            fstatus += 1
+        end
+    end
+
+    xcall getlog('RPSTFIL', a_rpstfil, status)
+    if(.not.status)
+    begin
+        xcall getlog('RPSDAT', a_rpstfil, status)
+        if(status) then
+            a_rpstfil = 'RPSDAT:' + 'rpstext.ism'
+        else
+        begin
+            clear a_rpstfil
+            fstatus += 2
+        end
+    end
+
+    if(^passed(a_opencheck))
+    begin
+        clear a_opencheck
+
+        if(.not.%file_exists(a_rpsmfil, 'I:I'))
+            a_opencheck += 1
+
+        if(.not.%file_exists(a_rpsmfil, 'I:I'))
+            a_opencheck += 2
+
+    end
+
+    freturn fstatus
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine RPS_FILENAME_DRILL ,reentrant
+.include "WND:inpinf.def"   ; Group argument of input info
+    a_inprec            ,a      ; The data_area argument passed to the
+    ;  calling input routine.
+    a_rps_drill         ,a      ; Optional method data argument
+    a_method_data2      ,a      ; Optional method data argument
+    a_method_data3      ,a      ; Optional method data argument
+    a_method_data4      ,a      ; Optional method data argument
+    a_method_data5      ,a      ; Optional method data argument
+    a_method_data6      ,a      ; Optional method data argument
+    a_method_data7      ,a      ; Optional method data argument
+    a_method_data8      ,a      ; Optional method data argument
+    a_method_data9      ,a      ; Optional method data argument
+    a_method_data10     ,a      ; Optional method data argument
+    a_method_data11     ,a      ; Optional method data argument
+    a_method_data12     ,a      ; Optional method data argument
+    a_method_data13     ,a      ; Optional method data argument
+    a_method_data14     ,a      ; Optional method data argument
+    a_method_data15     ,a      ; Optional method data argument
+    a_method_data16     ,a      ; Optional method data argument
+    a_method_data17     ,a      ; Optional method data argument
+    a_method_data18     ,a      ; Optional method data argument
+    a_method_data19     ,a      ; Optional method data argument
+    a_method_data20     ,a      ; Optional method data argument
+
+.include 'WND:tools.def'
+.include 'WND:inpctl.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:rps_utilities.def'
+
+    structure fil_array
+        file_array          ,a30            ;filename(s)
+
+.align
+    record clr
+        count               ,d4             ;number of files in array
+        mbuffer             ,a1024          ;menu column build buffer
+        file_name           ,a ^size(fil_array)
+        ;current filename
+
+.align
+    record clr_i
+        ctr                 ,i4             ;counter
+        f_ptr               ,D_HANDLE       ;rps filename array handle
+        bld_id              ,i4             ;build id
+        col_id              ,i4             ;menu column id
+        sel_col             ,i4             ;list selection column id
+        wnd_id              ,i4             ;list input windows id
+        lst_id              ,i4             ;list id
+        req                 ,i4             ;list request
+
+.proc
+
+    if(^passed(a_rps_drill)) then
+        rps_drill = a_rps_drill
+    else
+        clear rps_drill
+
+    clear ^i(clr_i), clr
+
+    if(rpsmain_file.and.rpstext_file) then
+        xcall dd_init(dcs, rpsmain_file, rpstext_file)
+    else
+        xcall dd_init(dcs)
+
+    using error select
+    (E_OK), begin
+        xcall dd_name(dcs, DDN_COUNT, DDN_FILE, count)
+        if (error)
+        begin
+            clear count
+        end
+
+        if (count.gt.0) then
+            call build_list
+        else
+            xcall u_message("No Files in Repository")
+
+        xcall dd_exit(dcs)
+    end
+    (E_NOFIND),
+        xcall u_message("Record not found")
+    (E_OPNERR),
+        xcall u_message("Cannot open RPS")
+    (E_INVFNC),
+        xcall u_message("Invalid Function")
+    (E_OPNERRM),
+        xcall u_message("Cannot open RPS main file")
+    (E_OPNERRT),
+        xcall u_message("Cannot open RPS text file")
+    (E_BADVERS),
+        xcall u_message("Incompatible Repository version")
+    (),
+        xcall u_message("DD_INIT error "+%string(error))
+    endusing
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+build_list,
+
+    xcall e_enter
+
+    xcall m_column(D_REMOVE, D_ALL)
+
+
+    xcall mb_column(mbuffer, 'MC_FILENAME', "Options")
+    xcall mb_entry(mbuffer, 'EXIT', "Exit",,, "E")
+    xcall mb_entry(mbuffer, 'QUIT', "Quit",,, "E")
+    xcall mb_entry(mbuffer, 'S_FIND', "Find",,, "F")
+    xcall mb_end(mbuffer, col_id)
+
+    xcall mb_column(mbuffer, 'MC_SELECT', "Cursor",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'S_DOWN', "Next item", DOWN_KEY, "v", "N")
+    xcall mb_entry(mbuffer, 'S_UP', "Prev item", UP_KEY, "^", "P")
+    xcall mb_entry(mbuffer, 'S_PGDN', "Next page", F61_KEY, "PgDn", "N")
+    xcall mb_entry(mbuffer, 'S_PGUP', "Prev page", F59_KEY, "PgUp", "P")
+    xcall mb_end(mbuffer, sel_col)
+
+    xcall ib_input(bld_id, 'IW_FILENAME', 1, ^size(fil_array))
+
+    xcall ib_field(bld_id, 'rpsfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(fil_array))
+
+    xcall ib_end(bld_id, wnd_id)
+
+    clear mbuffer
+    ;mbuffer = 'ACTIVEX'
+
+    xcall l_class(bld_id, 'LC_FILENAME',,, 10,,,,,,, 'rps_filename_load', %atrim(mbuffer))
+
+    xcall l_create(lst_id, wnd_id, file_name,, 'LC_FILENAME', 3, 20,,, 1, count)
+
+    xcall l_sect(lst_id, "List of "+%string(count)+" Repository Files", D_TITLE)
+
+    xcall l_button(lst_id, 'EXIT', "OK",,,, "O")
+    xcall l_button(lst_id, 'QUIT', "Cancel",,,, "C")
+    xcall l_buttonset(lst_id, DSB_BOTTOM, 2, DSB_BEGIN)
+
+
+    f_ptr = %mem_proc(DM_ALLOC+DM_STATIC, count*^size(fil_array))
+
+    xcall dd_name(dcs, DDN_LIST, DDN_FILE, count, ^m(fil_array, f_ptr))
+
+
+    req = D_LNOP
+
+    do  begin
+        xcall l_select(lst_id, req, file_name,,, "Filename  ", 30,, sel_col,,,,,,, f_ptr, count)
+        if(g_select) then
+        begin
+            using g_entnam select
+            ('EXIT'),
+            begin
+                xcall i_force(file_name)
+            end
+            ('QUIT'),
+                nop
+            endusing
+        end
+        else
+        begin
+            xcall l_status(lst_id, D_LCURITM, ctr)
+            if(ctr)
+                xcall i_force(file_name)
+            g_entnam = 'EXIT'
+        end
+    end
+    until(g_entnam.eq.'EXIT'.or.g_entnam.eq.'QUIT')
+
+    if(f_ptr)
+        f_ptr = %mem_proc(DM_FREE, f_ptr)
+
+    clear g_entnam
+    xcall e_exit
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; List load method for filenames
+
+.subroutine RPS_FILENAME_LOAD ,stack
+    a_listid    ,n          ; List id
+    a_req       ,n          ; Request flag
+    a_data      ,a          ; Item data
+    a_inpid     ,n          ; Input window id
+    a_disable   ,n          ; (Optional) Disable flag
+    a_index     ,n          ; Loading index
+
+    a_f_ptr     ,n          ; array memory handle
+    a_count     ,n          ; array size
+
+.include "WND:tools.def"
+.include 'RPSLIB:ddinfo.def'
+
+    structure fil_array
+        file_array          ,a30
+
+.proc
+
+    if(a_index.le.a_count) then
+    begin
+        a_data = ^m(fil_array[a_index], a_f_ptr)
+        xcall i_display(a_inpid,, a_data)
+    end
+    else
+        a_req = D_LEOF
+
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

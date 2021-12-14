@@ -1,0 +1,21 @@
+; file_utilities.def
+
+.ifndef D_FILENAME_SIZE
+.define D_FILENAME_SIZE 255
+.endc ;D_FILENAME_SIZE
+
+; redefine xcall envrn returns.  This avoids conflicting with OS_xxxx.
+.define ENV_VMS         6
+.define ENV_UNIX        8
+.define ENV_WINDOWS     11
+
+; %EXPAND_FOLDER
+;expand logicals
+.define D_EXPAND_LOG    1
+
+; %CASE_NAME
+.define D_CASE_NONE         0
+.define D_CASE_CAPITALIZE   1
+.define D_CASE_UPPER        2
+.define D_CASE_LOWER        3
+

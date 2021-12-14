@@ -1,0 +1,67 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+; This routine writes errors to a log file.
+;
+; Change History
+;
+; 03-May-2000 William Hawkins   Initial version
+; 20-Apr-2010 William Hawkins   Removed UI Toolkit & DBL v9 syntax
+;
+; To delete a log file, pass an error of -1, and do not pass a message
+;
+subroutine log_error
+    req in      a_error     ,n          ;log error number
+    opt in      a_message   ,a          ;log message
+    opt in      a_logfile   ,a          ;log filename
+    endparams
+
+.align
+    record
+        chan        ,i4
+        e1          ,i4
+        filename    ,a255   ,'errors.log'
+
+proc
+
+    if(^passed(a_logfile) && a_logfile)
+        filename = a_logfile
+
+    if(a_error == -1 && !^passed(a_message))
+    begin
+        xcall delet(filename)
+        xreturn
+    end
+
+    chan = %syn_freechn
+    onerror nofile
+    open(chan, A, filename) [$ERR_FNF=nofile, ERR=badopen]
+    if(FALSE)
+    begin
+nofile,
+        open(chan, O, filename) [ERR=badopen]
+    end
+    offerror
+
+    if(a_error) then
+    begin
+        if(^passed(a_message)) then
+            writes(chan, %datetime+":"+%string(a_error)+":"+%atrim(a_message))
+        else
+            writes(chan, %datetime+":"+%string(a_error)+":")
+    end
+    else
+    begin
+        if(^passed(a_message)) then
+            writes(chan, %datetime+":"+%atrim(a_message))
+        else
+            writes(chan, %datetime+":")
+    end
+    close chan
+
+badopen,
+    xreturn
+
+endsubroutine
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

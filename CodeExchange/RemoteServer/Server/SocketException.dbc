@@ -1,0 +1,117 @@
+;;**********************************************************************
+;;
+;; Title:       Socket.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System.Net
+
+namespace SynPSG.System.Net
+
+.include "DBLDIR:synsock.def"
+
+    public class SocketException extends System.ApplicationException
+        private mErrorCode          ,int
+        private mSocketErrorCode    ,int
+        private mMessage            ,string
+
+        ;;;<summary>
+        ;;; Public Static method to throw a SocketError.
+        ;;; You should use this if you want to specify a message.
+        ;;;</summary>
+        static public method ThrowSocketException ,void
+            req in  errnum      ,int
+            req in  source      ,string
+            req in  message     ,string
+            endparams
+            record
+                sError          ,@SocketException
+            endrecord
+        proc
+                sError = new SocketException(errnum)
+                sError.Source = source
+                sError.mMessage = message
+                throw sError
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Create a new socket
+        ;;;</summary>
+        public method SocketException
+            endparams
+        proc
+            mErrorCode = 0
+            mSocketErrorCode = 0
+        endmethod
+
+        ;;;<summary>
+        ;;;Create a new socket
+        ;;;</summary>
+        public method SocketException
+            req in  SocketErrorCode ,int
+            endparams
+        proc
+            mErrorCode = 0
+            mSocketErrorCode = SocketErrorCode
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public property ErrorCode   ,int
+            method get
+            proc
+                mreturn mErrorCode
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property SocketErrorCode ,int
+            method get
+            proc
+                mreturn mSocketErrorCode
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        override public property Message ,string
+            method get
+            proc
+                mreturn mMessage
+            endmethod
+       endproperty
+
+    endclass
+
+endnamespace

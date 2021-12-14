@@ -1,0 +1,515 @@
+;;****************************************************************************
+;;
+;; Title:       RemoteServer.dbl
+;;
+;; Type:        Application
+;;
+;; Description:
+;;
+;; Author:      William Hawkins, Synergex Professional Services Group
+;;
+;; Copyright    © 2010 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;****************************************************************************
+
+import SynPSG.System.Net
+import SynPSG.System.Net.Sockets
+import SynPSG.Utilities.RemoteServer
+
+namespace SynPSG.Utilities.RemoteServer
+
+.include 'DEF:RemoteServer.def'
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+main RMTBLD
+
+.include 'DBLDIR:synsock.def'
+
+literal
+    rsVersion       ,a* ,"v1.4"
+endliteral
+
+.define MAX_ARGS    20
+
+.define M_LOGGING_PORT  %datetime+":RemoteServer "+%string(listenPort)+":"
+.define M_LOGGING       %datetime+":RemoteServer:"
+
+external function
+    loggerStart         ,int
+    loggerInfoMessage   ,^val
+    loggerOutput        ,^val
+    locase              ,a
+endexternal
+
+record rbdata
+.include 'DEF:RemoteServer.inc'
+
+record
+    tcpListener         ,@TcpListener
+    tcpClient           ,@TcpClient
+    nws                 ,@NetworkStream   ;network stream
+    remoteSocket        ,@Socket
+    listenPort          ,int            ;listen on this port
+    response            ,a10000         ;socket response
+    responseSize        ,int            ;length of response
+    offset              ,int            ;offset into response
+    request             ,string         ;returned request (to reconnect)
+    chTT                ,int            ;screen channel (for debug logging)
+    OStype              ,int            ;operating systme type
+    ssError             ,int            ;Synergy Socket Error
+
+    pid                 ,int            ;current process ID
+    remoteInAddr        ,int            ;remoteServer inet address
+    remotePort          ,int            ;remoteServer port
+    remoteHost          ,a126           ;remoteServer hostname
+    debugMode           ,int            ;debug mode
+    continue            ,boolean
+endrecord
+
+proc
+
+    xcall envrn(OStype)
+    using OStype select
+    (8),
+        OStype = D_RS_UNIX
+    (6),
+        OStype = D_RS_OpenVMS
+    (),
+        OStype = D_RS_WINDOWS
+    endusing
+
+    call decodeCommandLine
+    if(listenPort < 1)
+        goto exitprog
+
+    begin
+        data logical    ,a80
+        data loglen     ,int
+
+        getlog('REMOTESERVERDBG', logical, loglen)
+        if(loglen > 0)
+            debugMode = loggerStart(logical(1:loglen),
+            &                       'REMOTESERVERLOG:rs_service.log')
+
+        getlog('REMOTESERVERLOG', logical, loglen)
+        if(loglen) then
+            loggerInfoMessage("Logical REMOTESERVERLOG="+logical(1,loglen))
+        else
+        begin
+            if(!chTT)
+                open(chTT=%syn_freechn(), O, 'TT:')
+            writes(chtt, "RemoteServer Logical REMOTESERVERLOG is not defined")
+            goto exitprog
+        end
+
+        ;; make sure REMOTESERVERLOG is valid, by creating a dummy file
+        begin
+            data rbChan ,i4
+            open(rbChan=%syn_freechn, O, rsProcessFileName(0)) [ERR=CreateError]
+            purge rbChan
+            exit
+CreateError,
+            if(!chTT)
+                open(chTT=%syn_freechn(), O, 'TT:')
+            writes(chtt, "RemoteServer Error " + %string(%error)
+            &   +" creating " + rsProcessFileName(0))
+        end
+
+        getlog('REMOTESERVEREXE', logical, loglen)
+        if(loglen) then
+            loggerInfoMessage("Logical REMOTESERVEREXE="+logical(1,loglen))
+        else
+        begin
+            if(!chTT)
+                open(chTT=%syn_freechn(), O, 'TT:')
+            writes(chtt, "RemoteServer Logical REMOTESERVEREXE is not defined")
+            goto exitprog
+        end
+
+        ;; make sure rsProcess executable exists
+        begin
+            data rbChan ,i4
+            data rsFile ,a40
+            using OStype select
+            (D_RS_UNIX),
+                rsFile = 'REMOTESERVEREXE:rsProcess.dbr'
+            (D_RS_OpenVMS),
+                rsFile = 'REMOTESERVEREXE:rsProcess.exe'
+            (D_RS_WINDOWS),
+                rsFile = 'REMOTESERVEREXE:rsProcess.dbr'
+            endusing
+            open(rbChan=%syn_freechn, I, rsFile) [ERR=rsProcessError]
+            close rbChan
+            exit
+rsProcessError,
+            if(!chTT)
+                open(chTT=%syn_freechn(), O, 'TT:')
+            writes(chtt, "RemoteServer "+%atrim(rsFile) + " does not exist")
+        end
+
+    end
+
+    loggerInfoMessage(M_LOGGING+"Started")
+
+    continue = TRUE
+
+    loggerInfoMessage(M_LOGGING_PORT+"starting listener")
+    tcpListener = new TcpListener(listenPort)
+    try
+        tcpListener.Start()
+    catch (e)
+    begin
+        loggerInfoMessage(M_LOGGING_PORT+"error starting " + e.Message)
+        if(debugMode != 1)
+        begin
+            if(!chTT)
+                open(chTT=%syn_freechn(), O, 'TT:')
+            writes(chTT, "RemoteServer Error starting on port"
+            &   +" (" + %string(listenPort) + ") " + e.Message)
+        end
+        continue = FALSE
+    end
+    endtry
+
+    if(continue == TRUE)
+    begin
+        repeat
+        begin
+            loggerInfoMessage(M_LOGGING_PORT+"listening")
+
+            try
+                tcpClient = tcpListener.AcceptTcpClient()
+            catch (e ,@SocketException)
+            begin
+                using e.SocketErrorCode select
+                (10004),
+                    nextloop ;; this error occurs when rsProcess stops
+                (),
+                    loggerInfoMessage(M_LOGGING_PORT+"stopped listening - " +
+                    & " Socket error "+%string(e.SocketErrorCode)+" "+e.Message)
+                endusing
+
+                if(tcpClient != ^null)
+                begin
+                    tcpClient.Close()
+                    clear nws
+                    clear tcpClient
+                end
+                exitloop
+            end
+            catch (e)
+            begin
+                loggerInfoMessage(M_LOGGING_PORT+"stopped listening - " +
+                &   "Unknown error type occurred " + e.Message)
+                if(tcpClient != ^null)
+                begin
+                    tcpClient.Close()
+                    clear nws
+                    clear tcpClient
+                end
+                exitloop
+            end
+            endtry
+
+            nws = tcpClient.getStream()
+
+            offset = 0
+            responseSize = nws.Read(response, offset, ^size(response))
+            loggerInfoMessage(M_LOGGING_PORT+"recv:"+%atrim(response))
+            using response select
+            (D_RS_NEWCONNECT),
+            begin
+                ;; check for merged packets
+                if(%instr(1, response, D_RS_SHUTDOWN)) then
+                    response = D_RS_SHUTDOWN
+                else
+                begin
+                    call startChild
+
+                    request = D_RS_CONNECTON + ':'
+                    &       + %string(rbPortNumber, 'XXXXX') + ':'
+                    &       + %string(OStype) + ':'
+                    &       + %atrim(rbErrorText) + ':'
+                    &       + D_LINE_TERMINATOR
+                    loggerInfoMessage(M_LOGGING_PORT+"send:"+request)
+                    nws.Write(request, offset, request.Length)
+                end
+            end
+            (D_RS_SHUTDOWN),
+                nop
+            (), ;; unknown request
+                nop
+            endusing
+
+            loggerInfoMessage(M_LOGGING_PORT+"stopped listening")
+            if(tcpClient != ^null)
+            begin
+                tcpClient.Close()
+                clear nws
+                clear tcpClient
+            end
+
+            using response select
+            (D_RS_SHUTDOWN),
+                exitloop
+            endusing
+        end
+
+        loggerInfoMessage(M_LOGGING_PORT+"stopping listener")
+        TcpListener.Stop()
+    end
+
+    clear TcpListener
+
+exitprog,
+    if(chTT > 0)
+    begin
+.ifdef D_GUI
+        if(tnmbr >= 0)
+        begin
+            try
+            begin
+                accept(chTT, offset, done, WAIT:10)
+            end
+            catch (e)
+                nop
+            endtry
+done,
+        end
+.endc ;D_GUI
+        close chTT
+        clear chTT
+    end
+    xcall flags(7000000, 1)
+    stop D_EXIT_SUCCESS
+
+;----------------------------------------------------------------------------
+
+startChild,
+
+    clear rbData
+
+    ;; find out what port the TCP listener is using
+    remoteSocket = tcpClient.Client
+
+    ;; get the remote endpoint
+    ssError = %ss_getsockname(remoteSocket.Handle, remotePort, remoteInAddr)
+    if (ssError != SS_SUCCESS)
+    begin
+        loggerInfoMessage(M_LOGGING+"%ss_getsockname error "+%string(ssError)
+        &   +" (InetAddr="+%string(remoteInAddr)+":"+%string(remotePort)
+        &   +" syserr="+%string(%syserr)+")")
+        return
+    end
+    ;; get the remote client IP address (for logging)
+    ssError = %ss_gethostbyaddr(remoteInAddr, remoteHost)
+    if (ssError != SS_SUCCESS)
+    begin
+        loggerInfoMessage(M_LOGGING+"%ss_gethostbyaddr error "+%string(ssError)
+        &   +" (InetAddr="+%string(remoteInAddr)
+        &   +" syserr="+%string(%syserr)+")")
+        remoteHost = remoteInAddr
+    end
+    loggerInfoMessage(M_LOGGING+"Starting rsProcess for "
+    &   +%atrim(remoteHost)+":"+%string(remotePort))
+
+    using OStype select
+    (D_RS_UNIX),
+    begin
+        response = 'dbr REMOTESERVEREXE:rsProcess'
+        responseSize = %trim(response)
+        runjb(response(1:responseSize),, pid)
+    end
+    (D_RS_OpenVMS),
+    begin
+        response = 'REMOTESERVEREXE:rsProcess'
+        responseSize = %trim(response)
+        runjb(response(1:responseSize), -1, pid, 1, 0)
+    end
+    (D_RS_WINDOWS),
+    begin
+        response = 'dbr REMOTESERVEREXE:rsProcess'
+        responseSize = %trim(response)
+        runjb(response(1:responseSize),, pid)
+    end
+    endusing
+
+    clear response, responseSize
+
+    loggerInfoMessage(M_LOGGING+"waiting for rsProcess to create "
+    &   +rsProcessFileName(pid))
+    sleep 0.5
+    begin
+        data rbChan     ,int
+        data rbOpenCount,int
+again,
+        clear rbData
+
+        if(rbOpenCount > 100)
+            exit ;; give up looking for PID file
+                 ;;  - must be a problem with the rsProcess startup
+        rbOpenCount += 1
+        sleep 0.5
+
+        open(rbChan=%syn_freechn, I, rsProcessFileName(pid)) [$ERR_FNF=again, ERR=openError]
+        reads(rbChan, rbData, pidEOF)
+        if(FALSE)
+        begin
+pidEOF,
+            loggerInfoMessage("Error "+%string(%error)
+            &   + " reading " + rsProcessFileName(pid)
+            &   + " [" + %atrim(rbData) + "]")
+            if(!rbData)
+                rbData.rbErrorText = "Error " + %string(%error)
+                &   + " reading " + rsProcessFileName(pid)
+        end
+        close rbChan
+
+        try
+            delet(rsProcessFileName(pid))
+        catch (e)
+            loggerInfoMessage("Error "+%string(%error)
+            &   + " deleting " + rsProcessFileName(pid))
+        endtry
+
+        if(FALSE)
+        begin
+openError,
+            rbData.rbErrorText = "Error " + %string(%error)
+            &       + " opening " + rsProcessFileName(pid)
+            loggerInfoMessage(%atrim(rbData.rbErrorText))
+        end
+    end
+
+    if(!rbData.rbErrorText)
+        rbData.rbErrorText = rsVersion
+    return
+
+;----------------------------------------------------------------------------
+
+decodeCommandLine,
+
+    try
+    begin
+        data cmdlin     ,a1024
+        data pos        ,i4
+        data num_args   ,i4
+        data argPos    ,[MAX_ARGS]i4
+        data argLen    ,[MAX_ARGS]i4
+        data sts        ,i4
+
+        cmdln(cmdlin, num_args, argPos, argLen)
+
+        if(%instr(1, cmdlin, ' -h ') || %instr(1, cmdlin, ' -? '))
+        begin
+            if(!chTT)
+                open(chTT=%syn_freechn(), O, 'TT:')
+            writes(chtt, "")
+            writes(chtt, "dbr REMOTESERVEREXE:RemoteServer [-p <port>] [-l <log dir>:] [-dbg 1|2]")
+            writes(chtt, "")
+            writes(chtt, " -p <port> = listen on port")
+            writes(chtt, "")
+            writes(chtt, " -l <log dir> = set REMOTESERVERLOG to <log dir>")
+            writes(chtt, " -dbg <value> = set REMOTESERVERDBG to <value>")
+            writes(chtt, "      1 = TT:")
+            writes(chtt, "      2 = REMOTESERVERLOG:rs_service.log / REMOTESERVERLOG:rs_process.log")
+            writes(chtt, "")
+            writes(chtt, "if -p not specified, REMOTESERVERPORT must be set to a valid port number")
+            writes(chtt, "")
+            writes(chtt, "")
+            writes(chtt, "Other Environment variables used")
+            writes(chtt, "")
+            writes(chtt, "REMOTESERVERMINPORT & REMOTESERVERMAXPORT can be used to limit the range of")
+            writes(chtt, " ports used by rsProcess.")
+            writes(chtt, "")
+            goto exitprog
+        end
+
+        clear pos
+        while(pos < num_args)
+        begin
+            pos += 1
+            using %locase(cmdlin(argPos[pos]:argLen[pos])+' ') select
+            ('-p '),
+            begin
+                pos += 1
+                if(pos>MAX_ARGS || argPos[pos]<1 || argLen[pos]<1)
+                    throw new applicationException("Missing -p parameter")
+                listenPort = ^d(cmdlin(argPos[pos]:argLen[pos]))
+                if(listenPort < 1 || listenPort > 65535)
+                    throw new applicationException("Invalid -p parameter")
+            end
+            ('-l '),
+            begin
+                pos += 1
+                if(pos>MAX_ARGS || argPos[pos]<1 || argLen[pos]<1)
+                    throw new applicationException("Missing -l parameter")
+                if(cmdlin(argPos[pos]:argLen[pos]) == '-')
+                    throw new applicationException("Missing -l parameter")
+                setlog('REMOTESERVERLOG', cmdlin(argPos[pos]:argLen[pos]), sts)
+            end
+            ('-dbg '),
+            begin
+                pos += 1
+                if(pos>MAX_ARGS || argPos[pos]<1 || argLen[pos]<1)
+                    throw new applicationException("Missing -dbg parameter")
+                using cmdlin(argPos[pos]:argLen[pos]) select
+                ('1 '),
+                    setlog('REMOTESERVERDBG', '1', sts)
+                ('2 '),
+                    setlog('REMOTESERVERDBG', '2', sts)
+                (),
+                    throw new applicationException("Invalid -dbg parameter "
+                    &       +cmdlin(argPos[pos]:argLen[pos]))
+                endusing
+            end
+            endusing
+        end
+        if(listenPort < 1)
+        begin
+            getlog('REMOTESERVERPORT', cmdlin, pos)
+            if(pos>0) then
+                listenPort = ^d(cmdlin(1:pos))
+            else
+                throw new applicationException("Missing -p parameter")
+        end
+    end
+    catch (e)
+    begin
+        if(!chTT)
+            open(chTT=%syn_freechn(), O, 'TT:')
+        writes(chtt, "RemoteServer "+e.Message)
+    end
+    endtry
+
+    return
+
+endmain
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+endnamespace
+

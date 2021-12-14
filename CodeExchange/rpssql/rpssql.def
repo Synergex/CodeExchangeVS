@@ -1,0 +1,49 @@
+; rpssql.def
+
+common
+	colid		,3i4
+	invalid		,i4						;invalid/unsupported structure definition
+	error_log	,a50					;error log file (in common)
+
+record input_rps
+	export_file	,a50
+	rps_main	,a50
+	rps_text	,a50
+	log_rps		,a50
+	incl_rw		,d1
+	use_odbc	,d1
+	db_syntax	,a50
+	use_char	,d1
+
+structure fil_array
+	fil_name	,a30					;file names
+
+structure str_array
+	str_name	,a30					;structure names
+
+structure odbc_array
+	odbc_name	,a30					;ODBC file/structure names
+
+structure tag_array
+	tag_name	,a30					;tag names
+
+structure fld_array
+	fld_name	,a30					;field names for structure
+
+structure fld_dets
+	grp_prefix	,a30					;group prefix
+	fld_name	,a30					;field name
+	fld_pos		,d5						;field position (in structure)
+	fld_info	,a ^size(f_info)		;field details for structure
+
+structure keys
+	key_nam 	,a30					;key names for structure
+
+structure key_dets
+	key_info	,a ^size(k_info)		;key details for structure
+
+structure rels
+	rel_nam		,a30					;relationship names for structure
+	
+
+

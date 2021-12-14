@@ -1,0 +1,27 @@
+;ismkey.def
+
+; function return values
+.define ERR_NONE        ,0                  ;no error
+.define ERR_NOSTRUCT    ,-1                 ;cannot read structure
+.define ERR_NOASS       ,-2                 ;structure not assigned to file
+.define ERR_NOKEYS      ,-3                 ;no keys defined
+.define ERR_NOKEYDEF    ,-4                 ;not all access keys are defined
+.define ERR_INVSEG      ,-5                 ;invalid segment type (not field)
+.define ERR_NOFLD       ,-6                 ;cannot read field (from key)
+.define ERR_NOKEYLST    ,-7                 ;cannot read list of key names
+.define ERR_NOSTRNAME   ,-8                 ;no structure name
+.define ERR_NOFILENAME  ,-9                 ;no file name
+
+; function key details
+
+.define NM_KEYS         ,100                ;# of keys (Repository allows 99)
+.define NM_SEGS         ,8                  ;# of segments per key
+.define ST_SIZ          ,5+(NM_SEGS*6)+1    ;size of start section of key
+.define LN_SIZ          ,6+(NM_SEGS*6)+1    ;size of lenght section of key
+.define TY_SIZ          ,4+(NM_SEGS*9)+1    ;size of type section of key
+.define OR_SIZ          ,5+(NM_SEGS*2)+1    ;size of order section of key
+.define KEY_SIZ         ,9+7+8+12+9+20+12+12+1+ST_SIZ+LN_SIZ+TY_SIZ+OR_SIZ
+                                            ;size of key
+.define FIL_SIZ         ,255+9+10+14+11+9+6+120
+                                            ;size of filename specification
+

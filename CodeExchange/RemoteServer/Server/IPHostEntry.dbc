@@ -1,0 +1,116 @@
+;;***********************************************************************************
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; Title:       IPHostEntry.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      William Hawkins, Synergex Professional Services Group
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System.net
+import System.Collections
+
+.include "DBLDIR:synsock.def"
+
+namespace SynPSG.System.Net
+
+    public class IPHostEntry
+        private mHostName       ,string
+        private mAddressList    ,@ArrayList
+        private mAliases        ,@ArrayList
+
+        public method IPHostEntry
+            req in inAddr       ,int
+            endparams
+            record
+                errnum          ,i4
+                address         ,a126
+            endrecord
+        proc
+            ;;convert internet Address to DNS name
+            errnum = %ss_gethostbyaddr(inAddr, address(1:%trim(address)))
+            using errnum select
+            (SS_SUCCESS),
+                mHostName = address(1:%trim(address))
+            (),
+                throw new applicationException("IPHostEntry(inAddr) ss_gethostbyaddr error "+%string(errnum)+" for INET Address "+%string(inAddr))
+            endusing
+            ;;convert internet Address to TCP/IP address
+            errnum = %ss_inet_ntoa(inAddr, address)
+            using errnum select
+            (SS_SUCCESS),
+                nop
+            (),
+                throw new applicationException("IPHostEntry(inAddr) ss_inet_ntoa error "+%string(errnum)+" for INET Address "+%string(inAddr))
+            endusing
+            mAddressList = new ArrayList()
+            mAddressList.Add((@a)address)
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public property HostName    ,string
+        method get
+        proc
+            mreturn mHostName
+        endmethod
+        method set
+        proc
+            mHostName = value
+        endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property AddressList ,@ArrayList
+        method get
+        proc
+            mreturn mAddressList
+        endmethod
+        method set
+        proc
+            mAddressList = value
+        endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Aliases ,@ArrayList
+        method get
+        proc
+            mreturn mAliases
+        endmethod
+        method set
+        proc
+            mAliases = value
+        endmethod
+        endproperty
+
+    endclass
+endnamespace

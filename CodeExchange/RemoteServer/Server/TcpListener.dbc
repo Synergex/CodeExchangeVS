@@ -1,0 +1,196 @@
+;;**********************************************************************
+;;
+;; Title:       TcpListener.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      William Hawkins, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System.Net
+import SynPSG.System.Net.Sockets
+
+;;.define TCPLISTENER_LOGGING
+
+.include "DBLDIR:synsock.def"
+
+namespace SynPSG.System.Net.Sockets
+
+    class TcpListener
+
+        private mActive         ,boolean
+        private mLocalEndpoint  ,@IPEndPoint
+        private mRemoteEndpoint ,@IPEndPoint
+        private mSocket         ,@Socket
+        private mExclusiveAddressUse    ,boolean
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the TcpListener class.
+        ;;;</summary>
+        public method TcpListener
+            endparams
+            this(0)
+        proc
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the TcpListener class for a specified port.
+        ;;;</summary>
+        public method TcpListener
+            in port     ,int
+            endparams
+        proc
+            mLocalEndpoint = new IPEndPoint(SS_INADDR_ANY, port)
+            mActive = FALSE
+            mExclusiveAddressUse = TRUE
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the TcpListener class for a specified end point.
+        ;;;</summary>
+        public method TcpListener
+            in localEP  ,@IPEndPoint
+            endparams
+        proc
+            mLocalEndpoint = localEP
+            mActive = FALSE
+            mExclusiveAddressUse = TRUE
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Start, void
+            endparams
+        proc
+            mRemoteEndpoint = new IPEndPoint()
+            mSocket = New Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.TCP)
+.ifdef TCPLISTENER_LOGGING
+            logit('TcpListener.Start() Socket='+%string(mSocket.Handle)+' Endpoint='+%string(mLocalEndpoint.Address)+':'+%string(mLocalEndpoint.Port))
+.endc ;TCPLISTENER_LOGGING
+            mSocket.Bind(mLocalEndpoint)
+.ifdef TCPLISTENER_LOGGING
+            logit('TcpListener.Start() after Bind() Socket='+%string(mSocket.Handle)+' Endpoint='+%string(mSocket.LocalEndpoint.Address)+':'+%string(mSocket.LocalEndpoint.Port))
+.endc ;TCPLISTENER_LOGGING
+            mSocket.Listen()
+            mActive = TRUE
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Stop, void
+            endparams
+        proc
+            mSocket.Close()
+            clear mSocket
+            clear mRemoteEndpoint
+            mActive = FALSE
+            mreturn
+        endmethod
+
+        ;;;<summary>
+        ;;;Accept connections from remote endpoint
+        ;;;</summary>
+        public method AcceptTcpClient   ,@TcpClient
+            endparams
+            record
+                tcpClient       ,@TcpClient
+                peerSocket      ,int
+                socketError     ,int
+            endrecord
+        proc
+.ifdef TCPLISTENER_LOGGING
+            logit('TcpListener.AcceptTcpClient() before SS_ACCEPT() Socket='+%string(mSocket.Handle)+' Endpoint='+%string(mLocalEndpoint.Address)+':'+%string(mLocalEndpoint.Port))
+.endc ;TCPLISTENER_LOGGING
+            if((socketError=%ss_accept(mSocket.Handle, peerSocket, mRemoteEndpoint.Port, mRemoteEndpoint.Address)) != SS_SUCCESS)
+                SynPSG.System.Net.SocketException.ThrowSocketException(socketError, "TcpListener.AcceptTcpClient()", "SS_ACCEPT error")
+            tcpClient = new TcpClient()
+            tcpClient.Client.Handle = peerSocket
+            ;; note the tcpClient end points are not setup
+.ifdef TCPLISTENER_LOGGING
+            logit('TcpListener.AcceptTcpClient() after SS_ACCEPT() TcpClient.Client.Handle='+%string(peerSocket)+' Client='+%string(mRemoteEndpoint.Address)+':'+%string(mRemoteEndpoint.Port))
+.endc ;TCPLISTENER_LOGGING
+            mreturn tcpClient
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public property ExclusiveAddressUse  ,boolean
+            method get
+            proc
+                mreturn mExclusiveAddressUse
+            endmethod
+            method set
+            proc
+                mExclusiveAddressUse = value
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets or sets the underlying socket.</summary>
+        public property Server  ,@socket
+            method get
+            proc
+                mreturn mSocket
+            endmethod
+            method set
+            proc
+                mSocket = value
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets a value indicating whether the underlying Socket for a TcpListener is listening.</summary>
+        public property Active, boolean
+            method get
+            proc
+                mreturn mActive
+            endmethod
+        endproperty
+
+.ifdef TCPLISTENER_LOGGING
+        private method logit ,void
+            req in  aText   ,a
+            endparams
+            record
+                chan        ,int
+            endrecord
+        proc
+            if(FALSE)
+            begin
+        waitAbit,
+                sleep 0.2
+            end
+            open(chan=%syn_freechn(), A, 'tcplistener.log') [$ERR_FINUSE=waitAbit, ERR=openErr]
+            writes(chan, aText)
+            close chan
+        openErr,
+        endmethod
+.endc ;TCPLISTENER_LOGGING
+
+    endclass
+
+endnamespace

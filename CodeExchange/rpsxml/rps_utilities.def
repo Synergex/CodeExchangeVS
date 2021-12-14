@@ -1,0 +1,31 @@
+;=======================================================================;
+;  Copyright 2001 by Synergex International Corporation                 ;
+;                                                                       ;
+;  Synergex provides this software under a license and may only be      ;
+;  used in accordance with the terms and conditions of such             ;
+;  license and with the inclusion of the above Copyright notice.        ;
+;=======================================================================;
+;
+; Source:  rps_utilities.def
+;
+; Function: Synergy/DE Repository utilites
+;
+; Environment: Synergy Development Environment, v7.5
+;
+; $Author: William Hawkins $
+;
+; $Date: 2010-10-19 13:07:35-07:00 $
+;
+; $Revision: 1 $
+;
+; History
+;
+; 21-Sep-2001	WJH		Added get_rps_filenames
+;
+;=======================================================================;
+
+record rps_drill
+	rpsmain_file	,a255
+	rpstext_file	,a255
+
+

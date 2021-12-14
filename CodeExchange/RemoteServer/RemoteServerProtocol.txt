@@ -1,0 +1,64 @@
+RemoteServer Protocol
+--------------------
+
+rsClient sends to RemoteServer
+
+    newconnect<CR><LF>
+
+RemoteServer responds
+
+    connect:serverPort:X:<CR><LF>
+
+    where serverPort is a port number and X is the server OS type (1=Windows, 2=Unix, 3=OpenVMS)
+
+rsClient sends to rsProcess
+
+    hello<CR><LF>
+
+RemoteServer responds
+
+    helloback<CR><LF>
+
+rsClient sends a <CR><LF> terminated request to rsProcess e.g.
+
+    dbl <filename><CR><LF>
+    set <logical>=<value><CR><LF>
+    syn_set <logical>=<value><CR><LF>
+
+rsProcess responds with result, and waits for next request
+
+
+Exceptions to the above
+
+If rsProcess gets a ":shutdown:" request, it shuts down
+If rsProcess gets a "set" or "syn_set" request, it decodes the remaining text
+ (in the form: set logical=value), and executes a SETLOG(logical, value, sts).
+On OpenVMS, logicals are set in the JOB table.
+
+If RemoteServer gets a ":shutdown:" request, it shuts down
+If RemoteServer ignores requests that are not "hello" or ":shutdown:"
+
+RemoteServer and rsProcess talk to each other using a Synergy
+DBMS file REMOTESERVERLOG:rs_<pid>.txt.  This file should only exist between the 
+time that rsProcess creates it, and RemoteServer consumes it (and
+reports the port to the client).
+
+
+
+                  Request                 Response
+
+RemoteServer      newconnect<CR><LF>      connect:<serverPort>:<OS>:<CR><LF>
+                  :shutdown:              <no response>
+                  anything else           ignored
+
+rsProcess         newconnect<CR><LF>      helloback<CR><LF>
+                  hello<CR><LF>           helloback<CR><LF>
+                  :shutdown:              <no response>
+                  dbl <>                  compile errors
+                                          no output = DONE<CR><LF>
+                  set <>                  DONE<CR><LF>
+                  syn_set <>              DONE<CR><LF>
+                  anything else           whatever output is returned
+                                          no output = DONE<CR><LF>
+
+

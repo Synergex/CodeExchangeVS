@@ -1,0 +1,60 @@
+# Workbench build file converted to UNIX script
+
+# call setenv.bat
+DEVROOTNODE=/usr1/Development ;export DEVROOTNODE
+
+DEVROOT=$DEVROOTNODE/SynPSG/CodeExchange/RemoteServer ;export DEVROOT
+
+RSCLNTSRC=$DEVROOT/Client ;export RSCLNTSRC
+RSSRVRSRC=$DEVROOT/Server ;export RSSRVRSRC
+CORUTLSRC=$DEVROOT/Server ;export CORUTLSRC
+SYSNETSRC=$DEVROOT/Server ;export SYSNETSRC
+
+# RemoteServer environment variables
+SYNEXPDIR=$DEVROOT/hdr ;export SYNEXPDIR
+SYNIMPDIR=$DEVROOT/hdr ;export SYNIMPDIR
+OBJ=$DEVROOT/obj ;export OBJ
+DEF=$RSSRVRSRC ;export DEF
+
+# Runtime environment variables
+REMOTESERVERLOG=$DEVROOT/log ;export REMOTESERVERLOG
+REMOTESERVEREXE=$DEVROOT/exe ;export REMOTESERVEREXE
+
+# generate prototype files
+rm -f $SYNEXPDIR/*.dbp
+
+dblproto $RSCLNTSRC/*.dbl
+dblproto $RSSRVRSRC/*.dbl
+dblproto $RSSRVRSRC/*.dbc
+
+dbl -d -qstrict -qalign -o OBJ:rsClient           RSCLNTSRC:rsClient
+dbl -d -qstrict -qalign -o OBJ:RemoteServer       RSSRVRSRC:RemoteServer.dbl
+dbl -d -qstrict -qalign -o OBJ:rsProcess          RSSRVRSRC:rsProcess.dbl
+dbl -d -qstrict -qalign -o OBJ:rsProcessFileName  RSSRVRSRC:rsProcessFileName.dbl
+
+# SynPSG.Core
+dbl -d -qstrict -qalign -o OBJ:dbl2dibol       CORUTLSRC:dbl2dibol.dbl
+dbl -d -qstrict -qalign -o OBJ:endOfToken      CORUTLSRC:endOfToken.dbl
+dbl -d -qstrict -qalign -o OBJ:logging         CORUTLSRC:logging.dbl
+dbl -d -qstrict -qalign -o OBJ:stringCase      CORUTLSRC:stringCase.dbl
+dbl -d -qstrict -qalign -o OBJ:stringReplace   CORUTLSRC:stringReplace.dbl
+dbl -d -qstrict -qalign -o OBJ:pipe            CORUTLSRC:pipe.dbc
+
+# SynPSG.System.Net
+dbl -d -qstrict -qalign -o OBJ:dns             SYSNETSRC:dns.dbc
+dbl -d -qstrict -qalign -o OBJ:IPEndPoint      SYSNETSRC:IPEndPoint.dbc
+dbl -d -qstrict -qalign -o OBJ:IPHostEntry     SYSNETSRC:IPHostEntry.dbc
+dbl -d -qstrict -qalign -o OBJ:NetWorkStream   SYSNETSRC:NetWorkStream.dbc
+dbl -d -qstrict -qalign -o OBJ:Socket          SYSNETSRC:Socket.dbc
+dbl -d -qstrict -qalign -o OBJ:SocketException SYSNETSRC:SocketException.dbc
+dbl -d -qstrict -qalign -o OBJ:TcpClient       SYSNETSRC:TcpClient.dbc
+dbl -d -qstrict -qalign -o OBJ:TcpListener     SYSNETSRC:TcpListener.dbc
+
+# build client
+dblink -d -o REMOTESERVEREXE:rsClient OBJ:rsClient OBJ:rsProcessFileName OBJ:dns OBJ:IPEndPoint OBJ:IPHostEntry OBJ:logging OBJ:NetWorkStream OBJ:Socket OBJ:SocketException OBJ:stringCase OBJ:TcpClient OBJ:TcpListener
+
+# build server components
+dblink -d -o REMOTESERVEREXE:rsProcess OBJ:rsProcess OBJ:rsProcessFileName OBJ:dbl2dibol OBJ:endOfToken OBJ:IPEndPoint OBJ:logging OBJ:NetWorkStream OBJ:pipe OBJ:Socket OBJ:SocketException OBJ:stringCase OBJ:stringReplace OBJ:TcpClient OBJ:TcpListener
+dblink -d -o REMOTESERVEREXE:RemoteServer OBJ:RemoteServer OBJ:rsProcessFileName OBJ:IPEndPoint OBJ:logging OBJ:NetWorkStream OBJ:Socket OBJ:SocketException OBJ:stringCase OBJ:TcpClient OBJ:TcoListener
+
+#

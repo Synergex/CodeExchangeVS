@@ -1,0 +1,12 @@
+namespace SynPSG.Utilities.RemoteServer
+
+;rsProcess filename
+function rsProcessFileName  ,string
+    req in  pid     ,int
+    endparams
+proc
+    freturn 'REMOTESERVERLOG:rs_'+%string(pid)+'.txt'
+endfunction
+
+endnamespace
+

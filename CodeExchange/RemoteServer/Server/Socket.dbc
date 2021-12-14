@@ -1,0 +1,290 @@
+;;**********************************************************************
+;;
+;; Title:       Socket.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System.Net
+
+.include "DBLDIR:synsock.def"
+
+namespace SynPSG.System.Net.Sockets
+
+    public enum AddressFamily
+        Unknown     ,-1
+        Unspecified
+        Unix
+        InterNetwork
+        ImpLink
+        Pup
+        Chaos
+        NS
+        Ipx
+        Iso
+        Osi
+        Ecma
+        DataKit
+        Ccitt
+        Sna
+        DecNet
+        DataLink
+        Lat
+        HyperChannel
+        AppleTalk
+        NetBios
+        VoiceView
+        FireFox
+        Banyan
+        Atm
+        InterNetworkV6
+        Cluster
+        Ieee12844
+        Irda
+        NetworkDesigners
+        Max
+    endenum
+
+    public enum ProtocolType
+        IP      ,0
+        Unknown ,-1
+        Tcp     ,6
+    endenum
+
+    public enum SocketType
+        Unknown     ,-1
+        Dgram       ,SS_SOCK_DGRAM
+        Stream      ,SS_SOCK_STREAM
+        Raw         ,3
+        Rdm         ,4
+        SeqPacket   ,5
+    endenum
+
+    class Socket
+        private mSocketDesc    ,int
+        public SocketType      ,SynPSG.system.net.sockets.SocketType
+        public AddressFamily   ,SynPSG.system.net.sockets.AddressFamily
+        public ProtocolType    ,SynPSG.system.net.sockets.ProtocolType
+        private mConnected     ,int
+        private mLocalEndpoint ,@IPEndPoint
+        private mRemoteEndpoint,@IPEndPoint
+
+        ;;;<summary>
+        ;;;Create a new socket
+        ;;;</summary>
+        public method Socket
+            in addressFamily  ,SynPSG.system.net.sockets.AddressFamily
+            in socketType     ,SynPSG.system.net.sockets.SocketType
+            in protocolType   ,SynPSG.system.net.sockets.ProtocolType
+            endparams
+            record
+                errnum      ,int
+            endrecord
+        proc
+            if ((errnum=%ss_socket(mSocketDesc,socketType)) != SS_SUCCESS)
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket()", "SS_SOCKET Could not create a socket")
+            this.SocketType = socketType
+            this.AddressFamily = addressFamily
+            this.ProtocolType = protocolType
+            mLocalEndpoint = new IPEndPoint(0,0)
+            mRemoteEndpoint = new IPEndPoint(0,0)
+        endmethod
+
+        ;;;<summary>Associates the socket with a local endpoint</summary>
+        public method Bind  ,void
+            req in localEP  ,@IPEndPoint
+            endparams
+            record
+                errnum      ,int
+            endrecord
+        proc
+            if localEP.Address then
+                mLocalEndpoint.Address = localEP.Address
+            else
+                mLocalEndpoint.Address = SS_INADDR_ANY
+            mLocalEndpoint.Port = localEP.Port
+            using (errnum=%ss_bind(mSocketDesc, mLocalEndpoint.Port, mLocalEndpoint.Address)) select
+            (SS_SUCCESS),
+                nop
+            (SS_EACCES),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Bind()", "SS_BIND The requested address is protected, and the current user has inadequate permission to access it.")
+            (SS_EINVAL),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Bind()", "SS_BIND The socket is already bound to an address.")
+            (),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Bind()", "SS_BIND error.")
+            endusing
+            if ((errnum=%ss_getsockname(mSocketDesc, mLocalEndpoint.Port, mLocalEndpoint.Address)) != SS_SUCCESS)
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Bind()", "SS_GETSOCKNAME Unable to get bound socket information.")
+            mreturn
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Close, void
+        proc
+            if (%ss_close(mSocketDesc) == SS_SUCCESS)
+                mConnected = 0
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Close, void
+            req in  timeout     ,int
+            endparams
+        proc
+            sleep timeout
+            if (%ss_close(mSocketDesc) == SS_SUCCESS)
+                mConnected = 0
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Connect, void
+            in hostname ,string
+            in port     ,int
+            endparams
+            record
+                errnum  ,int
+                inAddr  ,int
+            endrecord
+        proc
+            if (hostname==^null || hostname.length==0)
+                SynPSG.System.Net.SocketException.ThrowSocketException(SS_ENULL, "Socket.Connect()", "Hostname is empty or null.")
+            if (port<=0 || port>65535)
+                SynPSG.System.Net.SocketException.ThrowSocketException(SS_ENULL, "Socket.Connect()", "Port is not between 1 and 65535.")
+
+            ;Get the host IP Address (assume DNS name)
+            errnum = %ss_gethostbyname(hostname(1:%trim(hostname)), inAddr)
+            ;; if error, retry as TCP/IP address
+            if (errnum != SS_SUCCESS)
+                errnum = %ss_inet_addr(hostname(1:%trim(hostname)), inAddr)
+            using errnum select
+            (SS_SUCCESS),
+                nop
+            (SS_EBADSTRING),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Connect()", "Invalid HostName "+hostname(1:%trim(hostname)))
+            (),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Connect()", "HostName "+hostname(1:%trim(hostname)))
+            endusing
+            mRemoteEndpoint.Address = inAddr
+            mRemoteEndpoint.Port = port
+
+            ;Connect socket to the specified remote port
+            using (errnum=%ss_connect(mSocketDesc,port,mRemoteEndpoint.Address)) select
+            (SS_SUCCESS),
+                nop
+            (SS_ECONNRESET),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Connect()", "SS_CONNECT The remote peer reset the connection.")
+            (SS_EDESTADDRREQ),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Connect()", "SS_CONNECT The socket has not been bound to an address.")
+            (),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Connect()", "SS_CONNECT Could not connect to " + %atrim(hostname) + " on port "+%string(port))
+            endusing
+
+            ;get the local endpoint
+            if ((errnum=%ss_getsockname(mSocketDesc,mLocalEndpoint.Port,mLocalEndpoint.Address)) != SS_SUCCESS)
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Connect()", "SS_GETSOCKNAME The socket has not been bound to an address or the socket has been shut down.")
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Disconnect, void
+            req in  reUseSocket     ,boolean
+            endparams
+        proc
+            if(reUseSocket == TRUE) then
+                if (%ss_close(mSocketDesc, SS_PURGE) == SS_SUCCESS)
+                    mConnected = 0
+            else
+                this.Close()
+        endmethod
+
+        ;;;<summary>Places the socket in a listening state</summary>
+        public method Listen    ,void
+            endparams
+            record
+                peerSocket      ,int
+                errnum          ,int
+            endrecord
+        proc
+            using (errnum=%ss_listen(mSocketDesc)) select
+            (SS_SUCCESS),
+                nop
+            (SS_EINVAL),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Listen()", "SS_LISTEN The socket has not been bound or is already connected.")
+            (SS_EDESTADDRREQ),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Listen()", "SS_LISTEN The socket has not been bound to an address.")
+            (),
+                SynPSG.System.Net.SocketException.ThrowSocketException(errnum, "Socket.Listen()", "SS_LISTEN error")
+            endusing
+            mreturn
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Handle, int
+            method get
+            proc
+                mreturn mSocketDesc
+            endmethod
+            method set
+            proc
+                mSocketDesc = value
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets the local endpoint of the socket</summary>
+        public property LocalEndPoint   ,@IPEndPoint
+            method get
+            proc
+                mreturn mLocalEndpoint
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets the remote endpoint of the socket</summary>
+        public property RemoteEndPoint  ,@IPEndPoint
+            method get
+            proc
+                mreturn mRemoteEndpoint
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Connected, boolean
+            method get
+            proc
+                mreturn mConnected
+            endmethod
+        endproperty
+    endclass
+
+endnamespace

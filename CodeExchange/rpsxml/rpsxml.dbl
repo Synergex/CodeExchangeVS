@@ -1,0 +1,1527 @@
+.main
+.include 'INC:rpsxml.def'
+.include 'INC:rpsxml.rec'
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+function mainprog ,i
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; RPSXML.DBL
+;
+; This routine exports the Synergy/DE Repository in XML format
+;
+; Requires with Synergy/DE version 8.1 or later
+;
+; Version :
+;
+.define D_APP       ,"RPSXML"
+.define D_VERSION   ,"2.0.1"
+;
+; Date : 3rd March 2003
+;
+; Export does not support :
+;  Multi-dimensional arrays
+;
+;  Does not export overlay fields unless logical RPSXML_OVR is set to Y
+;
+;
+; Requires :
+;  Files, Structures
+;
+;
+; in test mode, defaults are provided
+;;.define D_TEST_MODE       ,1
+;
+; xcall debug_break is field name is this value
+;;.define TEST_FIELD        ,'DEL_TRACK_INFO'
+
+.include 'WND:tools.def'
+.include 'WND:windows.def'
+.include 'WND:inpctl.def'
+.include 'DBLDIR:synxml.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:file_utilities.def'
+
+.include 'INC:rpsxml.def'
+.include 'INC:rpsxml.rec'
+
+.align
+    record clr_i
+        status          ,i4                     ;function return status
+        f_ptr           ,D_HANDLE               ;filename array memory handle
+        fil_ctr         ,i4                     ;file counter
+        err             ,i4                     ;error flag
+        bld_id          ,i4                     ;build window id
+        tab_id          ,i4                     ;tab id
+        wndidx          ,i4                     ;export window
+
+        parser_id       ,XML_PARSER_TYPE        ;XML parser
+        doc_id          ,XML_DOC_TYPE           ;document ID
+        root_node       ,XML_ELEM_TYPE          ;root node
+
+.align
+    record clr
+        num_files       ,d5                     ;number of files
+        mbuffer         ,a1024                  ;menu buffer build buffer
+
+.proc
+
+    xcall u_start(,,,, 17, 80)
+
+    xcall e_sect("RPSXML v"+D_VERSION, D_HEADER, D_LEFT, D_CLEAR)
+    xcall u_update
+
+    xcall flags(7000000,1)
+
+    clear clr, ^I(clr_i)
+
+    call setup
+
+    do  begin
+        xcall ts_process(tab_id, params)
+        if(g_select)
+        begin
+            call process
+        end
+    end
+    until(g_entnam == 'O_QUIT')
+
+    xcall u_finish
+
+    freturn D_EXIT_SUCCESS
+
+;----------------------------------------------------------------------------
+
+process,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        ;delete log file
+        xcall log_dcs_error(-1, ' ')
+
+        xcall dd_init(dcs, rps_main, rps_text)
+        using error select
+        (E_OK),
+        begin
+            xcall dd_name(dcs, DDN_COUNT, DDN_FILE, num_files)
+            if (error)
+            begin
+                xcall log_dcs_error(error, "DD_NAME error")
+                clear num_files
+            end
+
+            if (num_files > 0) then
+                call build_list
+            else
+                xcall u_message("No Files in Repository")
+
+            xcall dd_exit(dcs)
+        end
+        (E_NOFIND),
+            xcall u_message("Record not found")
+        (E_OPNERR),
+            xcall u_message("Cannot open RPS")
+        (E_INVFNC),
+            xcall u_message("Invalid Function")
+        (E_OPNERRM),
+            xcall u_message("Cannot open RPS main file")
+        (E_OPNERRT),
+            xcall u_message("Cannot open RPS text file")
+        (E_BADVERS),
+            xcall u_message("Incompatible Repository version")
+        (),
+            xcall u_message("DD_INIT error "+%string(error))
+        endusing
+
+        g_entnam = 'O_QUIT'
+    end
+    endusing
+    return
+
+;----------------------------------------------------------------------------
+
+setup,
+    xcall ib_input(bld_id, 'IW_RPS_XML', 7, 78)
+
+    xcall ib_field(bld_id, 'xmlfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(xml_file),
+&       D_FLD_INFO, "Enter export XML filename",
+&       D_FLD_POS, 2, 2, D_FLD_FPOS, 2, 20,
+&       D_FLD_DRILL, 'EXPORT_FILENAME_DRILL',
+&       D_FLD_PROMPT, "XML File")
+    xcall ib_field(bld_id, 'ismfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(ism_file),
+&       D_FLD_INFO, "Enter RPS filename, or leave blank for all files",
+&       D_FLD_POS, 3, 2, D_FLD_FPOS, 3, 20,
+&       D_FLD_UC, D_FLD_DRILL, 'FILENAME_DRILL',
+&       D_FLD_PROMPT, "RPS File")
+    xcall ib_field(bld_id, 'rpsmfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(rps_main),
+&       D_FLD_INFO, "Enter name and location of RPS main file",
+&       D_FLD_POS, 4, 2, D_FLD_FPOS, 4, 20,
+&       D_FLD_DRILL, 'RPSMAIN_DRILL',
+&       D_FLD_PROMPT, "RPSMFIL")
+    xcall ib_field(bld_id, 'rpstfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(rps_text),
+&       D_FLD_INFO, "Enter name and location of RPS text file",
+&       D_FLD_POS, 5, 2, D_FLD_FPOS, 5, 20,
+&       D_FLD_DRILL, 'RPSTEXT_DRILL',
+&       D_FLD_PROMPT, "RPSTFIL")
+    xcall ib_field(bld_id, 'logfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(log_rps),
+&       D_FLD_INFO, "Enter name of log file, or leave blank",
+&       D_FLD_POS, 6, 2, D_FLD_FPOS, 6, 20,
+&       D_FLD_PROMPT, "Log File")
+
+    xcall ib_button(bld_id, 'O_EXIT', DSB_TEXT, "OK",,, "O")
+    xcall ib_button(bld_id, 'O_QUIT', DSB_TEXT, "Cancel",,, "N")
+
+    xcall ib_end(bld_id, wndidx)
+
+    xcall w_brdr(wndidx, WB_TITLE, "Export RPS as XML")
+
+    ;Load columns, but do not place
+    xcall mb_column(mbuffer, 'input_col', "Cursor  ")
+    xcall mb_entry(mbuffer, 'I_FRST', "First field")
+    xcall mb_entry(mbuffer, 'I_LAST', "Last field")
+    xcall mb_entry(mbuffer, 'I_NEXT', "Next field")
+    xcall mb_entry(mbuffer, 'I_PREV', "Prev field")
+    xcall mb_entry(mbuffer, 'E_LEFT', "Left 1 character")
+    xcall mb_entry(mbuffer, 'E_RIGHT', "Right 1 character")
+    xcall mb_entry(mbuffer, 'E_CDEL', "Delete character")
+    xcall mb_end(mbuffer, colid(1))
+
+    xcall m_column(D_REMOVE, colid(1))
+
+    xcall mb_column(mbuffer, 'select_col', "Cursor  ")
+    xcall mb_entry(mbuffer, 'S_DOWN', "Next item")
+    xcall mb_entry(mbuffer, 'S_UP', "Prev item")
+    xcall mb_end(mbuffer, colid(2))
+
+    xcall m_column(D_REMOVE, colid(2))
+
+    xcall mb_column(mbuffer, 'Options', "File  ")
+    xcall mb_entry(mbuffer, 'O_EXIT', "OK" , F4_KEY)
+    xcall mb_entry(mbuffer, 'O_QUIT', "Quit")
+    xcall mb_entry(mbuffer, 'O_ABOUT', "About")
+    xcall mb_end(mbuffer, colid(3))
+
+
+    tab_id = %ts_tabset(DTS_CREATE, 'BLD', 17, 78,,, DTS_NONE)
+
+    xcall ts_tabset(DTS_WINDOW, tab_id, wndidx, 'rps_to_xml',,"Generate XML Schema from RPS")
+
+
+    ;control parameters
+    name_case = D_CASE_NONE                 ;name case (0-no change, 1-Xxxxx, 2-xxxxx, 3=XXXXX)
+
+    ;shall we use the ODBC name?
+    xcall getlog('SODBC_ODBCNAME', mbuffer, status)
+    ;use ODBC field names
+    odbcfldname = (status > 0)
+
+    ;do not include overlays
+    no_overlays = 1
+
+    xcall getlog('RPSXML_OVR', mbuffer, status)
+    if(status && mbuffer == 'Y')
+        clear no_overlays
+
+    return
+
+;----------------------------------------------------------------------------
+
+build_list,
+
+    xcall e_sect(" ", D_INFO+D_LEFT+D_CLEAR)
+    xcall e_sect(" ", D_FOOTER+D_LEFT+D_CLEAR)
+
+    f_ptr = %mem_proc(DM_ALLOC+DM_STATIC, num_files*^size(fil_array))
+
+    xcall dd_name(dcs, DDN_LIST, DDN_FILE, num_files, ^m(fil_array, f_ptr))
+    if (error) then
+        xcall log_dcs_error(error, "Number of files")
+    else
+        call build_list2
+
+    f_ptr = %mem_proc(DM_FREE, f_ptr)
+
+    return
+
+;----------------------------------------------------------------------------
+
+build_list2,
+
+    clear parser_id, doc_id, err, rps_error
+    if(parser_id = %xml_parser_create)
+    begin
+        doc_id = %xml_doc_create
+        if(doc_id && %xml_doc_setdeclaration(doc_id, "<?xml version='1.0'?>") != XML_SUCCESS)
+        begin
+            xcall log_xml_error("1", "Cannot add document declaration")
+            clear doc_id
+        end
+    end
+
+    if(doc_id) then
+    begin
+        call create_root_node
+
+        if(.not.err)
+        begin
+            ;assume an XML error has occurred (so that we do not create the XML file
+            ; if there are no matching structures
+            err = 99
+
+            if(ism_file) then
+            begin
+                xcall dd_file(dcs, DDL_INFO, ism_file, fl_info)
+                if(error)
+                begin
+                    xcall log_dcs_error(error, "File:" + %atrim(ism_file))
+                    clear fli_nmstructs
+                end
+
+                if(fli_nmstructs)
+                begin
+                    xcall rpsxml_file(dcs, fl_info, root_node, err)
+                end
+            end
+            else
+            begin
+                for fil_ctr from 1 thru num_files
+                begin
+                    xcall dd_file(dcs, DDL_INFO, ^m(fil_array[fil_ctr].fil_name, f_ptr), fl_info)
+                    if(error)
+                    begin
+                        xcall log_dcs_error(error, "File:" + %atrim(^m(fil_array[fil_ctr].fil_name, f_ptr)))
+                        clear fli_nmstructs
+                    end
+
+                    if(fli_nmstructs)
+                    begin
+                        xcall rpsxml_file(dcs, fl_info, root_node, err)
+                        if(err)
+                            exitloop
+                    end
+                end
+            end
+        end
+
+        if(.not.err) then
+        begin
+            if(%xml_doc_tofile(doc_id, xml_file) == XML_SUCCESS) then
+                xcall u_message("File updated OK")
+            else
+                xcall u_message("Error creating file from document "+%string(err))
+        end
+        else
+            xcall u_message("No file updates "+%string(err))
+
+    end
+    else
+        xcall u_message("Error creating file")
+
+    ;delete parser
+    if(parser_id)
+        err = %xml_parser_delete(parser_id)
+
+    return
+
+;----------------------------------------------------------------------------
+
+create_root_node,
+
+    ;create root node
+    root_node = %xml_elem_create
+    if(!root_node)
+    begin
+        err = 1
+        return
+    end
+    ;set document root node
+    if(%xml_doc_setroot(doc_id, root_node) != XML_SUCCESS)
+    begin
+        err = 2
+        return
+    end
+    ;set name of root element
+    if(%xml_elem_setname(root_node, D_XML_ROOT) != XML_SUCCESS)
+    begin
+        err = 3
+        return
+    end
+
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine rpsxml_file
+
+    a_dcs           ,a                      ;DCS
+    a_fl_info       ,a                      ;file to export
+    a_root_node     ,XML_ELEM_TYPE          ;REQUIRED root node of document
+    a_err           ,n                      ;REQUIRED export err
+
+.include 'RPSLIB:ddinfo.def'
+.include 'DBLDIR:synxml.def'
+
+.include 'INC:rpsxml.def'
+.include 'INC:rpsxml.rec'
+
+    external function
+        case_name       ,a
+
+    structure current_node
+        cn              ,XML_ELEM_TYPE
+
+.align
+    record
+        s_ptr           ,D_HANDLE               ;structure list handle
+        o_ptr           ,D_HANDLE               ;odbc names list handle
+        str_ctr         ,i4                     ;structure array counter
+        str_size        ,i4                     ;structure size
+        strname         ,a30                    ;structure name
+
+        file_node       ,XML_ELEM_TYPE          ;file node
+        str_node        ,XML_ELEM_TYPE          ;structure mode
+        fld_node        ,XML_ELEM_TYPE          ;field node
+        grp_node        ,XML_ELEM_TYPE          ;group node
+        cur_node        ,XML_ELEM_TYPE          ;current node
+
+.align
+    record clr_i
+        fn_ptr          ,D_HANDLE               ;field names list handle
+        f_ptr           ,D_HANDLE               ;field details list handle
+        fld_ctr         ,i4                     ;field array pointer
+        ctr             ,i4                     ;general purpose counter
+        field_pos       ,i4                     ;field position in structure/group
+        field_num       ,i4                     ;field number
+        field_len       ,i4                     ;length
+        field_dim       ,i4                     ;dimension
+        field_prec      ,i4                     ;field precision
+        field_ovrlay    ,i4                     ;field is an overlay
+        grp_overlay     ,i4                     ;in a group overlay
+        cn_hdl          ,D_HANDLE               ;current_node array handle
+        cn_ctr          ,i4                     ;current_node array counter
+
+.align
+    record clr
+        struct_name     ,a30                    ;structure name
+        str_name        ,a30                    ;output structure name
+        field_name      ,a30                    ;field name
+        field_type      ,a30                    ;field type
+        field_format    ,a10                    ;field format string
+
+.proc
+
+    dcs = a_dcs
+    fl_info = a_fl_info
+
+    clear a_err
+
+    ;allocate memory for array of field name and ODBC name
+    s_ptr = %mem_proc(DM_ALLOC+DM_STATIC, fli_nmstructs*^size(str_names))
+    o_ptr = %mem_proc(DM_ALLOC+DM_STATIC, fli_nmstructs*^size(odbc_names))
+
+    ;get the field and ODBC names
+    xcall dd_file(dcs, DDL_STRS, fli_nmstructs, ^m(str_names, s_ptr),,, ^m(odbc_names, o_ptr))
+    if(error) then
+    begin
+        xcall log_dcs_error(error, "No structures")
+        clear fli_nmstructs
+    end
+    else
+    begin
+        call export_file_tag
+    end
+
+    ;export each structure assigned to the Repository file
+    for str_ctr from 1 thru fli_nmstructs
+    begin
+        xcall dd_struct(dcs, DDS_INFO, ^m(str_names[str_ctr].str_name, s_ptr), s_info)
+        if(error) then
+        begin
+            xcall log_dcs_error(error, "Structure:" + %atrim(^m(str_names[str_ctr].str_name, s_ptr)))
+        end
+        else
+        begin
+            if(^m(odbc_names[str_ctr].odbc_name, o_ptr)) then
+                strname = ^m(odbc_names[str_ctr].odbc_name, o_ptr)
+            else
+                strname = ^m(str_names[str_ctr].str_name, s_ptr)
+            str_size = si_recsz
+
+            xcall e_sect("File:"+%atrim(fli_fname)+" Structure:"+%atrim(sname)
+&               , D_INFO+D_LEFT+D_CLEAR)
+
+            ;export this structure
+            call process_structure
+        end
+    end
+
+exit,
+    xcall e_sect(" ", D_INFO+D_LEFT+D_CLEAR)
+
+    o_ptr = %mem_proc(DM_FREE, o_ptr)
+    s_ptr = %mem_proc(DM_FREE, s_ptr)
+
+;;  a_dcs = dcs
+;;  a_fl_info = fl_info
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+export_file_tag,
+
+    ;create file node
+    file_node = %xml_elem_create
+    if(!file_node)
+    begin
+        a_err = 4
+        goto exit
+    end
+    ;add file node as child of root node
+    if(%xml_elem_addchild(a_root_node, file_node) != XML_SUCCESS)
+    begin
+        a_err = 5
+        goto exit
+    end
+    ;set name of file node
+    if(%xml_elem_setname(file_node, D_XML_FILE) != XML_SUCCESS)
+    begin
+        a_err = 6
+        goto exit
+    end
+    ;set NAME attribute of file node
+    if(%xml_elem_setattribute(file_node, D_XML_NAME, flname) != XML_SUCCESS)
+    begin
+        a_err = 7
+        goto exit
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+process_structure,
+
+    clear clr, ^I(clr_i)
+
+    struct_name = sname
+
+    ;field array
+    fn_ptr = %mem_proc(DM_ALLOC+DM_STATIC, si_nmflds*^size(fld_names))
+
+    ;get a list of fields
+    xcall dd_field(dcs, DDF_SLIST, si_nmflds, ^m(fld_names, fn_ptr))
+    if(error)
+    begin
+        xcall log_dcs_error(error, "Structure:" + %atrim(struct_name)+" Field list")
+        fn_ptr = %mem_proc(DM_FREE, fn_ptr)
+        xreturn
+    end
+
+    ;field array
+    f_ptr = %mem_proc(DM_ALLOC+DM_STATIC, si_nmflds*^size(fld_array))
+
+    ;get properties all fields
+    clear field_num, field_pos, grp_overlay
+    xcall get_all_fields(dcs, control, params, fn_ptr, f_ptr, si_nmflds, field_num, field_pos, grp_overlay)
+    if(rps_error)
+    begin
+        a_err = 8
+        goto exit
+    end
+
+    ;export structure tag
+    call export_str_tag
+
+    cur_node = str_node
+
+    for fld_ctr from 1 thru field_num
+    begin
+        call export_field
+    end
+
+    f_ptr = %mem_proc(DM_FREE, f_ptr)
+    fn_ptr = %mem_proc(DM_FREE, fn_ptr)
+
+    return
+
+;----------------------------------------------------------------------------
+; export STRUCTURE tag
+
+export_str_tag,
+
+    ;create structure node
+    str_node = %xml_elem_create
+    if(!str_node)
+    begin
+        a_err = 10
+        goto exit
+    end
+    ;add structure node as child of file node
+    if(%xml_elem_addchild(file_node, str_node) != XML_SUCCESS)
+    begin
+        a_err = 11
+        goto exit
+    end
+    ;set name of structure node
+    if(%xml_elem_setname(str_node, D_XML_STRUCT) != XML_SUCCESS)
+    begin
+        a_err = 12
+        goto exit
+    end
+    ;set NAME attribute of structure node
+    if(%xml_elem_setattribute(str_node, D_XML_NAME, strname) != XML_SUCCESS)
+    begin
+        a_err = 13
+        goto exit
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_field,
+
+    ;exclude overlay fields
+    if(no_overlays && ^m(fld_array[fld_ctr].fld_ovrlay, f_ptr))
+        return
+
+    ;is this this first field in a group
+    using ^m(fld_array[fld_ctr].fld_grp_st, f_ptr) select
+    (D_GROUP_EXPLICIT),
+    begin ;explicit group
+        field_name = ^m(fld_array[fld_ctr].fld_name, f_ptr)
+        field_len = ^m(fld_array[fld_ctr].fld_len, f_ptr)
+        field_dim = ^m(fld_array[fld_ctr].fld_dim, f_ptr)
+        field_ovrlay = ^m(fld_array[fld_ctr].fld_ovrlay, f_ptr)
+
+        call export_grp_hdr
+    end
+    (D_GROUP_EXPLICIT),
+    begin ;implicit group
+        field_name = ^m(fld_array[fld_ctr].fld_name, f_ptr)
+        field_len = ^m(fld_array[fld_ctr].fld_len, f_ptr)
+        field_dim = ^m(fld_array[fld_ctr].fld_dim, f_ptr)
+        field_ovrlay = ^m(fld_array[fld_ctr].fld_ovrlay, f_ptr)
+        call export_grp_hdr
+    end
+    (), ;must be a field
+        call export_fld
+    endusing
+
+    ;is this the last field in a group (or multiple groups)
+    if(^m(fld_array[fld_ctr].fld_grp_end, f_ptr))
+    begin
+        ctr = ^m(fld_array[fld_ctr].fld_grp_end, f_ptr)
+        while(ctr)
+        begin
+            call export_grp_ftr
+            ctr -= 1
+        end
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_fld,
+
+    ;field name (or ODBC field name)
+    field_name = ^m(fld_array[fld_ctr].fld_name, f_ptr)
+    field_len = ^m(fld_array[fld_ctr].fld_len, f_ptr)
+    field_dim = ^m(fld_array[fld_ctr].fld_dim, f_ptr)
+    field_prec = ^m(fld_array[fld_ctr].fld_dp, f_ptr)
+    field_ovrlay = ^m(fld_array[fld_ctr].fld_ovrlay, f_ptr)
+
+    ;create field node
+    fld_node = %xml_elem_create
+    if(!fld_node)
+    begin
+        a_err = 21
+        goto exit
+    end
+    ;add field node as child of current node
+    if(%xml_elem_addchild(cur_node, fld_node) != XML_SUCCESS)
+    begin
+        a_err = 22
+        goto exit
+    end
+    ;set name of field node
+    if(%xml_elem_setname(fld_node, D_XML_FIELD) != XML_SUCCESS)
+    begin
+        a_err = 23
+        goto exit
+    end
+    ;set NAME attribute of field node
+    if(%xml_elem_setattribute(fld_node, D_XML_NAME, %case_name(field_name, name_case)) != XML_SUCCESS)
+    begin
+        a_err = 24
+        goto exit
+    end
+
+    clear field_format
+
+    ;set field type
+    using ^m(fld_array[fld_ctr].fld_typ, f_ptr) select
+    ('A'),
+    begin
+        using ^m(fld_array[fld_ctr].fld_class, f_ptr) select
+        (C_BINARY),
+            field_type = 'binary'
+        (),
+            field_type = 'alpha'
+        endusing
+    end
+    ('D'),
+    begin
+        using ^m(fld_array[fld_ctr].fld_class, f_ptr) select
+        (0),
+            field_type = 'decimal'
+        (C_YYMMDD),
+        begin
+            field_format = 'YYMMDD'
+            field_type = 'date'
+        end
+        (C_YYYYMMDD),
+        begin
+            field_format = 'YYYYMMDD'
+            field_type = 'date'
+        end
+        (C_YYJJJ),
+        begin
+            field_format = 'YYJJJ'
+            field_type = 'date'
+        end
+        (C_YYYYJJJ),
+        begin
+            field_format = 'YYYYJJJ'
+            field_type = 'date'
+        end
+        (C_YYPP),
+        begin
+            field_format = 'YYPP'
+            field_type = 'date'
+        end
+        (C_YYYYPP),
+        begin
+            field_format = 'YYYYPP'
+            field_type = 'date'
+        end
+        (C_HHMMSS),
+        begin
+            field_format = 'HHMMSS'
+            field_type = 'time'
+        end
+        (C_HHMM),
+        begin
+            field_format = 'HHMM'
+            field_type = 'time'
+        end
+        (),
+            field_type = 'decimal'
+        endusing
+    end
+    ('I'),
+    begin
+        field_type = 'integer'
+    end
+    ('U'),
+    begin
+        field_type = 'user'
+    end
+    (),
+    begin
+        field_type = 'alpha'
+
+        xcall log_xml_error(" ", "Unsupported " + ^m(fld_array[fld_ctr].fld_typ, f_ptr) + " for field " +
+&           field_name+ ". " + field_name + " will be converted to alpha")
+    end
+    endusing
+
+    ;set TYPE attribute of field node
+    if(%xml_elem_setattribute(fld_node, D_XML_TYPE, %atrim(field_type)) != XML_SUcCESS)
+    begin
+        a_err = 25
+        goto exit
+    end
+
+    ;set SIZE attribute of field node
+    if(%xml_elem_setattribute(fld_node, D_XML_SIZE, %string(field_len)) != XML_SUCCESS)
+    begin
+        a_err = 26
+        goto exit
+    end
+
+    if(field_format)
+    begin
+        ;set FORMAT attribute of field node
+        if(%xml_elem_setattribute(fld_node, D_XML_FORMAT, %atrim(field_format)) != XML_SUCCESS)
+        begin
+            a_err = 27
+            goto exit
+        end
+    end
+
+    if(field_prec)
+    begin
+        ;set PRECISION attribute of field node
+        if(%xml_elem_setattribute(fld_node, D_XML_PREC, %string(field_prec)) != XML_SUCCESS)
+        begin
+            a_err = 28
+            goto exit
+        end
+    end
+
+    if(field_dim > 1)
+    begin
+        ;set DIM attribute of field node
+        if(%xml_elem_setattribute(fld_node, D_XML_DIM, %string(field_dim)) != XML_SUCCESS)
+        begin
+            a_err = 29
+            goto exit
+        end
+    end
+
+    if(field_ovrlay)
+    begin
+        ;set OVERLAY attribute of field node
+        if(%xml_elem_setattribute(fld_node, D_XML_OVERLAY, 'yes') != XML_SUCCESS)
+        begin
+            a_err = 30
+            goto exit
+        end
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_grp_hdr,
+
+    ;create field node
+    grp_node = %xml_elem_create
+    if(!grp_node)
+    begin
+        a_err = 40
+        goto exit
+    end
+    ;add field node as child of structure node
+    if(%xml_elem_addchild(str_node, grp_node) != XML_SUCCESS)
+    begin
+        a_err = 41
+        goto exit
+    end
+    ;set name of field node
+    if(%xml_elem_setname(grp_node, D_XML_FIELD) != XML_SUCCESS)
+    begin
+        a_err = 42
+        goto exit
+    end
+    ;set NAME attribute of field node
+    if(%xml_elem_setattribute(grp_node, D_XML_NAME, %case_name(field_name, name_case)) != XML_SUCCESS)
+    begin
+        a_err = 43
+        goto exit
+    end
+
+    if(field_dim > 1)
+    begin
+        ;set DIM attribute of field node
+        if(%xml_elem_setattribute(grp_node, D_XML_DIM, %string(field_dim)) != XML_SUCCESS)
+        begin
+            a_err = 44
+            goto exit
+        end
+    end
+
+    if(field_ovrlay)
+    begin
+        ;set OVERLAY attribute of field node
+        if(%xml_elem_setattribute(grp_node, D_XML_OVERLAY, 'yes') != XML_SUCCESS)
+        begin
+            a_err = 45
+            goto exit
+        end
+    end
+
+    ;create a dynamic memory array of previous nodes, so the correct node can be used
+    ; when we've finished with the currenct group
+
+    if(cn_hdl) then
+    begin
+        cn_hdl = %mem_proc(DM_RESIZ, cn_ctr*^size(current_node), cn_hdl)
+    end
+    else
+    begin
+        cn_hdl = %mem_proc(DM_ALLOC, ^size(current_node), cn_hdl)
+    end
+
+    cn_ctr += 1
+    ^m(current_node[cn_ctr].cn, cn_hdl) = cur_node
+
+    cur_node = grp_node
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_grp_ftr,
+
+    cur_node = ^m(current_node[cn_ctr].cn,cn_hdl)
+    cn_ctr -= 1
+
+    if(.not.cn_ctr)
+        cn_hdl = %mem_proc(DM_FREE, cn_hdl)
+
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; get all fields for a structure / group
+
+.subroutine get_all_fields, reentrant, stack
+
+    a_dcs               ,a                      ;REQUIRED RETURNED DCS control structure
+    a_control           ,a                      ;REQUIRED RETURNED RPSXML control structure
+    a_params            ,a                      ;REQUIRED RPSXML parameters
+    a_fn_ptr            ,i                      ;REQUIRED field name array handle
+    a_f_ptr             ,i                      ;REQUIRED field array handle
+    a_si_nmflds         ,n                      ;REQUIRED number of fields in structure
+    a_field_num         ,n                      ;REQUIRED field number in (outer) structure
+    a_fi_pos            ,n                      ;REQUIRED field position in (outer) structure
+    a_grp_overlay       ,n                      ;REQUIRED in a group overlay
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:rpsxml.def'
+.include 'INC:rpsxml.rec'
+
+; maximum number of fields to process at one time
+.define MAX_FLDS        ,500
+
+.align
+    stack record clr_i
+        num_flds            ,d4                     ;number of fields in DDF_SLIST
+        fld_ctr             ,i4                     ;field counter
+        in_grp_overlay      ,i4                     ;in a group overlay
+
+.align
+    stack record clr
+        field_names         ,MAX_FLDS a30           ;DDF_SLIST array of field names
+        field_name          ,a30                    ;field name
+        start               ,a30                    ;start field name (for DDF_SLIST)
+        old_dcs             ,a30                    ;previous DCS (for implicit groups)
+        old_struct          ,a30                    ;previous structure name (for implicit groups)
+        strname             ,a30                    ;current structure name (for implicit groups)
+
+.proc
+
+    clear clr, ^i(clr_i)
+
+    dcs = a_dcs
+    control = a_control
+    params = a_params
+
+again,
+    xcall dd_field(dcs, DDF_SLIST, MAX_FLDS, field_names, start, num_flds)
+    if (error)
+    begin
+        xcall log_dcs_error(error, "Structure:" + %atrim(sname) + " List of fields error")
+        xreturn
+    end
+
+    for fld_ctr from 1 thru num_flds
+    begin
+        ;second time through, ignore first field
+        if(fld_ctr == 1 && start && field_names(1) == start)
+            nextloop
+
+.ifdef TEST_FIELD
+        if(field_names(fld_ctr) == TEST_FIELD)
+        begin
+            xcall debug_break
+        end
+.endc ;TEST_FIELD
+
+        ;get the field information
+        xcall dd_field(dcs, DDF_INFO, field_names(fld_ctr), f_info)
+        if(error)
+        begin
+            xcall log_dcs_error(error, "Structure:" + %atrim(sname)
+&               + " Field:" + %atrim(field_names(fld_ctr)))
+            nextloop
+        end
+
+        if(no_overlays)
+        begin
+            ;is this an overlay field?
+            if(fi_ovrfld)
+                nextloop
+        end
+
+        ;ODBC name or field name
+        if (odbcfldname && fi_odbcnm) then
+        begin
+            ;get the ODBC fieldname
+            xcall dd_field(dcs, DDF_TEXT, fi_odbcnm, field_name)
+            if (error)
+            begin
+                xcall log_dcs_error(error, "Structure:" + %atrim(sname)
+&                   + " Field:" + %atrim(field_names(fld_ctr)) + " no ODBC name")
+                field_name = field_names(fld_ctr)
+            end
+        end
+        else
+            field_name = field_names(fld_ctr)
+
+        a_field_num += 1
+
+        ;update field names array
+        ^m(fld_names[a_field_num].fld_name, a_fn_ptr) = field_names(fld_ctr)
+
+        ;update field details array
+        ^m(fld_array[a_field_num].fld_name, a_f_ptr) = field_name
+        ^m(fld_array[a_field_num].fld_pos, a_f_ptr) = a_fi_pos + fi_pos
+        ^m(fld_array[a_field_num].fld_len, a_f_ptr) = fi_size
+
+        ;check for multi-dimensional arrays
+        if(fi_dim(2) || fi_dim(3) || fi_dim(4))
+        begin
+            xcall log_xml_error(" ", "Field "+%atrim(field_name)+" in structure "+%atrim(sname)+" has more than one dimension - not supported.")
+            rps_error = 1
+        end
+
+        ^m(fld_array[a_field_num].fld_dim, a_f_ptr) = fi_dim(1)+fi_dim(2)+fi_dim(3)+fi_dim(4)
+        if(.not.^m(fld_array[a_field_num].fld_dim, a_f_ptr))
+            ^m(fld_array[a_field_num].fld_dim, a_f_ptr) = 1
+
+        using fi_type select
+        (T_ALP),
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'A'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = 0
+            ^m(fld_array[a_field_num].fld_class, a_f_ptr) = fi_class
+            ;;using fi_class select
+            ;;(C_BINARY),
+            ;;endusing
+        end
+        (T_DEC),
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'D'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = fi_prec
+            ^m(fld_array[a_field_num].fld_class, a_f_ptr) = fi_class
+        end
+        (T_INT),
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'I'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = 0
+            ^m(fld_array[a_field_num].fld_class, a_f_ptr) = 0
+        end
+        (T_USR),
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'U'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = 0
+            ^m(fld_array[a_field_num].fld_class, a_f_ptr) = 0
+            ;;using fi_class select
+            ;;(C_ALPHA),
+            ;;(C_NUMERIC),
+            ;;(C_DATE),
+            ;;endusing
+        end
+        (), ;unknown type
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'A'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = 0
+            ^m(fld_array[a_field_num].fld_class, a_f_ptr) = 0
+        end
+        endusing
+
+        if(a_grp_overlay) then
+            ^m(fld_array[a_field_num].fld_ovrlay, a_f_ptr) = 2
+        else
+            ;is this field is an overlay field
+            ^m(fld_array[a_field_num].fld_ovrlay, a_f_ptr) = (fi_ovrfld.ne.' ')
+
+        ;is this field a group
+        using fi_group select
+        (F_GROUPOVRFLD),
+        begin
+            if(no_overlays)
+            begin
+                ;group overlay - skip
+                nextloop
+            end
+
+            ^m(fld_array[a_field_num].fld_ovrlay, a_f_ptr) = 2
+
+            in_grp_overlay = 1
+            call process_group
+            in_grp_overlay = a_grp_overlay
+            if(error)
+                goto abort
+        end
+        (F_GROUPFLD),
+        begin
+            in_grp_overlay = a_grp_overlay
+            call process_group
+            if(error)
+                goto abort
+        end
+        (),
+        begin
+            ;not the start or end of a group
+            ^m(fld_array[a_field_num].fld_grp_st, a_f_ptr) = 0
+            ^m(fld_array[a_field_num].fld_grp_end, a_f_ptr) = 0
+        end
+        endusing
+    end
+
+    ;see if there are more fields
+    if(num_flds == MAX_FLDS && field_names(MAX_FLDS))
+    begin
+        start = field_names(MAX_FLDS)
+        goto again
+    end
+
+abort,
+    a_dcs = dcs
+    a_control = control
+    xreturn
+
+;----------------------------------------------------------------------------
+
+process_group,
+
+    ;is this an implicit group
+    if(fi_struct) then
+    begin
+        ;start of implicit group
+        ^m(fld_array[a_field_num].fld_grp_st, a_f_ptr) = D_GROUP_IMPLICIT
+        old_dcs = dcs
+        old_struct = sname
+        ;get structure name
+        xcall dd_field(dcs, DDF_TEXT, fi_struct, strname)
+        if(.not.error)
+        begin
+            ;reset to new structure
+            xcall dd_struct(dcs, DDS_INFO, strname, s_info)
+            if(error)
+                goto abort_group
+        end
+    end
+    else
+    begin
+        ;start of explicit group
+        ^m(fld_array[a_field_num].fld_grp_st, a_f_ptr) = D_GROUP_EXPLICIT
+        clear old_struct, old_dcs
+        ;start explicit group
+        xcall dd_field(dcs, DDF_GROUP, field_names(fld_ctr))
+    end
+
+    if(error) then
+    begin
+        xcall log_dcs_error(error, "Structure:" + %atrim(sname) + " Group Field:" + %atrim(field_names(fld_ctr)))
+    end
+    else
+        xcall get_all_fields(dcs, control, params, a_fn_ptr, a_f_ptr, a_si_nmflds,
+&           a_field_num, fi_pos-1, in_grp_overlay)
+
+    ;last field in a (nested) group
+    ^m(fld_array[a_field_num].fld_grp_end, a_f_ptr) += 1
+
+    if(old_struct) then
+    begin
+        dcs = old_dcs
+        sname = old_struct
+    end
+    else
+    begin
+        ;end explicit group
+        xcall dd_field(dcs, DDF_ENDGROUP)
+    end
+
+    clear error
+
+abort_group,
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; log DDLIB errors
+
+.subroutine log_dcs_error
+
+    a_error             ,n                      ;REQUIRED error number
+    a_ermsg             ,a                      ;REQUIRED error message
+
+.proc
+
+    if(a_error == -1) then
+        xcall log_message(%string(a_error)+" "+%atrim(a_ermsg), 1)
+    else
+        xcall log_message(%string(a_error)+" "+%atrim(a_ermsg))
+
+    xreturn
+
+.end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; log XMLGEN errors
+
+.subroutine log_xml_error
+
+    a_err_tag           ,a                      ;OPTIONAL error tag
+    a_msg               ,a                      ;REQUIRED message
+
+.proc
+
+    if(^passed(a_err_tag)) then
+    begin
+        if(a_err_tag) then
+            xcall log_message(D_APP+": "+%atrim(a_err_tag)+" "+%atrim(a_msg))
+        else
+            xcall log_message(D_APP+": "+%atrim(a_msg))
+    end
+    else
+        xcall log_message(%atrim(a_msg))
+
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine rps_to_xml
+
+    wndidp          ,n                      ;window ID
+    a_params        ,a                      ;input record
+
+.include 'WND:tools.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:rpsxml.def'
+.include 'INC:rpsxml.rec'
+
+    external function
+        get_rps_filenames   ,^val
+        file_exists         ,^val
+
+.align
+    record
+        status          ,i4                     ;command line status
+        rpsmfile        ,a D_FILENAME_SIZE      ;original RPSMFIL
+        rpstfile        ,a D_FILENAME_SIZE      ;original RPSTFIL
+        fld             ,a30                    ;field
+
+.proc
+
+    params = a_params
+
+    if(.not.%get_rps_filenames(rpsmfile, rpstfile)) then
+    begin
+        rps_main = rpsmfile
+        rps_text = rpstfile
+    end
+    else
+        clear rps_main, rps_text
+
+.ifdef D_TEST_MODE
+    if(.not.xml_file)
+        xml_file = 'TMP:rpsxml.xml'
+    if(.not.rps_main)
+        rps_main = 'RPSDAT:rpsmain.ism'
+    if(.not.rps_text)
+        rps_text = 'RPSDAT:rpstext.ism'
+    if(.not.log_rps)
+        log_rps = 'TMP:rpsxml.log'
+.endc
+
+    xcall i_display(wndidp,, params)
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    do  begin
+        xcall i_input(wndidp,, params, colid(1), colid(2),, D_NOTERM,,
+&           , dcs)
+        ;process window
+        if (g_select) then
+            call mnu_cols                   ;menu processing
+        else
+        begin
+            if(g_setsts) then
+                call set_proc               ;set processing
+            else
+                call brk_proc               ;break procssing
+        end
+    end
+    until(g_entnam == 'O_QUIT' || g_entnam == 'O_EXIT' || g_entnam == 'TS_')
+
+    xcall u_update
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call set_return_vars
+    end
+    ('O_QUIT'),
+        nop
+    ('O_ABOUT'),
+        xcall u_about(D_APP, D_VERSION, %datecompiled)
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    call validate_fields
+
+    if(fld)
+    begin
+        xcall u_message("Invalid data")
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+validate_fields,
+
+    clear fld
+    ; check xml file
+    if(.not.xml_file)
+    begin
+        fld = 'xmlfile'
+    end
+    ; check RPSMFIL exists
+    if(.not.fld && .not.%file_exists(rps_main, 'I:I'))
+    begin
+        fld = 'rpsmfil'
+    end
+    ; check RPSTFIL exists
+    if(.not.fld && .not.%file_exists(rps_text, 'I:I'))
+    begin
+        fld = 'rpstfil'
+    end
+
+    if(fld) then
+        xcall i_next(wndidp,, fld)
+    else
+        xcall i_next(wndidp,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_return_vars,
+
+    call validate_fields
+
+    if(fld) then
+    begin
+        xcall u_message("Invalid data")
+        clear g_entnam
+    end
+    else
+    begin
+        a_params = params
+    end
+
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Drill Method
+
+.subroutine export_filename_drill ,reentrant
+.include "WND:inpinf.def"       ; Group argument of input info
+    a_inprec        ,a              ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data ,a              ; Optional method data argument
+
+.include 'RPSLIB:ddinfo.def'
+.include 'INC:rpsxml.rec'
+
+.align
+    record
+        filename        ,a 255
+
+.proc
+
+    params = a_inprec
+    filename = xml_file
+    xcall export_select(filename)
+    if(filename)
+    begin
+        xml_file = filename
+        a_inprec = params
+    end
+
+    return
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine export_select
+
+    a_filename      ,a              ;REQUIRED RETURNED filename
+
+.proc
+
+    if(.not.%u_getfilename(a_filename, "Select XML File",,,, 'rpsxml','xml'
+&       ,,,,, D_OFN_NONETWORK+D_OFN_NOTRANS+D_OFN_SAVEAS))
+&       clear a_filename
+
+    xreturn
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine filename_drill ,reentrant
+.include "WND:inpinf.def"   ; Group argument of input info
+    a_inprec            ,a      ; The data_area argument passed to the
+    ;  calling input routine.
+
+.include 'WND:tools.def'
+
+.include 'INC:rpsxml.rec'
+
+.include 'INC:rps_utilities.def'
+
+.proc
+
+    params = a_inprec
+    clear rps_drill
+    rpsmain_file = rps_main
+    rpstext_file = rps_text
+
+    xcall rps_filename_drill(inputinfo, a_inprec, rps_drill)
+
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Drill Method
+
+.subroutine rpsmain_drill ,reentrant
+.include "WND:inpinf.def"       ; Group argument of input info
+    a_inprec        ,a              ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data ,a  ; Optional method data argument
+
+.include 'RPSLIB:ddinfo.def'
+.include 'INC:rpsxml.rec'
+
+.align
+    record
+        filename        ,a 255
+
+.proc
+
+    params = a_inprec
+    filename = rps_main
+    xcall rps_select(filename, 'rpsmain')
+    if(filename)
+    begin
+        rps_main = filename
+        a_inprec = params
+    end
+
+    return
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Drill Method
+
+.subroutine rpstext_drill ,reentrant
+.include "WND:inpinf.def"       ; Group argument of input info
+    a_inprec        ,a              ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data ,a              ; Optional method data argument
+
+.include 'RPSLIB:ddinfo.def'
+.include 'INC:rpsxml.rec'
+
+.align
+    record
+        filename        ,a 255
+
+.proc
+
+    params = a_inprec
+    filename = rps_text
+    xcall rps_select(filename, 'rpstext')
+    if(filename)
+    begin
+        rps_text = filename
+        a_inprec = params
+    end
+
+    return
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine rps_select
+
+    a_filename      ,a              ;REQUIRED RETURNED filename
+    a_default       ,a              ;RPS default filename
+
+.proc
+
+    if(.not.%u_getfilename(a_filename, "Select Repository file",,,, a_default, 'ism'
+&       ,,,,, D_OFN_NONETWORK+D_OFN_NOTRANS))
+&       clear a_filename
+
+    xreturn
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

@@ -1,0 +1,134 @@
+;;***********************************************************************************
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; Title:       IPHostEntry.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      William Hawkins, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System.Net
+
+.include "DBLDIR:synsock.def"
+
+namespace SynPSG.System.Net
+
+    public class DNS
+
+        ;; Methods not yet implemented
+        ;;
+        ;; BeginGetHostByName
+        ;; BeginResolve
+        ;; EndGetHostByName
+        ;; EndResolve
+        ;; GetHostAddresses
+        ;; GetHostbyName (deprecated)
+        ;; GetHostByAddress (deprecated)
+        ;; Resolve (deprecated)
+
+        ;;;<summary>
+        ;;;</summary>
+        static public method GetHostEntry ,@IPHostEntry
+            req in dnsAddress ,string   ;hostname
+            endparams
+            record
+                address     ,a126
+            endrecord
+        proc
+            if (dnsAddress==^null || dnsAddress.length==0)
+                throw new System.ArgumentNullException("DNS.GetHostEntry(string) Hostname is empty or null.")
+            if (dnsAddress.length>126)
+                throw new System.ArgumentOutOfRangeException("DNS.GetHostEntry(string) Hostname > 126 characters.")
+            address = dnsAddress
+            mreturn GetHostEntry(address)
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        static public method GetHostEntry ,@IPHostEntry
+            req in dnsAddress ,a        ;hostname
+            endparams
+            record
+                ipAddress   ,a126
+                inAddr      ,int
+                socketError ,int
+                errnum      ,int
+            endrecord
+        proc
+            if (!dnsAddress)
+                throw new System.ArgumentNullException("DNS.GetHostEntry(a) Hostname is empty or null.")
+            if (^size(dnsAddress)>126)
+                throw new System.ArgumentOutOfRangeException("DNS.GetHostEntry(a) Hostname > 126 characters.")
+            ipAddress = dnsAddress
+            ;; assume DNS name
+            socketError = %ss_gethostbyname(ipAddress(1:%trim(ipAddress)), inAddr)
+            ;; if error, retry as TCP/IP address
+            if (socketError != SS_SUCCESS)
+            begin
+                ;;save ss_gethostbyname error, for error reporting
+                errnum = SocketError
+                socketError = %ss_inet_addr(ipAddress(1:%trim(ipAddress)), inAddr)
+            end
+            using socketError select
+            (SS_SUCCESS),
+                nop
+            (SS_EBADSTRING),
+                throw new applicationException("DNS.GetHostEntry(a) Invalid HostName "+dnsAddress(1:%trim(dnsAddress)))
+            (),
+                SynPSG.System.Net.SocketException.ThrowSocketException(socketError, "DNS.GetHostEntry()",
+                &   "SS_INET_ADDR error for "+dnsAddress(1:%trim(dnsAddress))+" (after SS_GETHOSTBYNAME error "+%string(errnum)+")")
+            endusing
+            mreturn new IPHostEntry(inAddr)
+        endmethod
+
+        ;;;<summary>
+        ;;;Get the name of the local host
+        ;;;</summary>
+        static public method GetHostName ,string
+            endparams
+            record
+                localhost   ,a126
+                socketError ,int
+            endrecord
+        proc
+            socketError = %ss_gethostname(localhost)
+            using socketError select
+            (SS_SUCCESS),
+                nop
+            (),
+                SynPSG.System.Net.SocketException.ThrowSocketException(socketError, "DNS.GetHostHame()",
+                &   "SS_GETHOSTNAME error for LOCALHOST")
+            endusing
+            mreturn localhost(1:%trim(localhost))
+        endmethod
+
+    endclass
+endnamespace

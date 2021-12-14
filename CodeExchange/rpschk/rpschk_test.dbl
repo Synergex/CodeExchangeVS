@@ -1,0 +1,426 @@
+main
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.include 'WND:tools.def'
+.include 'DBLDIR:windows.def'
+.include 'RPSLIB:ddinfo.def'
+
+.define D_VERSION               "1.0.8"
+
+.define D_ER_DIFFERENCES        1
+.define D_ER_NOCOMPARE          -1
+
+.align
+    record
+        file_ctr                ,d4                     ;filename counter
+        ctr                     ,i4                     ;general purpose counter
+        diffs                   ,i4                     ;number of difference
+        nocmp                   ,i4                     ;number of no comparisons
+        same                    ,i4                     ;number of files ok
+        f_hdl                   ,D_HANDLE               ;filename handle
+        arg_ctr                 ,i4                     ;argument counter
+        status                  ,i4                     ;command line status
+        bld_id                  ,i4                     ;input windows build id
+        wndidp                  ,i4                     ;input window id
+        colid                   ,3i4                    ;menu columns
+
+        mbuffer                 ,a1024                  ;menu column build buffer
+        rps                     ,2a50                   ;original RPSMFIL & RPSTFIL
+        results                 ,a500                   ;results message
+
+.align
+    record input
+        file_name               ,a30                    ;RPS filename
+        arg                     ,2a50                   ;command line arguments
+        log_file                ,a50                    ;log filename
+
+    structure filename
+        f_name                  ,a30                    ;filename
+
+    external function
+        file_exists             ,^VAL
+        rpschk                  ,^VAL
+        u_cmdlinopt             ,^VAL
+
+proc
+
+    xcall u_start(, 1, 1)
+
+    xcall flags(7000000,1)
+
+    xcall e_sect("ISAM Check v"+D_VERSION, D_HEADER, D_LEFT, D_CLEAR)
+    xcall u_update
+
+    xcall getlog('RPSMFIL', rps(1), status)
+    xcall getlog('RPSTFIL', rps(2), status)
+
+    call get_parameters
+    if(status)
+    begin
+        xcall dd_init(dcs)
+        using error select
+        (E_OK),
+        begin
+            call dcs_ok
+            xcall dd_exit(dcs)
+        end
+        (E_NOFIND),
+            xcall u_message("RPS Record not found")
+        (E_OPNERR),
+            xcall u_message("RPS Open error")
+        (E_INVFNC),
+            xcall u_message("RPS Invalid Function")
+        (E_OPNERRM),
+            xcall u_message("RPS Cannot open main file")
+        (E_OPNERRT),
+            xcall u_message("RPS Cannot open text file")
+        (E_BADVERS),
+            xcall u_message("RPS Incompatible version")
+        (),
+            xcall u_message("DD_INIT error "+%string(error))
+        endusing
+    end
+
+    xcall u_finish
+
+    ; reset logicals
+    xcall setlog('RPSMFIL', rps(1), status)
+    xcall setlog('RPSTFIL', rps(2), status)
+
+    freturn D_EXIT_SUCCESS
+
+;--------------------------------------------------------------------
+
+dcs_ok,
+    if(file_name) then
+    begin
+        xcall dd_file(dcs, DDL_INFO, file_name, fl_info)
+        if(error) then
+            clear file_ctr
+        else
+            file_ctr = 1
+    end
+    else
+    begin
+        xcall dd_name(dcs, DDN_COUNT, DDN_FILE, file_ctr)
+        if(error)
+            clear file_ctr
+    end
+
+    if(file_ctr) then
+    begin
+        ; delete log file (if it exists)
+        if(log_file)
+            xcall delet(log_file)
+
+        clear diffs, nocmp, same
+
+        f_hdl = %mem_proc(DM_ALLOC+DM_STATIC, file_ctr*^size(filename))
+
+        if(file_name) then
+        begin
+            ^m(filename[1].f_name, f_hdl) = file_name
+        end
+        else
+        begin
+            xcall dd_name(dcs, DDN_LIST, DDN_FILE, file_ctr, ^m(filename, f_hdl))
+            if(error)
+            begin
+                xcall rpschk_err(error, "List of files error")
+                clear file_ctr
+            end
+        end
+
+        for ctr from 1 thru file_ctr
+        begin
+            xcall e_sect(^m(filename[ctr].f_name, f_hdl), D_LEFT)
+            xcall u_update
+
+            ;check status
+            using %rpschk(dcs, ^m(filename[ctr].f_name, f_hdl), log_file) select
+            (D_ER_DIFFERENCES),
+                diffs += 1
+            (D_ER_NOCOMPARE),
+                nocmp += 1
+            (),
+                same += 1
+            endusing
+        end
+
+        f_hdl = %mem_proc(DM_FREE, f_hdl)
+
+        if(file_name) then
+        begin                                   ;only got 1 file to check - can be more specific
+            if(diffs) then
+                results = "File "+%atrim(file_name)+" has differences"
+            else
+            begin
+                if(nocmp) then
+                    results = "File "+%atrim(file_name)+" was not checked"
+                else
+                    results = "File "+%atrim(file_name)+" has no differences"
+            end
+        end
+        else
+        begin
+            if(diffs+nocmp) then
+            begin
+                results = %string(same)+" files have no differences\n"+
+&                   %string(diffs)+" files have differences\n"+
+&                   %string(nocmp)+" files were not checked"
+            end
+            else
+                results = "No differences found\n"+
+&                   %string(same)+" files checked"
+        end
+
+
+        if(log_file.and.(diffs+nocmp)) then
+            xcall u_msgbox(%atrim(results)+"\n"+
+&               "Please check "+%atrim(log_file)
+&               ,D_MOK+D_MICONINFO, "Results")
+        else
+            xcall u_msgbox(%atrim(results)
+&               ,D_MOK+D_MICONINFO, "Results")
+
+    end
+    else
+    begin
+        xcall u_msgbox("No files in Repository"
+&           ,D_MOK+D_MICONINFO, "Results")
+    end
+
+    return
+
+;--------------------------------------------------------------------
+
+get_parameters,
+
+    if(%u_cmdlinopt('h'))
+    begin
+        xcall u_message("dbr rpschk -f file_name -l log_file -r rpsmfil rpstfil")
+        clear status
+        return
+    end
+
+    clear input
+
+    if(.not.%u_cmdlinopt('f', 1, file_name))
+        clear file_name
+
+    if(.not.%u_cmdlinopt('l', 1, log_file))
+        clear log_file
+
+    if(%u_cmdlinopt('r', 2, arg, arg_ctr)) then
+    begin
+        if(arg_ctr.eq.2) then
+        begin
+            ; check RPSMFIL exists
+            status = %file_exists(arg(1), 'I:I')
+            ; check RPSTFIL exists
+            if(status) status = %file_exists(arg(2), 'I:I')
+
+            ; both files exist
+            if(status) then
+            begin
+                xcall setlog('RPSMFIL', arg(1), status)
+                xcall setlog('RPSTFIL', arg(2), status)
+                status = 1
+            end
+            else
+            begin
+                xcall u_message("Repository file(s) not found")
+                clear status
+            end
+        end
+        else
+        begin
+            xcall u_message("Invalid -r argument [-r rpsmfil rpstfil]")
+            clear status
+        end
+    end
+    else
+    begin
+        arg(1) = rps(1)
+        arg(2) = rps(2)
+        status = 2
+    end
+
+    xcall ib_input(bld_id, 'RPSCHK1', 6, 78)
+
+    xcall ib_field(bld_id, 'filename', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 30,
+&       D_FLD_UC, D_FLD_INFO, "Leave blank for all files",
+&       D_FLD_POS, 2, 2, D_FLD_FPOS, 2, 20,
+&       D_FLD_PROMPT, "Filename")
+    xcall ib_field(bld_id, 'rpsmfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&       D_FLD_INFO, "Enter name and location of RPS main file",
+&       D_FLD_POS, 3, 2, D_FLD_FPOS, 3, 20,
+&       D_FLD_PROMPT, "RPSMFIL")
+    xcall ib_field(bld_id, 'rpstfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&       D_FLD_INFO, "Enter name and location of RPS text file",
+&       D_FLD_POS, 4, 2, D_FLD_FPOS, 4, 20,
+&       D_FLD_PROMPT, "RPSTFIL")
+    xcall ib_field(bld_id, 'logfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&       D_FLD_INFO, "Enter name of log file, or leave blank",
+&       D_FLD_POS, 5, 2, D_FLD_FPOS, 5, 20,
+&       D_FLD_PROMPT, "Log File")
+
+    if(status.eq.2)
+    begin
+        xcall ib_button(bld_id, 'O_EXIT', DSB_TEXT, "Check",,, "C")
+        xcall ib_button(bld_id, 'CREATE', DSB_TEXT, "Create",,, "C")
+        xcall ib_button(bld_id, 'O_QUIT', DSB_TEXT, "Cancel",,, "N")
+    end
+
+    xcall ib_end(bld_id, wndidp)
+
+    xcall u_window(D_PLACE, wndidp, 6, 1)
+
+    xcall w_brdr(wndidp, WB_DRAGOFF)
+
+    xcall i_display(wndidp,, input)
+
+    if(status.eq.2)
+    begin
+        xcall mb_column(mbuffer, 'rpschk_g', "General  ")
+        xcall mb_entry(mbuffer, 'O_EXIT', "Exit")
+        xcall mb_entry(mbuffer, 'O_QUIT', "Quit")
+        xcall mb_end(mbuffer, colid(3))
+        ;Load columns, but do not place
+        xcall mb_column(mbuffer, 'rpschk_i', "Cursor  ",, D_NOPLC)
+        xcall mb_entry(mbuffer, 'I_FRST', "First field")
+        xcall mb_entry(mbuffer, 'I_LAST', "Last field")
+        xcall mb_entry(mbuffer, 'I_NEXT', "Next field")
+        xcall mb_entry(mbuffer, 'I_PREV', "Prev field")
+        xcall mb_entry(mbuffer, 'E_LEFT', "Left 1 character")
+        xcall mb_entry(mbuffer, 'E_RIGHT', "Right 1 character")
+        xcall mb_entry(mbuffer, 'E_CDEL', "Delete character")
+        xcall mb_end(mbuffer, colid(1))
+
+        xcall mb_column(mbuffer, 'rpschk_s', "Cursor  ",, D_NOPLC)
+        xcall mb_entry(mbuffer, 'S_DOWN', "Next item")
+        xcall mb_entry(mbuffer, 'S_UP', "Prev item")
+        xcall mb_end(mbuffer, colid(2))
+
+        xcall i_next(wndidp,, '*FRST*')
+
+        do
+        begin
+            xcall i_input(wndidp,, input, colid(1), colid(2),, D_NOTERM)
+            ;process window
+            if (g_select) then
+                call mnu_cols               ;menu processing
+            else
+            begin
+                if(g_setsts) then
+                    call set_proc           ;set processing
+                else
+                    call brk_proc           ;break procssing
+            end
+        end
+        until(g_entnam.eq.'O_EXIT'.or.g_entnam.eq.'O_QUIT')
+
+    end
+
+    xcall u_update
+    return
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call set_rps_logicals
+        status = 1
+    end
+    ('O_QUIT'),
+        status = 0
+    endusing
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_rps_logicals,
+
+    if(arg(1).ne.rps(1).or.arg(2).ne.rps(2))
+    begin
+        xcall setlog('RPSMFIL', arg(1), status)
+        xcall setlog('RPSTFIL', arg(2), status)
+    end
+
+    return
+end
+
+;======================================================================
+; Check is a file exists.  Uses mode to confirm it's the correct file type
+
+function file_exists ,^VAL
+
+    a_file                  ,a
+    a_mode                  ,a
+
+.align
+    record
+        chan                ,i4
+        error               ,i4
+
+proc
+
+    xcall u_open(chan, a_mode, a_file,,, error)
+    if(.not.error)
+        xcall u_close(chan)
+
+    freturn (error.eq.0)
+
+end
+
+;======================================================================
+

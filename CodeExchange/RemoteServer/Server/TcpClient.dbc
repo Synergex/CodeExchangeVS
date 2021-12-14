@@ -1,0 +1,126 @@
+;;**********************************************************************
+;;
+;; Title:       TcpClient.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System.Net
+import SynPSG.System.Net.Sockets
+
+namespace SynPSG.System.Net.Sockets
+    .include "DBLDIR:synsock.def"
+    class TcpClient
+        mConnected             ,boolean
+        private mSocketDesc    ,int
+        private mHostname      ,string
+        private mPort          ,int
+        private mHostIpAddr    ,int
+        private mSocket        ,@Socket
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the TcpClient class.
+        ;;;</summary>
+        public method TcpClient
+            endparams
+        proc
+            mSocket = New Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.TCP)
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the TcpClient class and connects to the specified port on the specified host.
+        ;;;</summary>
+        public method TcpClient
+            in hostname ,string
+            in port     ,int
+            endparams
+            this()
+        proc
+            Connect(hostname, port)
+        endmethod
+
+        ;;;<summary>
+        ;;;Connects the client to the specified port on the specified host.
+        ;;;</summary>
+        public method Connect, void
+            req in hostname ,string
+            req in port     ,int
+            endparams
+        proc
+            if (hostname==^null || hostname.length==0)
+                throw new applicationException("TcpClient.Connect(hostname,port) Hostname is empty or null.")
+            if (port<=0 || port>65535)
+                throw new applicationException("TcpClient.Connect(hostname,port) Port is not between 1 and 65535.")
+
+            mHostname = hostname
+            mPort = port
+            mSocket.connect(hostname,port)
+            mConnected = 1
+        endmethod
+
+        ;;;<summary>Disposes this TcpClient instance without closing the underlying connection.</summary>
+        public method Close, void
+            endparams
+        proc
+            init mHostname, mPort, mConnected, mHostIpAddr, mSocketDesc
+            mreturn
+        endmethod
+
+        ;;;<summary>Returns the NetworkStream used to send and receive data.</summary>
+        public method GetStream,    @NetworkStream
+            endparams
+        proc
+            mreturn new NetworkStream(mSocket)
+        endmethod
+
+        ;;;<summary>Gets or sets the underlying socket.</summary>
+        public property Client  ,@socket
+            method get
+            proc
+                mreturn mSocket
+            endmethod
+            method set
+            proc
+                mSocket = value
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets a value indicating whether the underlying Socket for a TcpClient is connected to a remote host.</summary>
+        public property Connected, boolean
+            method get
+            proc
+                mreturn mConnected
+            endmethod
+        endproperty
+
+    endclass
+
+endnamespace

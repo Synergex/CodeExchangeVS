@@ -1,0 +1,88 @@
+; rpsxml.def
+
+.ifndef D_RPSXML_DEFS
+
+; defined RPSXML defines
+.define D_RPSXML_DEFS   ,1
+
+; log any messages to this file/device
+.define D_MSG_FILE      ,'TT:'
+
+; log any RPS (DDLIB) errors to this file
+.define D_LOG_FILE      ,'TT:'
+
+.define D_XML_ROOT      ,'repository'
+.define D_XML_FILE      ,'file'
+.define D_XML_COMP      ,'component'
+.define D_XML_STRUCT    ,'structure'
+.define D_XML_INTER     ,'interface'
+.define D_XML_METHOD    ,'method'
+.define D_XML_METHRES   ,'methodresult'
+.define D_XML_PARAM     ,'param'
+.define D_XML_GROUP     ,'group'
+.define D_XML_FIELD     ,'field'
+
+.define D_XML_NAME      ,'name'
+.define D_XML_ALTNAME   ,'altname'
+.define D_XML_SIZE      ,'size'
+.define D_XML_PREC      ,'precision'
+.define D_XML_TYPE      ,'type'
+.define D_XML_DIR       ,'dir'
+.define D_XML_STRNAME   ,'structureName'
+.define D_XML_DIM       ,'dim'
+.define D_XML_REQD      ,'required'
+.define D_XML_ID        ,'id'
+.define D_XML_ELB       ,'elb'
+.define D_XML_FORMAT    ,'format'
+.define D_XML_PASSBY    ,'passby'
+.define D_XML_ERRTAG    ,'errortag'
+.define D_XML_OVERLAY   ,'overlay'
+
+; logging mode
+.define D_LOG_NONE      ,0
+.define D_LOG_ERROR     ,1
+.define D_LOG_SUCCESS   ,2
+.define D_LOG_ALL       ,3
+
+; method return types (must match RET_TYPES order)
+.define D_RET_ALPHA     ,1
+.define D_RET_DEC       ,2
+.define D_RET_INPDEC    ,4
+.define D_RET_INT       ,8
+.define D_RET_VAL       ,9
+
+; field types (must match FLD_TYPES order)
+.define D_FIELD_ALPHA   ,1
+.define D_FIELD_DEC     ,2
+.define D_FIELD_INPDEC  ,4
+.define D_FIELD_INT     ,8
+.define D_FIELD_STRUCT  ,16
+
+; field argument passed by
+.define D_PASSED_BY_REF ,'R'
+.define D_PASSED_BY_VAL ,'V'
+
+; group type
+.define D_GROUP_EXPLICIT    ,1
+.define D_GROUP_IMPLICIT    ,2
+
+.endc ;D_RPSXML_DEFS
+
+;The next two structures are use by the routines XML_STR and GET_ALL_FIELDS
+
+structure fld_names
+    fld_name            ,a30                    ;field names for structure
+
+structure fld_array
+    fld_name            ,a30                    ;field names for structure
+    fld_pos             ,i4                     ;field position
+    fld_len             ,i4                     ;field length
+    fld_dim             ,i4                     ;field dimensions
+    fld_typ             ,a1                     ;field type
+    fld_dp              ,d2                     ;field decimal places
+    fld_ovrlay          ,d1                     ;field is an overlay field
+    fld_class           ,d1                     ;field class
+    fld_grp_st          ,d1                     ;field is a group (1-explicit, 2-implicit)
+    fld_grp_end         ,d1                     ;field is last field in group (number of endgroups)
+
+

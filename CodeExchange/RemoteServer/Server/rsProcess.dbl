@@ -1,0 +1,646 @@
+;;***********************************************************************************
+;;
+;; Title:       rsProcess.dbl
+;;
+;; Type:        Program
+;;
+;; Description:
+;;
+;; Author:      William Hawkins, Synergex Professional Services Group
+;;
+;; Copyright    © 2010 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+
+import SynPSG.System.Net
+import SynPSG.System.Net.Sockets
+import SynPSG.Core.Utilities
+import SynPSG.Utilities.RemoteServer
+
+namespace SynPSG.Utilities.RemoteServer
+
+.include 'DEF:RemoteServer.def'
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+main rsProcess
+
+.include 'DBLDIR:synsock.def'
+
+literal
+    rpVersion       ,a* ,"v1.4"
+endliteral
+
+.define MAX_ARGS    20
+
+.define M_LOGGING_PORT  %datetime+":rsProcess "+%string(serverPort)+":"
+.define M_LOGGING       %datetime+":rsProcess:"
+
+external function
+    dbl2dibol           ,a
+    locase              ,a
+    loggerStart         ,int
+    loggerInfoMessage   ,^val
+endexternal
+
+record
+    tcpListener         ,@TcpListener
+    tcpClient           ,@TcpClient
+    nws                 ,@NetworkStream   ;network stream
+    serverPort          ,int
+    response            ,a10000
+     errorMessage       ,a200 @response
+    responseSize        ,int
+    offset              ,int
+    request             ,string
+    chTT                ,int
+    OStype              ,int
+
+    pipeRequest         ,string
+    subResponse         ,a1000
+    subResponseSize     ,int
+    spos                ,int
+    epos                ,int
+    sts                 ,int
+    pid                 ,int
+    minPort             ,int
+    maxPort             ,int
+    serverMode          ,boolean
+    stopStatus          ,int
+
+endrecord
+
+proc
+
+    xcall envrn(OStype)
+    using OStype select
+    (8),
+        OStype = D_RS_UNIX
+    (6),
+        OStype = D_RS_OpenVMS
+    (),
+        OStype = D_RS_WINDOWS
+    endusing
+
+    serverMode = FALSE
+    stopStatus = D_EXIT_SUCCESS
+
+    rbSetLog('SLKRUNS', '1', sts, OStype)
+
+    call decodeCommandLine
+
+    try
+    begin
+        begin
+            data logical    ,a80
+            data loglen     ,int
+
+            getlog('REMOTESERVERDBG', logical, loglen)
+            if(loglen > 0)
+                sts = loggerStart(logical(1:loglen), 'REMOTESERVERLOG:rs_process.log')
+
+            getlog('REMOTESERVERLOG', logical, loglen)
+            if(loglen > 0) then
+                loggerInfoMessage("Logical REMOTESERVERLOG="+logical(1,loglen))
+            else
+                throw new applicationexception("Logical REMOTESERVERLOG is not defined")
+
+            ;; make sure REMOTESERVERLOG is valid
+            begin
+                data rbChan ,i4
+                open(rbChan=%syn_freechn, O, rsProcessFileName(0)) [ERR=CreateError]
+                purge rbChan
+                exit
+            CreateError,
+                throw new applicationException("Error "+%string(sts)+" creating file "+rsProcessFileName(0))
+            end
+
+            clear sts
+            getlog('REMOTESERVERMINPORT', logical, loglen)
+            if(loglen > 0) then
+            begin
+                loggerInfoMessage("Logical REMOTESERVERMINPORT="+logical(1,loglen))
+                for spos from 1 thru loglen
+                begin
+                    using logical(spos:1) select
+                    ('0' thru '9'),
+                        nop
+                    (),
+                        throw new applicationexception("Logical REMOTESERVERMINPORT contains invalid data ["+logical(1,loglen)+"]")
+                    endusing
+                end
+                minPort = ^d(logical(1:loglen))
+                if(minPort != 0 && (minPort < 1025 || minPort > 65535))
+                    throw new applicationexception("Logical REMOTESERVERMINPORT is not in the range 1025 to 65535")
+            end
+            else
+                sts = 1
+
+            getlog('REMOTESERVERMAXPORT', logical, loglen)
+            if(loglen > 0) then
+            begin
+                loggerInfoMessage("Logical REMOTESERVERMAXPORT="+logical(1,loglen))
+
+                for spos from 1 thru loglen
+                begin
+                    using logical(spos:1) select
+                    ('0' thru '9'),
+                        nop
+                    (),
+                        throw new applicationexception("Logical REMOTESERVERMAXPORT contains invalid data ["+logical(1,loglen)+"]")
+                    endusing
+                end
+                maxPort = ^d(logical(1:loglen))
+                if(maxPort != 0 && (maxPort < 1025 || maxPort > 65535))
+                    throw new applicationexception("Logical REMOTESERVERMINPORT is not in the range 1025 to 65535")
+            end
+            else
+                sts += 2
+
+            using sts select
+            (0),
+            begin
+                if((minPort != 0 && maxPort == 0) || (minPort == 0 && maxPort != 0))
+                    throw new applicationexception("Logicals REMOTESERVERMINPORT and REMOTESERVERMAXPORT are not both defined appropriately")
+                if(minPort > maxPort)
+                    throw new applicationexception("REMOTESERVERMINPORT > REMOTESERVERMAXPORT ("+%string(minPort)+">"+%string(maxPort)+")")
+            end
+            (3),
+            begin
+                ;; this is ok, rsProcess will use a random port
+                loggerInfoMessage("Logicals REMOTESERVERMINPORT and REMOTESERVERMAXPORT are not defined")
+                clear minPort, maxPort
+            end
+            (1, 2),
+                throw new applicationexception("Both logicals REMOTESERVERMINPORT and REMOTESERVERMAXPORT must be defined")
+            (),
+                throw new applicationexception("Error "+%string(sts)+" processing Logicals REMOTESERVERMINPORT and REMOTESERVERMAXPORT")
+            endusing
+        end
+
+        if(serverMode == TRUE) then
+        begin
+            ;; acting as a single user service
+            loggerInfoMessage(M_LOGGING_PORT+"starting listener "+rpVersion+" in service mode")
+            tcpListener = new TcpListener(serverPort)
+            tcpListener.Start()
+        end
+        else
+        begin
+            loggerInfoMessage(M_LOGGING+"starting listener "+rpVersion)
+
+            if(minPort > 0) then
+            begin
+                ;;look for the first unused port between minPort and maxPort
+                serverPort = minPort
+                repeat
+                begin
+                    loggerInfoMessage(M_LOGGING_PORT+"trying to start listener")
+                    tcpListener = new TcpListener(serverPort)
+                    try
+                    begin
+                        tcpListener.Start()
+                        exitloop
+                    end
+                    catch (e)
+                    begin
+                        loggerInfoMessage(M_LOGGING_PORT+"error starting listener "+e.Message)
+                        if(serverPort >= maxPort)
+                            throw new applicationException("No available ports between "+%string(minPort)+" and "+%string(maxPort))
+                    end
+                    endtry
+                    clear tcpListener
+                    serverPort += 1
+                end
+            end
+            else
+            begin
+                data remoteSocket   ,@Socket
+                data inAddr ,int
+
+                tcpListener = new TcpListener()
+                tcpListener.Start()
+
+                ;; find out what port the TCP listener is using
+                remoteSocket = tcpListener.Server
+                if (%ss_getsockname(remoteSocket.Handle, serverPort, inAddr) != SS_SUCCESS)
+                    throw new applicationException("SS_GETSOCKNAME Unable to get bound socket information.")
+            end
+
+            loggerInfoMessage(M_LOGGING_PORT+"listener started")
+
+            pid = jbno
+
+            loggerInfoMessage(M_LOGGING_PORT+"Creating file "+rsProcessFileName(pid))
+
+            sts = %createPIDfile(pid, serverPort, " ")
+            if(sts)
+            begin
+                loggerInfoMessage(M_LOGGING_PORT+"Error "+%string(sts)+" creating file "+rsProcessFileName(pid))
+                throw new applicationException(M_LOGGING_PORT+"Error "+%string(sts)+" creating file "+rsProcessFileName(pid))
+            end
+        end
+
+        loggerInfoMessage(M_LOGGING_PORT+"listening")
+
+        try
+        begin
+            repeat
+            begin
+                tcpClient = tcpListener.AcceptTcpClient()
+                loggerInfoMessage(M_LOGGING_PORT+"TcpClient created (" + %string(tcpClient.Client.Handle) + ")")
+                nws = tcpClient.getStream()
+                nws.ReadTimeout = 1200000 ;wait for 20 minutes before timeout
+
+                repeat
+                begin
+                    offset = 0
+                    responseSize = nws.Read(response, offset, ^size(response))
+                    if(responseSize < 1)
+                    begin
+                        request = 'timeout'
+                        response = D_RS_SHUTDOWN
+                        loggerInfoMessage(M_LOGGING_PORT+"no response")
+                        exitloop
+                    end
+                    loggerInfoMessage(M_LOGGING_PORT+"recv:"+response(1:responseSize))
+
+                    request = ''
+
+                    spos = 1
+                    while(spos < responseSize)
+                    begin
+                        epos = %instr(spos, response, D_LINE_TERMINATOR)
+                        if(!epos) then
+                        begin
+                            epos = responseSize
+                            subResponseSize = (epos+1) + ^size(D_LINE_TERMINATOR) - spos
+                            subResponse = response(spos, epos) + D_LINE_TERMINATOR
+                        end
+                        else
+                        begin
+                            subResponseSize = epos + ^size(D_LINE_TERMINATOR) - spos
+                            subResponse = response(spos:subResponseSize)
+                        end
+
+                        clear pipeRequest
+
+                        using subResponse select
+                        (D_RS_SETLOG, D_RS_SYNSET),
+                        begin
+                            data lspos  ,int
+                            data lepos  ,int
+                            data vspos  ,int
+                            data vepos  ,int
+                            pipeRequest = D_RS_RESPOND_INVCMD + D_LINE_TERMINATOR
+                            using subResponse select
+                            (D_RS_SETLOG),
+                                lspos = %trim(D_RS_SETLOG)+2
+                            (D_RS_SYNSET),
+                                lspos = %trim(D_RS_SYNSET)+2
+                            (),
+                                exit
+                            endusing
+                            while(lspos<=subResponseSize && subResponse(lspos:1) == ' ')
+                                lspos += 1
+                            if(lspos>subResponseSize)
+                                exit
+                            lepos = lspos+1
+                            while(lepos<=subResponseSize && (subResponse(lepos:1) > ' ' && subResponse(lepos:1) != '='))
+                                lepos += 1
+                            if(lepos>subResponseSize)
+                                exit
+                            vspos = lepos+1
+                            while(vspos<=subResponseSize && (subResponse(vspos:1) == ' ' || subResponse(vspos:1) == '='))
+                                vspos += 1
+                            if(vspos>subResponseSize)
+                                exit
+                            if(subResponse(vspos:1) == '"') then
+                            begin
+                                ;; logical value is wrapped in quote characters
+                                vspos += 1
+                                vepos = vspos+1
+                                while(vepos<=subResponseSize && subResponse(vepos:1) > '"')
+                                    vepos += 1
+                            end
+                            else
+                            begin
+                                vepos = vspos+1
+                                while(vepos<=subResponseSize && subResponse(vepos:1) > ' ')
+                                    vepos += 1
+                            end
+                            rbSetLog(subResponse(lspos,lepos-1), subResponse(vspos,vepos-1), sts, OStype)
+                            pipeRequest = D_RS_RESPOND_OK + D_LINE_TERMINATOR
+                        end
+                        (D_RS_SETDIR),
+                        begin
+                            data lspos  ,int
+                            data lepos  ,int
+                            lspos = %trim(D_RS_SETDIR)+2
+                            while(lspos<=subResponseSize && subResponse(lspos:1) == ' ')
+                                lspos += 1
+                            if(lspos>subResponseSize)
+                                exit
+                            lepos = %endOfToken(subResponse(1:subResponseSize), lspos)
+                            if(%syn_setdir(subResponse(lspos, lepos))) then
+                                pipeRequest = D_RS_RESPOND_OK + D_LINE_TERMINATOR
+                            else
+                                pipeRequest = D_RS_RESPOND_INVCMD + D_LINE_TERMINATOR
+                        end
+                        (D_RS_COMPILE),
+                        begin
+                            using OStype select
+                            (D_RS_OpenVMS),
+                               pipeRequest = processCommand(%dbl2dibol(subResponse(1:subResponseSize)))
+                            (D_RS_UNIX),
+                            begin
+                                if(subResponseSize > ^size(D_LINE_TERMINATOR)) then
+                                    pipeRequest = processCommand(subResponse(1:subResponseSize-^size(D_LINE_TERMINATOR))+' 2>&1'
+                                    &                           +subResponse(subResponseSize+1-^size(D_LINE_TERMINATOR):^size(D_LINE_TERMINATOR)))
+                                else
+                                    pipeRequest = processCommand(subResponse(1:subResponseSize)+' 2>&1')
+                            end
+                            (),
+                                pipeRequest = processCommand(subResponse(1:subResponseSize))
+                            endusing
+                            ;; assume no response is a successful compile
+                            if(pipeRequest == ^null || pipeRequest.Length == 0)
+                                pipeRequest = D_RS_RESPOND_OK + D_LINE_TERMINATOR
+                        end
+                        (D_RS_SHUTDOWN),
+                            exitloop
+                        (D_RS_HELLO),
+                            pipeRequest = D_RS_RESPOND_HELLO + D_LINE_TERMINATOR
+                        (D_RS_NEWCONNECT),
+                            pipeRequest = D_RS_RESPOND_HELLO + D_LINE_TERMINATOR
+                        (D_RS_WHATVERSION),
+                            pipeRequest = rpVersion + D_LINE_TERMINATOR
+                        (),
+                        begin
+                            pipeRequest = processCommand(subResponse(1:subResponseSize))
+                        end
+                        endusing
+
+                        ;; assume no response is an invalid command
+                        if(pipeRequest == ^null || pipeRequest.Length < 1)
+                            pipeRequest = D_RS_RESPOND_INVCMD + D_LINE_TERMINATOR
+
+                        loggerInfoMessage(M_LOGGING_PORT+"send:"+pipeRequest(1,pipeRequest.Length))
+                        nws.Write(pipeRequest, offset, pipeRequest.Length)
+
+                        request = request + pipeRequest
+
+                        spos = epos + ^size(D_LINE_TERMINATOR)
+                    end
+                    using response select
+                    (D_RS_SHUTDOWN),
+                        exitloop
+                    endusing
+                end
+
+                if(!request.Length)
+                begin
+                    request = D_RS_RESPOND_OK
+                    nws.Write(request, offset, request.Length)
+                end
+
+                loggerInfoMessage(M_LOGGING_PORT+"closing TcpClient (" + %string(tcpClient.Client.Handle) + ")")
+                tcpClient.Close()
+                clear nws
+                clear tcpClient
+
+                using response select
+                (D_RS_SHUTDOWN),
+                    exitloop
+                endusing
+            end
+        end
+        catch (e)
+        begin
+            if(!chTT)
+                open(chTT=%syn_freechn(), O, 'TT:')
+            writes(chTT, "rsProcess "+%string(serverPort)+" "+e.Message)
+        end
+        endtry
+
+        loggerInfoMessage(M_LOGGING_PORT+"stopping listener")
+        TcpListener.Stop()
+    end
+    catch (e)
+    begin
+        if(!chTT)
+            open(chTT=%syn_freechn(), O, 'TT:')
+        writes(chTT, "rsProcess error:"+e.Message+" "+e.StackTrace)
+
+        ;;create dummy PID file, to tell RemoteServer that
+        ;; rsProcess didn't start correctly
+        if(serverMode == FALSE)
+            sts = createPIDfile(pid, 0, e.Message)
+
+        stopStatus = D_EXIT_FAILURE
+    end
+    finally
+        clear TcpListener
+    endtry
+
+endprog,
+    if(chTT)
+    begin
+.ifdef D_GUI
+        if(tnmbr >= 0)
+        begin
+            data inputChar  ,a1
+            try
+            begin
+                accept(chTT, inputChar, done, WAIT:10)
+            end
+            catch (e)
+                nop
+            endtry
+done,
+        end
+.endc ;D_GUI
+        close chTT
+        clear chTT
+    end
+    xcall flags(7000000, 1)
+    stop stopStatus
+
+;----------------------------------------------------------------------------
+; Under normal conditions, there are NO command line arguments.
+; But you can start rsProcess on a dedicated port, and talk directly
+;  to it from the client, removing RemoteServer from the equation.
+
+decodeCommandLine,
+
+    clear serverPort
+
+    try
+    begin
+        data cmdlin     ,a1024
+        data pos        ,int
+        data num_args   ,i4
+        data arg_pos    ,[MAX_ARGS]i4
+        data arg_len    ,[MAX_ARGS]i4
+        cmdln(cmdlin, num_args, arg_pos, arg_len)
+        clear pos
+        while(pos < num_args)
+        begin
+            pos += 1
+            using %locase(cmdlin(arg_pos[pos]:arg_len[pos])) select
+            ('-p '),
+            begin
+                pos += 1
+                serverPort = ^d(cmdlin(arg_pos[pos]:arg_len[pos]))
+                if(serverPort < 1025 || serverPort > 65535)
+                    throw new applicationException("rsProcess Invalid -p parameter")
+            end
+            endusing
+        end
+.ifdef DEBUG_MODE
+        if(serverPort < 1)
+        begin
+            getlog('REMOTESERVERPROCESSPORT', cmdlin, pos)
+            if(pos>0)
+                serverPort = ^d(cmdlin(1:pos))
+        end
+.endc ;DEBUG_MODE
+    end
+    catch (e)
+    begin
+        if(!chTT)
+            open(chTT=%syn_freechn(), O, 'TT:')
+        writes(chtt, "rsProcess "+e.Message)
+    end
+    endtry
+
+    if(serverPort > 0)
+        serverMode = TRUE
+
+    return
+
+endmain
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function createPIDfile ,int
+    req in  pid         ,i
+    req in  serverPort  ,i
+    req in  errorText   ,a
+    endparams
+record rbdata
+.include 'DEF:RemoteServer.inc'
+record
+    rbChan              ,int
+endrecord
+proc
+    open(rbChan=%syn_freechn, O, rsProcessFileName(pid)) [ERR=CreateError]
+    clear rbData
+    rbData.rbPortNumber = serverPort
+    rbData.rbErrorText = errorText
+    writes(rbChan, rbData)
+    close rbChan
+    freturn 0
+
+createError,
+    freturn %error
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine rbSetLog
+    req in  logical     ,a
+    req in  value       ,a
+    req out sts         ,n
+    req in  OStype      ,n
+    endparams
+proc
+    using OStype select
+    (D_RS_OpenVMS),
+    begin
+        data result     ,string
+        result = processCommand('DEFINE/JOB '+logical+' '+value)
+        sts = 1
+    end
+    (),
+        setlog(logical, value, sts)
+    endusing
+    xreturn
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function processCommand ,string
+    req in  command     ,a
+    endparams
+
+record
+    request             ,string         ;function request
+    commandLen          ,i4
+    pipe                ,@pipe
+    pipeRequest         ,string
+    spos                ,i4
+    epos                ,i4
+endrecord
+
+proc
+
+    commandLen = %trimz(command)
+    request = ''
+
+    spos = 1
+    while(spos < commandLen)
+    begin
+        epos = %instr(spos, command, D_LINE_TERMINATOR)
+        if(!epos)
+            epos = commandLen-1
+
+        ;;loggerInfoMessage(M_LOGGING + "Command("+%string(spos)+","+%string(epos+1)+"):"+command(spos,epos+1)+":")
+
+        try
+        begin
+            pipe = new pipe(command(spos,epos+1))
+            while(!pipe.EOF)
+            begin
+                pipeRequest = pipe.readLine()
+                ;;loggerInfoMessage(M_LOGGING + "recv:"+pipeRequest+":")
+                request = request + pipeRequest
+            end
+        end
+        catch (e)
+            nop
+        endtry
+        clear pipe
+
+        spos = epos + ^size(D_LINE_TERMINATOR)
+    end
+
+    freturn request
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+endnamespace

@@ -1,0 +1,60 @@
+main rfa_hex
+
+    external function
+        show_rfa    ,a
+        rfa_to_hex  ,a
+        hex_to_rfa  ,a
+
+.align
+    record
+        rfa     ,a6     ;RFA
+        copy    ,a6     ;original RFA value
+        conv    ,a12    ;RFA converted to string
+
+proc
+
+    open(1, o, "TT:")
+
+    xcall fill(%char(13)+%char(0)+%char(4), rfa)
+    copy = rfa
+    display(1, "Before: "+%show_rfa(rfa))
+    conv = %rfa_to_hex(rfa)
+    rfa = %hex_to_rfa(conv)
+    display(1, " After: "+%show_rfa(rfa))
+    if (rfa .eq. copy) then
+        conv = 'ok'
+    else
+        conv = 'no'
+    writes(1, " Converted: " + conv)
+
+    xcall fill(%char(213)+%char(80)+%char(124), rfa)
+    copy = rfa
+    display(1, "Before: "+%show_rfa(rfa))
+    conv = %rfa_to_hex(rfa)
+    rfa = %hex_to_rfa(conv)
+    display(1, " After: "+%show_rfa(rfa))
+    if (rfa .eq. copy) then
+        conv = 'ok'
+    else
+        conv = 'no'
+    writes(1, " Converted: " + conv)
+
+    rfa = %char(213)+%char(80)+%char(127)+%char(255)+%char(196)+%char(129)
+    copy = rfa
+    display(1, "Before: "+%show_rfa(rfa))
+    conv = %rfa_to_hex(rfa)
+    rfa = %hex_to_rfa(conv)
+    display(1, " After: "+%show_rfa(rfa))
+    if (rfa .eq. copy) then
+        conv = 'ok'
+    else
+        conv = 'no'
+    writes(1, " Converted: " + conv)
+
+    close 1
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    stop D_EXIT_SUCCESS
+end
+

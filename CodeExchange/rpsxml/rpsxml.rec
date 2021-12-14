@@ -1,0 +1,35 @@
+; rpsxml.rec
+
+common
+	colid		,3i4			;menu column ID's
+	indent		,i4				;current indent
+
+record params
+	xml_file	,a50			;XML file
+	ism_file	,a30			;RPS ISAM file
+	rps_main	,a50			;RPSMAIN filename
+	rps_text	,a50			;RPSTEXT filename
+	log_rps		,a50			;error log filename
+
+record control
+	rps_error	,i4				;RPS error has occurred (0-no, 1-yes)
+	name_case	,i4				;name case (0-no change, 1-Xxxxx, 2-xxxxx, 3-XXXXX)
+	odbcfldname	,i4				;use ODBC field names (0-no, 1-yes)
+	no_overlays	,i4				;do not include overlays
+
+structure fil_array
+	fil_name	,a30			;file names
+
+structure str_names
+	str_name	,a30			;structure names
+
+structure odbc_names
+	odbc_name	,a30			;ODBC file/structure names
+
+structure str_array
+	str_name	,a30			;structure names
+	str_len		,i4				;structure length
+	str_flds	,i4				;number of fields
+	fld_nam_hdl	,i4				;list of fld names
+	fld_arr_hdl	,i4				;list of fld details
+

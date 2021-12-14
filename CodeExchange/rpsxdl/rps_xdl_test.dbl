@@ -1,0 +1,611 @@
+main ;rpsxdl
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.include 'WND:tools.def'
+.include 'DBLDIR:windows.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:ismkey.def'
+
+.define D_VERSION       "1.0.4"
+
+.align
+    record clr_i
+        ctr             ,i4                     ;general purpose counter
+        num_xdl         ,i4                     ;number of XDL files generated
+        f_hdl           ,D_HANDLE               ;filename handle
+        arg_ctr         ,i4                     ;argument counter
+        status          ,i4                     ;command line status
+        bld_id          ,i4                     ;input windows build id
+        wndidp          ,i4                     ;input window id
+        colid           ,3i4                    ;menu columns
+        rec_size        ,i4                     ;record size
+        num_keys        ,i4                     ;number of keys
+
+.align
+    record clr
+        file_ctr        ,d4                     ;filename counter
+        mbuffer         ,a1024                  ;menu column build buffer
+        rps             ,2a50                   ;original RPSMFIL & RPSTFIL
+        xdl_logical     ,a20                    ;xdl logical
+        results         ,a500                   ;results message
+        filespec        ,a FIL_SIZ @results     ;file specification
+        key_spec        ,[ NM_KEYS] a KEY_SIZ   ;key specs
+
+.align
+    record input
+        file_name       ,a30                    ;RPS filename
+        xdl_file        ,a50                    ;xdl filename
+        arg             ,2a50                   ;command line arguments
+        log_file        ,a50                    ;log filename
+
+    structure filename
+        f_name          ,a30                    ;filename
+
+    external function
+        file_exists     ,^VAL
+        rpsxdl          ,^VAL
+        ismkey          ,^VAL
+        u_cmdlinopt     ,^VAL
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    xcall u_start
+
+    xcall e_sect("XDL Generator v"+D_VERSION, D_HEADER, D_LEFT, D_CLEAR)
+    xcall u_update
+
+    xcall getlog('RPSMFIL', rps(1), status)
+    xcall getlog('RPSTFIL', rps(2), status)
+
+    do  begin
+        call get_parameters
+
+        if(status)
+        begin
+            xcall dd_init(dcs)
+            using error select
+            (E_OK),
+            begin
+                call dcs_ok
+                xcall dd_exit(dcs)
+                status = 1
+            end
+            (E_NOFIND),
+            begin
+                xcall u_message("RPS Record not found")
+                clear status
+            end
+            (E_OPNERR),
+            begin
+                xcall u_message("RPS Open error")
+                clear status
+            end
+            (E_INVFNC),
+            begin
+                xcall u_message("RPS Invalid Function")
+                clear status
+            end
+            (E_OPNERRM),
+            begin
+                xcall u_message("RPS Cannot open main file")
+                clear status
+            end
+            (E_OPNERRT),
+            begin
+                xcall u_message("RPS Cannot open text file")
+                clear status
+            end
+            (E_BADVERS),
+            begin
+                xcall u_message("RPS Incompatible version")
+                clear status
+            end
+            (),
+            begin
+                xcall u_message("DD_INIT error "+%string(error))
+                clear status
+            end
+            endusing
+        end
+    end
+    until(.not.status)
+
+    xcall u_finish
+
+    ; reset logicals
+    xcall setlog('RPSMFIL', rps(1), status)
+    xcall setlog('RPSTFIL', rps(2), status)
+
+    freturn D_EXIT_SUCCESS
+
+;--------------------------------------------------------------------
+
+dcs_ok,
+    if(file_name.and.file_name.nes.'*') then
+    begin
+        xcall dd_file(dcs, DDL_INFO, file_name, fl_info)
+        if(error) then
+            clear file_ctr
+        else
+            file_ctr = 1
+    end
+    else
+    begin
+        clear file_name             ;just in case
+        xcall dd_name(dcs, DDN_COUNT, DDN_FILE, file_ctr)
+        if(error)
+            clear file_ctr
+    end
+
+    if(file_ctr) then
+    begin
+
+        clear num_xdl
+
+        f_hdl = %mem_proc(DM_ALLOC+DM_STATIC, file_ctr*^size(filename))
+
+        if(file_name) then
+        begin
+            ^m(filename[1].f_name, f_hdl) = file_name
+        end
+        else
+        begin
+            xcall dd_name(dcs, DDN_LIST, DDN_FILE, file_ctr, ^m(filename, f_hdl))
+            if(error)
+            begin
+                xcall u_message("List of files error:"+%string(error))
+                clear file_ctr
+            end
+        end
+
+        for ctr from 1 thru file_ctr
+        begin
+            file_name = ^m(filename[ctr].f_name, f_hdl)
+
+            xcall e_sect(file_name, D_LEFT)
+            xcall u_update
+
+            if(file_ctr.gt.1.or..not.xdl_file)
+            begin
+                xdl_file = %atrim(file_name) + '.xdl'
+                locase xdl_file
+                if(xdl_logical)
+                    xdl_file = %atrim(xdl_logical) + ':' + %atrim(xdl_file)
+            end
+
+            ;check status
+            status = %rpsxdl(dcs, file_name, xdl_file, log_file)
+            using status select
+            (ERR_NONE),
+                num_xdl += 1
+            (ERR_NOSTRUCT),
+                xcall log_error(status, "RPSXDL Error : Cannot get filename "+%atrim(file_name), log_file)
+            (ERR_NOASS),
+                xcall log_error(status, "RPSXDL Error : Filename "+%atrim(file_name)+" not asigned to file", log_file)
+            (ERR_NOKEYS),
+                xcall log_error(status, "RPSXDL Error : Filename "+%atrim(file_name)+" no keys defined", log_file)
+            (ERR_NOKEYDEF),
+                xcall log_error(status, "RPSXDL Error : Filename "+%atrim(file_name)+" not all access keys are defined", log_file)
+            (ERR_INVSEG),
+                xcall log_error(status, "RPSXDL Error : Filename "+%atrim(file_name)+" invalid segment type", log_file)
+            (ERR_NOFLD),
+                xcall log_error(status, "RPSXDL Error : Filename "+%atrim(file_name)+" cannot get key field", log_file)
+            (ERR_NOKEYLST),
+                xcall log_error(status, "RPSXDL Error : Filename "+%atrim(file_name)+" cannot get list of key names", log_file)
+            (ERR_NOSTRNAME),
+                xcall log_error(status, "RPSXDL Error : Filename "+%atrim(file_name)+" no structures found", log_file)
+            (),
+                xcall log_error(status, "RPSXDL Error : Unknown", log_file)
+            endusing
+        end
+
+        f_hdl = %mem_proc(DM_FREE, f_hdl)
+
+        if(file_ctr.eq.1) then
+        begin                   ;only got 1 file to check - can be more specific
+            results = "XDL file (" + %atrim(xdl_file) + ") generated for "+%atrim(file_name)
+        end
+        else
+        begin
+            results = %string(num_xdl)+" files generated"
+            if(num_xdl.ne.file_ctr)
+                results = %atrim(results) + " of " + %string(file_ctr)
+            status = ERR_NONE
+            file_ctr = 1
+        end
+    end
+    else
+    begin
+        results = "No files in Repository"
+        status = ERR_NONE
+        file_ctr = 1
+    end
+
+    if(file_ctr.eq.1)
+    begin
+        using status select
+        (ERR_NONE),
+            xcall u_message(%atrim(results))
+        (ERR_NOSTRUCT),
+            xcall u_message("RPSXDL Error : Cannot get filename "+%atrim(file_name))
+        (ERR_NOASS),
+            xcall u_message("RPSXDL Error : Filename "+%atrim(file_name)+" not asigned to file")
+        (ERR_NOKEYS),
+            xcall u_message("RPSXDL Error : Filename "+%atrim(file_name)+" no keys defined")
+        (ERR_NOKEYDEF),
+            xcall u_message("RPSXDL Error : Filename "+%atrim(file_name)+" not all access keys are defined")
+        (ERR_INVSEG),
+            xcall u_message("RPSXDL Error : Filename "+%atrim(file_name)+" invalid segment type")
+        (ERR_NOFLD),
+            xcall u_message("RPSXDL Error : Filename "+%atrim(file_name)+" cannot get key field")
+        (ERR_NOKEYLST),
+            xcall u_message("RPSXDL Error : Filename "+%atrim(file_name)+" cannot get list of key names")
+        (ERR_NOSTRNAME),
+            xcall u_message("RPSXDL Error : Filename "+%atrim(file_name)+" no structures found")
+        (),
+            xcall u_message("RPSXDL Error " +%string(status))
+        endusing
+    end
+
+    return
+
+;--------------------------------------------------------------------
+
+get_parameters,
+
+    if(%u_cmdlinopt('h'))
+    begin
+        xcall u_message("dbr rpsxdl -f file_name -x xdl_filename -l log_filename -r rpsmfil rpstfil\n"
+&           "dbr rpsxdl -z xdl_logical -l log_filename -r rpsmfil rpstfil")
+        clear status
+        return
+    end
+
+    clear input
+
+    if(.not.%u_cmdlinopt('z', 1, xdl_logical))
+        clear xdl_logical
+
+    if(.not.%u_cmdlinopt('f', 1, file_name))
+        clear file_name
+
+    if(%u_cmdlinopt('x', 1, xdl_file)) then
+    begin
+        if(.not.%instr(1, xdl_file, '.'))
+            xdl_file = %atrim(xdl_file) + '.xdl'
+    end
+    else
+        clear xdl_file
+
+    if(.not.%u_cmdlinopt('l', 1, log_file))
+        clear log_file
+
+    if(%u_cmdlinopt('r', 2, arg, arg_ctr)) then
+    begin
+        if(arg_ctr.eq.2) then
+        begin
+            ; check RPSMFIL exists
+            status = %file_exists(arg(1), 'I:I')
+            ; check RPSTFIL exists
+            if(status) status = %file_exists(arg(2), 'I:I')
+
+            ; both files exist
+            if(status) then
+            begin
+                xcall setlog('RPSMFIL', arg(1), status)
+                xcall setlog('RPSTFIL', arg(2), status)
+                status = 1
+            end
+            else
+            begin
+                xcall u_message("Repository file(s) not found")
+                clear status
+            end
+        end
+        else
+        begin
+            xcall u_message("Invalid -r argument [-r rpsmfil rpstfil]")
+            clear status
+        end
+    end
+    else
+    begin
+        arg(1) = rps(1)
+        arg(2) = rps(2)
+        status = 2
+    end
+
+    if(.not.wndidp)
+    begin
+        xcall ib_input(bld_id, 'RPSXDL1', 7, 78)
+
+        xcall ib_field(bld_id, 'filename', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 30,
+&           D_FLD_UC, D_FLD_INFO, "Enter name of file",
+&           D_FLD_INFO, "Enter RPS filename or '*' for all",
+&           D_FLD_POS, 2, 2, D_FLD_FPOS, 2, 20,
+&           D_FLD_BREAK,
+&           D_FLD_PROMPT, "RPS Filename")
+        xcall ib_field(bld_id, 'xdlfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name of XDL file or logical pointing to XDL folder",
+&           D_FLD_POS, 3, 2, D_FLD_FPOS, 3, 20,
+&           D_FLD_PROMPT, "XDL Filename")
+        xcall ib_field(bld_id, 'rpsmfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name and location of RPS main file",
+&           D_FLD_POS, 4, 2, D_FLD_FPOS, 4, 20,
+&           D_FLD_PROMPT, "RPSMFIL")
+        xcall ib_field(bld_id, 'rpstfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name and location of RPS text file",
+&           D_FLD_POS, 5, 2, D_FLD_FPOS, 5, 20,
+&           D_FLD_PROMPT, "RPSTFIL")
+        xcall ib_field(bld_id, 'logfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name of Log file",
+&           D_FLD_POS, 6, 2, D_FLD_FPOS, 6, 20,
+&           D_FLD_PROMPT, "Log Filename")
+
+        if(status.eq.2)
+        begin
+            xcall ib_button(bld_id, 'O_EXIT', DSB_TEXT, "OK",,, "O")
+            xcall ib_button(bld_id, 'CREATE', DSB_TEXT, "CreateISM",,, "C")
+            xcall ib_button(bld_id, 'O_QUIT', DSB_TEXT, "Cancel",,, "N")
+        end
+
+        xcall ib_end(bld_id, wndidp)
+
+        xcall u_window(D_PLACE, wndidp, 6, 1)
+
+        xcall w_brdr(wndidp, WB_DRAGOFF)
+    end
+
+    clear file_name, xdl_file
+
+    xcall i_display(wndidp,, input)
+
+    if(status.eq.2)
+    begin
+        if(.not.colid(2))
+        begin
+            xcall mb_column(mbuffer, 'rpsxdl_g', "General  ")
+            xcall mb_entry(mbuffer, 'O_EXIT', "OK")
+            xcall mb_entry(mbuffer, 'O_QUIT', "Cancel")
+            xcall mb_entry(mbuffer, 'CREATE', "Create ISAM File")
+            xcall mb_end(mbuffer, colid(3))
+            ;Load columns, but do not place
+            xcall mb_column(mbuffer, 'rpsxdl_i', "Cursor  ",, D_NOPLC)
+            xcall mb_entry(mbuffer, 'I_FRST', "First field")
+            xcall mb_entry(mbuffer, 'I_LAST', "Last field")
+            xcall mb_entry(mbuffer, 'I_NEXT', "Next field")
+            xcall mb_entry(mbuffer, 'I_PREV', "Prev field")
+            xcall mb_entry(mbuffer, 'E_LEFT', "Left 1 character")
+            xcall mb_entry(mbuffer, 'E_RIGHT', "Right 1 character")
+            xcall mb_entry(mbuffer, 'E_CDEL', "Delete character")
+            xcall mb_end(mbuffer, colid(1))
+
+            xcall mb_column(mbuffer, 'rpsxdl_s', "Cursor  ",, D_NOPLC)
+            xcall mb_entry(mbuffer, 'S_DOWN', "Next item")
+            xcall mb_entry(mbuffer, 'S_UP', "Prev item")
+            xcall mb_end(mbuffer, colid(2))
+        end
+
+        xcall i_next(wndidp,, '*FRST*')
+
+        do  begin
+            xcall i_input(wndidp,, input, colid(1), colid(2),, D_NOTERM)
+            ;process window
+            if (g_select) then
+                call mnu_cols               ;menu processing
+            else
+            begin
+                if(g_setsts) then
+                    call brk_proc           ;break procssing
+                else
+                    call set_proc
+            end
+        end
+        until(g_entnam.eq.'O_EXIT'.or.g_entnam.eq.'O_QUIT')
+    end
+
+    xcall u_update
+    return
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call set_proc
+
+        if(status) then
+            clear g_entnam
+        else
+        begin
+            call check_data
+
+            call set_rps_logicals
+            status = 1
+        end
+    end
+    ('O_QUIT'),
+        status = 0
+    ('CREATE'),
+    begin
+        clear xdl_file
+        xcall i_dspfld(wndidp,'XDLFILE', xdl_file)
+
+        call set_rps_logicals
+        status = %ismkey(,, file_name, filespec, rec_size, num_keys, key_spec)
+        if(.not.status)
+        begin
+            status = %instr(1, filespec, ',')
+            using status select
+            (.gt.1),
+                mbuffer = filespec(1, status-1)
+            (),
+                mbuffer = filespec
+            endusing
+            if(%file_exists(mbuffer, 'I:I'))
+            begin
+                using %u_msgbox("Are you sure you want to overwrite\n("+%atrim(mbuffer)+")",
+&                   D_MICONQUESTION+D_MYESNO+D_MDEFBUTTON2, "ISAM File exists") select
+                (D_MIDYES),
+                begin
+                    clear status
+                end
+                (),
+                begin
+                    status = 1
+                    clear g_entnam      ;prevent warning message
+                end
+                endusing
+            end
+        end
+        if(.not.status) then
+        begin
+            xcall isamc(filespec, rec_size, num_keys, key_spec)
+            xcall u_message("Created ISAM file : "+%atrim(file_name))
+        end
+        else
+        begin
+            if(g_entnam)
+                xcall u_message("Cannot create ISAM file  Status="+%string(status))
+        end
+
+        clear file_name, xdl_file
+        xcall i_display(wndidp,, input)
+        xcall i_next(wndidp,, '*FRST*')
+    end
+
+    endusing
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    using g_fldnam select
+    ('FILENAME'),
+    begin
+        if(file_name.and.file_name.nes.'*') then
+        begin
+            locase file_name
+            if(xdl_logical) then
+                xdl_file = %atrim(xdl_logical) + ":" + %atrim(file_name) + '.xdl'
+            else
+                xdl_file = %atrim(file_name) + '.xdl'
+            upcase file_name
+        end
+        else
+            clear xdl_file
+
+        xcall i_dspfld(wndidp, 'FILENAME', file_name)
+        xcall i_dspfld(wndidp, 'XDLFILE', xdl_file)
+    end
+    (),
+        xcall i_next(wndidp,, '*FRST*')
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    if(.not.file_name)
+    begin
+        xcall u_message("Enter Filename")
+        xcall i_next(wndidp,, 'FILENAME')
+        status = 1
+        return
+    end
+
+    clear status
+    xcall i_next(wndidp,, '*FRST*')
+    return
+
+;----------------------------------------------------------------------------
+
+check_data,
+
+    if(xdl_file)
+    begin
+        ctr = %trim(xdl_file)
+        if(ctr.gt.1.and.xdl_file(ctr:1).eq.':')
+        begin
+            xdl_logical = xdl_file(1:ctr-1)
+            clear xdl_file
+        end
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_rps_logicals,
+
+    if(arg(1).ne.rps(1).or.arg(2).ne.rps(2))
+    begin
+        xcall setlog('RPSMFIL', arg(1), status)
+        xcall setlog('RPSTFIL', arg(2), status)
+    end
+
+    return
+.end
+
+;======================================================================
+; Check is a file exists.  Uses mode to confirm it's the correct file type
+
+.function file_exists ,^VAL
+
+    a_file          ,a
+    a_mode          ,a
+
+.align
+    record
+        chan            ,i4
+        error           ,i4
+
+.proc
+
+    xcall u_open(chan, a_mode, a_file,,, error)
+    if(.not.error) xcall u_close(chan)
+
+    freturn (error.eq.0)
+
+.end
+
+;======================================================================
+

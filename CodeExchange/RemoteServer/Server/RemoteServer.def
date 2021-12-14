@@ -1,0 +1,28 @@
+;OStype values
+.define D_RS_WINDOWS        1
+.define D_RS_UNIX           2
+.define D_RS_OpenVMS        3
+
+;RemoteServer commands
+.define D_RS_NEWCONNECT     'newconnect'
+.define D_RS_CONNECTON      'connect' ;;must be followed by ":" <port number> ":" <OStype> ":"
+                                      ;; if port number is zero, no subprocess was launched
+
+.define D_RS_SHUTDOWN       ':shutdown:'
+
+.define D_LINE_TERMINATOR   %char(13)+%char(10)
+
+;rsProcess commands (must be line terminated)
+.define D_RS_HELLO          'hello'
+.define D_RS_RESPOND_HELLO  'helloback'
+.define D_RS_SYNSET         'syn_set ' ;;syn_set <logical>=<native value>
+.define D_RS_SETLOG         'set ' ;;set <logical>=<native value>
+.define D_RS_SETDIR         'setdir ' ;;setdir <native value>
+.define D_RS_COMPILE        'dbl '
+.define D_RS_RESPOND_OK     'DONE' ;; this message will be filtered out by WorkBench
+.define D_RS_RESPOND_INVCMD 'INVALID COMMAND'
+.define D_RS_WHATVERSION    'v?'
+
+.define DEBUG_MODE
+
+
