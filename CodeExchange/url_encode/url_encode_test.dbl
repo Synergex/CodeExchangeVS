@@ -1,0 +1,21 @@
+main
+
+    external function
+        url_encode      ,a
+
+    record
+        url             ,a200
+
+proc
+    open(1, O, 'TT:')
+
+    url = "http://www.domain.com/page.asp?location=" + %url_encode("Gold River (CA)")
+
+    writes(1, "Encoded URL="+%atrim(url))
+
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    
+    stop D_EXIT_SUCCESS
+end

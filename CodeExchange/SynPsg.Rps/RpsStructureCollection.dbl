@@ -1,0 +1,240 @@
+;******************************************************************************
+;
+; Class:        SynPsg.Rps.RpsStructureCollection
+;
+; Description:  Represents a collection of all Repository structures
+;
+; Author:       Steve Ives, Synergex Professional Services Group
+;
+; Date:         19th October 2007
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+;******************************************************************************
+;
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPsg.Rps
+.ifdef DBLV915
+import Synergex.SynergyDE.Collections
+.else
+import System.Collections
+.endc
+
+namespace SynPsg.Rps
+
+    public class RpsStructureCollection
+		
+		private p_Collection, @ArrayList
+        
+        ; Constructor (default capacity)
+        public method RpsStructureCollection
+			LoadMode, RpsLoadMode
+            endparams
+        proc
+			p_Collection = new ArrayList()
+			if (LoadMode==RpsLoadMode.Load) 
+			begin
+				Repository.CheckIsOpen()
+				LoadStructures()
+			end
+        endmethod
+        
+        ; Constructor (specified capacity)
+        public method RpsStructureCollection
+			LoadMode, RpsLoadMode
+            required in Capacity, int
+            endparams
+        proc
+			p_Collection = new ArrayList(Capacity)
+			if (LoadMode==RpsLoadMode.Load)
+			begin
+				Repository.CheckIsOpen()
+				LoadStructures()
+			end
+        endmethod
+		
+		; Destructor
+		method ~RpsStructureCollection
+		proc
+			clear p_Collection
+		endmethod
+
+        ; Load structures
+        private method LoadStructures, void
+            endparams
+            record local_data
+                MemHandle, int
+                StructureCount, int
+                ix, int
+            endrecord
+        proc
+            init local_data
+            try 
+            begin
+                ;Get the number of structures in the repository
+                dd_name(Repository.RpsControl,DDN_COUNT,DDN_STRUCT,StructureCount)
+                if (Repository.RpsControl.error)
+                    throw new RpsStructureException("Failed to get repository structure count")
+                ;Do we have any structures to load?
+                if (StructureCount) 
+                begin
+                    ;Allocate structure name memory and get structure names
+                    MemHandle = %mem_proc(DM_ALLOC,^size(strIdentifier)*StructureCount)
+                    dd_name(Repository.RpsControl,DDN_LIST,DDN_STRUCT,StructureCount,^m(strIdentifier[1],MemHandle))
+                    if (Repository.RpsControl.error)
+                        throw new RpsStructureException("Failed to get repository structure names")
+                    for ix from 1 thru StructureCount
+                        p_Collection.Add(new RpsStructure(^m(strIdentifier[ix],MemHandle)))
+                end
+            end
+            finally
+            begin
+                ;Release structure names memory
+                if (StructureCount) 
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+            end
+            endtry
+        endmethod
+		
+		;-----------------------------------------------------------------------
+		;The follwoing members make the collection look just like an ArrayList
+		
+		;Gets or sets the number of elements that the collection can contain.
+		public property Capacity, int
+			method get
+			proc
+				mreturn p_Collection.Capacity
+			endmethod
+			method set
+			proc
+				p_Collection.Capacity = value
+			endmethod
+		endproperty
+		
+		;Gets the number of elements actually contained in the collection.
+		public property Count, int
+			method get
+			proc
+				mreturn p_Collection.Count
+			endmethod
+		endproperty
+		
+		;Gets or sets the element at the specified index.
+		public property Indexer, @RpsStructure
+			required in Index, int
+			method get
+			proc
+				mreturn (RpsStructure)p_Collection[Index]
+			endmethod
+			method set
+			proc
+				p_Collection[Index] = value
+			endmethod
+		endproperty
+
+		;Adds an element to the end of the collection. 
+        public method Add, int
+            required in RpsStructure, @RpsStructure
+            endparams
+        proc
+            mreturn p_Collection.Add(RpsStructure)
+		endmethod
+		
+		;Removes the element at the specified index of the collection.
+		public method RemoveAt, void
+			required in Index, int
+		proc
+			p_Collection.RemoveAt(Index)
+		endmethod
+		
+		;Searches for the specified element and returns the one-based index
+		;of the first occurrence within the entire collection.
+		public method IndexOf, int
+			required in RpsStructure, @RpsStructure
+		proc
+			mreturn p_Collection.IndexOf(RpsStructure)
+		endmethod
+		
+		;Searches for the specified element and returns the one-based index
+		;of the first occurrence within the range of elements in the collection
+		;that extends from the specified index to the last element.
+		public method IndexOf, int
+			required in RpsStructure, @RpsStructure
+			required in StartIndex, int
+		proc
+			mreturn p_Collection.IndexOf(RpsStructure,StartIndex)
+		endmethod
+
+		;Searches for the specified element and returns the one-based index
+		;of the first occurrence within the range of elements in the collection
+		;that starts at the specified index and contains the specified number of
+		;elements. 
+		public method IndexOf, int
+			required in RpsStructure, @RpsStructure
+			required in StartIndex, int
+			required in Count, int
+		proc
+			mreturn p_Collection.IndexOf(RpsStructure,StartIndex,Count)
+		endmethod
+		
+		;Removes all elements from the collection.
+		public method Clear, void
+		proc
+			p_Collection.Clear()
+		endmethod
+		
+		;Inserts an element into the collection at the specified index.
+		public method Insert, void
+			required in AtIndex, int
+			required in RpsStructure, @RpsStructure
+			endparams
+		proc
+			p_Collection.Insert(AtIndex,RpsStructure)
+		endmethod
+		
+		;Searches for the specified object and returns the one-based index of
+		;the last occurrence within the entire collection. 
+		public method LastIndexOf, int
+			required in RpsStructure, @RpsStructure
+		proc
+			mreturn p_Collection.LastIndexOf(RpsStructure)
+		endmethod
+
+		;Searches for the specified object and returns the one-based index of
+		;the last occurrence within the range of elements in the collection that
+		;extends from the first element to the specified index.
+		public method LastIndexOf, int
+			required in RpsStructure, @RpsStructure
+			required in StartIndex, int
+		proc
+			mreturn p_Collection.LastIndexOf(RpsStructure,StartIndex)
+		endmethod
+		
+		;Searches for the specified object and returns the one-based index of
+		;the last occurrence within the range of elements in the collection that
+		;contains the specified number of elements and ends at the specified index. 
+		public method LastIndexOf, int
+			required in RpsStructure, @RpsStructure
+			required in StartIndex, int
+			required in Count, int
+		proc
+			mreturn p_Collection.LastIndexOf(RpsStructure,StartIndex,Count)
+		endmethod
+
+    endclass
+    
+endnamespace
+

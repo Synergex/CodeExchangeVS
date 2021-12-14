@@ -1,0 +1,114 @@
+;******************************************************************************
+;
+; Class:		SynPsg.Rps.RpsRelation
+;
+; Description:	Represents a single relation definition for a Repository structure
+;
+; Author:		Steve Ives, Synergex Professional Services Group
+;
+; Date: 		19th October 2007
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+;******************************************************************************
+;
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPsg.Rps
+
+namespace SynPsg.Rps
+
+	public class RpsRelation
+		
+		;Relation attribute data
+		protected p_RelationName	,a30
+		protected p_FromKey			,a30
+		protected p_ToStructure		,a30
+		protected p_ToKey			,a30
+		
+		; Constructor
+		public method RpsRelation
+			required in StructureName, a
+			required in RelationName, a
+			endparams
+		proc
+			Repository.CheckIsOpen()
+			LoadRelation(StructureName,RelationName)
+		endmethod
+
+		; Load relation
+		private method LoadRelation, void
+			required in StructureName, a
+			required in RelationName, a
+			endparams
+		proc
+			;Save the relation name
+			p_RelationName = RpsUtils.UpperCase(RelationName)
+			begin
+				data p_s_info, s_info
+				;Set the current structure?
+				dd_struct(Repository.RpsControl,DDS_INFO,StructureName,p_s_info)
+				if (Repository.RpsControl.error)
+					throw new RpsRelationException("Failed to set current repository structure to "+StructureName)
+				;Load the relation information
+				dd_relation(Repository.RpsControl,DDR_INFO,p_RelationName,p_FromKey,p_ToStructure,p_ToKey)
+				if (Repository.RpsControl.error)
+				begin
+					data msg, a120
+					s_bld(msg,,"Failed to get information for repository relation %a.%a",StructureName,RelationName)
+					throw new RpsRelationException(atrim(msg))
+				end
+			end
+		endmethod
+		
+		;----------------------------------------------------------------------
+		;Public properties to expose the attributes to the outside world
+		
+		; Relation name (a30)
+		public property Name, a
+			method get
+			proc
+				mreturn atrim(p_RelationName)
+			endmethod
+		endproperty
+		
+		; From key (a30)
+		public property FromKey, a
+			method get
+			proc
+				mreturn atrim(p_FromKey)
+			endmethod
+		endproperty
+
+		; To structure (a30)
+		public property ToStructure, a
+			method get
+			proc
+				mreturn atrim(p_ToStructure)
+			endmethod
+		endproperty
+
+		; To key (a30)
+		public property ToKey, a
+			method get
+			proc
+				mreturn atrim(p_ToKey)
+			endmethod
+		endproperty
+
+	endclass
+
+endnamespace
+

@@ -1,0 +1,1573 @@
+;;**********************************************************************
+;;
+;; Title:       StringUtil.dbc
+;;
+;; Type:        Class
+;;
+;; Description: The StringUtil class currently gives access to two (2) methods,
+;;              including Split and Replace.  Both classes operate on
+;;              string parameters.  Split returns a dynamic array of
+;;              strings based on a "separator" parameter, and Replace
+;;              returns a string in which one parameter has been
+;;              replaced by the other.
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***************************************************************************
+;; Revision:    1.0  11/13/2008
+;;              1.1  09/27/2010 - Added Format()
+;;              1.2  11/15/2010 - Added windowsTimezoneToShort()
+;;***************************************************************************
+
+namespace SynPSG.System
+    ;;--------------------------------------------------------------------
+    ;;public class enumerations
+    ;;--------------------------------------------------------------------
+
+    ;;;<summary>
+    ;;;</summary>
+    public enum StringSplitOptions
+        None
+        RemoveEmptyEntries
+    endenum
+
+    public class StringUtil
+
+    ;;--------------------------------------------------------------------
+        ;;;<summary>
+        ;;;</summary>
+        ;;;<param name=inString></param>
+        ;;;<param name=seporator></param>
+        ;;;<param name=removeEmpty></param>
+        ;;;<return>String array</return>
+        public static method Split  ,[#]string
+            req in inString         ,string
+            req in separator        ,string
+            req in removeEmpty      ,StringSplitOptions
+            endparams
+
+            stack record wrkVars
+                elementCount,i4
+                lastPos     ,i4
+                startPos    ,i4
+            endrecord
+            stack record
+                splitArray  ,[#]string
+            endrecord
+        proc
+            init wrkVars
+            elementCount = 1
+            startPos = 1 - separator.Length
+            lastPos = 1
+            while %instr(lastPos, inString, separator, startPos) do
+            begin
+                if (removeEmpty == StringSplitOptions.None ||
+                &   (startPos > lastPos && startPos < (inString.Length + 1 - separator.Length)))
+                    elementCount += 1
+                lastPos = startPos + separator.Length
+            end
+
+            splitArray = new string[elementCount]
+
+            elementCount = 0
+            lastPos = 1
+            while %instr(lastPos, inString, separator, startPos) do
+            begin
+                if (startPos == lastPos) then
+                    ;; Nothing in this element
+                    if (removeEmpty == StringSplitOptions.None)
+                        splitArray[elementCount+=1]=""
+                else
+                    splitArray[elementCount +=1] = inString(lastPos:startPos-lastPos)
+                lastPos = startPos + separator.Length
+            end
+            ;; Get the final portion of the string and drop it in the last bucket of the Array
+            if (lastPos <= inString.Length) then
+                splitArray[elementCount+=1] = inString(lastPos:inString.Length-lastPos+1)
+            else
+                if (removeEmpty == StringSplitOptions.None) then
+                    splitArray[elementCount+=1] = ""
+                else
+                    if !elementCount
+                        splitArray[1] = inString
+            mreturn splitArray
+        endmethod
+
+    ;;--------------------------------------------------------------------
+
+        ;;;<summary>
+        ;;;</summary>
+        ;;;<param name=inString></param>
+        ;;;<param name=seperator></param>
+        ;;;<return>String array</return>
+        public static method Split  ,[#]string
+            req in inString         ,string
+            req in separator        ,string
+            endparams
+        proc
+            mreturn Split(inString, separator, StringSplitOptions.None)
+        endmethod
+
+    ;;--------------------------------------------------------------------
+
+        ;;;<summary>
+        ;;;</summary>
+        ;;;<param name=inString></param>
+        ;;;<param name=find></param>
+        ;;;<param name=replace</param>
+        ;;;<return>String array</return>
+        public static method Replace    ,string
+            req in inString             ,string
+            req in find                 ,string
+            req in replace              ,string
+            endparams
+
+            stack record wrkVars
+                count           ,i4
+            endrecord
+            stack record
+                newString       ,string
+                splitString     ,[#]string
+            endrecord
+        proc
+            init wrkVars
+            newString = ""
+            ;; Get an array of all substrings, with the string we're replacing removed
+            splitString = Split(inString, find, StringSplitOptions.None)
+            ;; Between each element of the array, insert the replacement string
+            for count from 1 thru (splitString.Length-1)
+                newString = String.Concat(newString, splitString[count]+replace)
+            ;; Add the last element of the original string to the end of the new string
+            newString = String.Concat(newString, splitString[count])
+            mreturn newString
+        endmethod
+
+    ;;--------------------------------------------------------------------
+
+        ;;;<summary>
+        ;;;</summary>
+        ;;;<param name=inString></param>
+        ;;;<return>Uppercase string</return>
+        public static method ToUpper    ,string
+            req in inString             ,string
+            endparams
+
+            structure s
+                sStr            ,a1
+            endstructure
+            record
+                hdl             ,D_HANDLE
+            endrecord
+        proc
+            hdl = %mem_proc(DM_ALLOC, ^size(inString))
+            ^m(hdl) = inString
+            upcase ^m(hdl)
+            mreturn ^m(hdl)
+        endmethod
+
+    ;;--------------------------------------------------------------------
+
+        ;;;<summary>
+        ;;;</summary>
+        ;;;<param name=inString></param>
+        ;;;<return>Lowercase string</return>
+        public static method ToLower    ,string
+            req in inString             ,string
+            endparams
+
+            structure s
+                sStr            ,a1
+            endstructure
+            record
+                hdl             ,D_HANDLE
+            endrecord
+        proc
+            hdl = %mem_proc(DM_ALLOC, ^size(inString))
+            ^m(hdl) = inString
+            locase ^m(hdl)
+            mreturn ^m(hdl)
+        endmethod
+
+    ;;--------------------------------------------------------------------
+
+        ;;;<summary>
+        ;;;</summary>
+        ;;;<param name=formatString></param>
+        ;;;<param name=zeroOrMoreParameters></param>
+        ;;;<return>Formatted string</return>
+        public static varargs method Format ,string
+            req in formatString             ,string
+            endparams
+
+            record
+                varCtr          ,i4
+                startPos        ,i4
+                varPos          ,i4
+                varEnd          ,i4
+                pos             ,i4
+                paramType       ,a40
+                paramString     ,a40
+                formatType      ,i4
+                group myDateTime,a20
+                    group myDate    ,d
+                        year        ,d4
+                        mon         ,d2
+                        day         ,d2
+                    endgroup
+                    group myTime    ,d
+                        hh          ,d2
+                        mm          ,d2
+                        ss          ,d2
+                    endgroup
+                    uuuuuu          ,d6
+                endgroup
+                outString       ,string
+            endrecord
+        proc
+            outString = formatString
+            for varCtr from 2 thru %numargs
+            begin
+                paramString = '{'+%string(varCtr-2)
+                startPos = 1
+                while(varPos=%instr(startPos, outString, paramString(1:%trim(paramString))))
+                begin
+                    varEnd = %instr(varPos, outString, '}')
+                    if(!varEnd)
+                        exitloop
+                    paramString = outString(varpos,varEnd)
+                    call processParameter
+                    startPos = varEnd + 1
+                end
+            end
+            mreturn outString
+
+        processParameter,
+
+            paramType = "G" ;assume general
+            if(pos=%instr(1, paramString, ':'))
+            begin
+                if(pos < %trim(paramString)-1)
+                    paramType = paramString(pos+1,%trim(paramString)-1)
+            end
+
+            formatType = 0 ;assume string / alpha
+
+            if(^passed(^arg(varCtr)))
+            begin
+                using ^datatype(varCtr) select
+                (D_TYPE_A),
+                begin
+                    using %trim(^arga(varCtr)) select
+                    (8, 12, 14, 17, 20),
+                    begin
+                        data myString ,a20 ,^arga(varCtr)
+                        formatType = 2 ;assume date
+                        for pos from 1 thru %trim(myString)
+                        begin
+                            using myString(pos:1) select
+                            ('0' thru '9'),
+                                nop
+                            (),
+                                formatType = 0 ;invalid numeric character - must be alpha
+                            endusing
+                        end
+                        if(formatType == 2)
+                            if(!isDate(^d(myString(1:8))))
+                                formatType = 0 ;alpha
+                    end
+                    endusing
+                end
+                (D_TYPE_D),
+                begin
+                    formatType = 1 ;number
+                    if(^size(^arga(varCtr)) != 8)
+                        exit
+                    if(isDate(^argn(varCtr)))
+                        formatType = 2 ;date
+                end
+                (D_TYPE_I),
+                    formatType = 1 ;number
+                (D_TYPE_ID),
+                    formatType = 1 ;number
+                endusing
+            end
+
+            begin
+                data replaceString ,string
+                replaceString = ""
+
+                ;; format text that will replace token
+                using formatType select
+                (2), ;; dateTime
+                begin
+                    using ^datatype(varCtr) select
+                    (D_TYPE_A, D_TYPE_D),
+                        myDateTime = ^arga(varCtr)
+                    (),
+                        using ^argn(varCtr) select
+                        (10000000000000 thru 99999999999999), ;; yyyymmddhhmmss
+                            myDateTime = %string(^argn(varCtr), 'XXXXXXXXXXXXXX')
+                        (100000000000 thru 999999999999),     ;; yyyymmddhhmm
+                            myDateTime = %string(^argn(varCtr), 'XXXXXXXXXXXX')
+                        (10000000 thru 99999999),             ;; yyyymmdd
+                            myDateTime = %string(^argn(varCtr), 'XXXXXXXX')
+                        (),
+                            mreturn ""
+                        endusing
+                    endusing
+
+                    using paramType select
+                    ('D  '),        ;; long date (datetime)
+                        replaceString = LongDatePattern(myDate)
+                    ('d  '),        ;; short date (datetime)
+                        replaceString = ShortDatePattern(myDate)
+                    ('F  '),        ;; long full datetime
+                        replaceString = LongDatePattern(myDate) + ' ' + LongTimePattern(myTime)
+                    ('f  '),        ;; short full datetime
+                        replaceString = LongDatePattern(myDate) + ' ' + ShortTimePattern(myTime)
+                    ('G  '),        ;; long datetime
+                        replaceString = ShortDatePattern(myDate) + ' ' + LongTimePattern(myTime)
+                    ('g  '),        ;; short datetime
+                        replaceString = ShortDatePattern(myDate) + ' ' + ShortTimePattern(myTime)
+                    ('M  '),        ;; month day pattern (datetime)
+                        replaceString = StringUtil.ToUpper(MonthDayPattern(myDate))
+                    ('m  '),        ;; month day pattern (datetime)
+                        replaceString = MonthDayPattern(myDate)
+                    ('O  ', 'o  '), ;; custom datetime
+                        replaceString = LongDatePattern(myDate) + ' ' + LongTimePattern(myTime) + '.' + %string(uuuuuu)
+                    ('R  ', 'r  '), ;; RFA1123 pattern (datetime)
+                        replaceString = RFA1123Pattern(myDateTime)
+                    ('s  '),        ;; sortable datetime (ISO8601) (datetime)
+                        replaceString = SortableDateTimePattern(myDateTime)
+                    ('T  '),        ;; long time (datetime)
+                        replaceString = LongTimePattern(myTime)
+                    ('t  '),        ;; short time (datetime)
+                        replaceString = ShortTimePattern(myTime)
+                    ('u  '),        ;; universal sortable datetime (datetime)
+                        replaceString = UniversalSortableDateTimePtn(myDateTime)
+                    ('U  '),        ;; universal full datetime (datetime)
+                        replaceString = UniversalFullDateTimePattern(myDateTime)
+                    ('Y  '),        ;; year month (datetime)
+                        replaceString = StringUtil.ToUpper(YearMonthPattern(myDate))
+                    ('y  '),        ;; year month (datetime)
+                        replaceString = YearMonthPattern(myDate)
+                    endusing
+                end
+                (1), ;; numeric
+                begin
+                    using paramType select
+                    ('C  ', 'c  '), ;; currency (number)
+                    begin
+                        data formattedString ,a40
+                        formattedString = ^argn(varCtr) ,'$$$,$$$,$$$,$$$,$$$,$$$,$$$,$$$,$$X.XX' [LEFT]
+                        replaceString = %atrim(formattedString)
+                    end
+                    ('D  ', 'd  '), ;; decimal (number or enum)
+                        replaceString = %string(^argn(varCtr))
+                    ('E  ', 'e  '), ;; scientific-exponential (number)
+                        replaceString = %string(^argn(varCtr))          ;;TODO
+                    ('F  ', 'f  '), ;; fixed-point (number) / string (enum)
+                    begin
+                        data formattedString ,a30
+                        data formatString ,a30 ,'ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ'
+                        data precision ,i4 ,0
+                        if(%trim(paramType) >  1)
+                            precision = ^d(paramType(2,%trim(paramType)))
+                        if(precision > 0)
+                        begin
+                            fill('X', formatString(29-precision,30))
+                            formatString(30-precision:1) = '.'
+                        end
+                        formattedString = ^argn(varCtr) ,formatString [LEFT]
+                        replaceString = %atrim(formattedString)
+                    end
+                    ('G  ', 'g  '), ;; general (number or enum)
+                        replaceString = %string(^argn(varCtr))
+                    ('N  ', 'n  '), ;; number (number or enum)
+                    begin
+                        data formattedString ,a40
+                        formattedString = ^argn(varCtr) ,'ZZZ,ZZZ,ZZZ,ZZZ,ZZZ,ZZZ,ZZZ,ZZZ,ZZZ,ZZX' [LEFT]
+                        replaceString = %atrim(formattedString)
+                    end
+                    ('P  ', 'p  '), ;; percent (number)
+                        replaceString = %string(^argn(varCtr)*100) + '%'
+                    ('R  ', 'r  '), ;; round-trip (number)
+                        replaceString = %string(^argn(varCtr))
+                    ('X  ', 'x  '), ;; hexadecimal (number or enum)
+                    begin
+                        if(%trim(paramType) > 1) then
+                            replaceString = %hex(^argn(varCtr), ^d(paramType(2:1)))
+                        else
+                            replaceString = %hex(^argn(varCtr))
+                        if(paramType(1:1) == 'x')
+                            replaceString = StringUtil.ToLower(replaceString)
+                    end
+                    endusing
+                end
+                (), ;; string
+                begin
+                    if(^passed(^arg(varCtr)))
+                        replaceString = ^arga(varCtr)
+                end
+                endusing
+
+                ;; replace token with string
+                using varPos select
+                (1),
+                begin
+                    if(outString.Length > %trim(paramString)) then
+                        outString = replaceString + outString(%trim(paramString)+1,outString.Length)
+                    else
+                        outString = replaceString
+                end
+                (),
+                begin
+                    if(outString.Length > varPos+%trim(paramString)) then
+                        outString = outString(1,varPos-1) + replaceString + outString(varPos+%trim(paramString),outString.Length)
+                    else
+                        outString = outString(1,varPos-1) + replaceString
+                end
+                endusing
+            end
+
+            return
+
+        endmethod
+
+    ;;--------------------------------------------------------------------
+
+        private static method MilitaryTimeZone  ,a
+            req in  aUTCoffset                  ,n
+            endparams
+            literal
+                ;; military timezone offset UTC-12 to UTC+14
+                MilitaryTZ          ,a27    ,'YXWVUTSRQPONZABCDEFGHIKLM  '
+            endliteral
+            record
+                UTCoffset           ,i4
+            endrecord
+        proc
+            UTCoffset = (aUTCoffset/60)
+            using UTCoffset select
+            (-12 thru +14),
+                mreturn MilitaryTZ(UTCoffset+13:1)
+            endusing
+            mreturn ' '
+        endmethod
+
+        ;; convert descriptions from Windows registry
+        ;; HKLM\Software\Microsoft\Windows NT\CurrentVersion\Time Zones\
+        private static method windowsTimezoneToShort ,a
+            req in  aLongTz                 ,a
+            req in  aDaylightSaving         ,n
+            endparams
+            record
+                timeZoneString      ,a3
+                timeZoneOffset      ,a6
+            endrecord
+        proc
+            clear timeZoneString, timeZoneOffset
+            using aLongTz select
+            ('Afghanistan Standard Time  '),
+            begin
+                timeZoneOffset = '+04:30'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AFT'
+                else
+                    timeZoneString = 'AFT'
+            end
+            ('Alaskan Standard Time  '),
+            begin
+                timeZoneOffset = '-09:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'YST'
+                else
+                    timeZoneString = 'YST'
+            end
+            ('Arab Standard Time  '),
+            begin
+                timeZoneOffset = '+03:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AST'
+                else
+                    timeZoneString = 'AST'
+            end
+            ('Arabian Standard Time  '),
+            begin
+                timeZoneOffset = '+04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AST'
+                else
+                    timeZoneString = 'AST'
+            end
+            ('Arabic Standard Time  '),
+            begin
+                timeZoneOffset = '+03:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AST'
+                else
+                    timeZoneString = 'AST'
+            end
+            ('Argentina Standard Time  '),
+            begin
+                timeZoneOffset = '-03:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'ART'
+                else
+                    timeZoneString = 'ART'
+            end
+            ('Atlantic Standard Time  '),
+            begin
+                timeZoneOffset = '-04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AST'
+                else
+                    timeZoneString = 'AST'
+            end
+            ('AUS Central Standard Time  '),
+            begin
+                timeZoneOffset = '+09:30'
+                if(aDaylightSaving) then
+                    timeZoneString = 'ACST'
+                else
+                    timeZoneString = 'ACST'
+            end
+            ('AUS Eastern Standard Time  '),
+            begin
+                timeZoneOffset = '+10:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AEST'
+                else
+                    timeZoneString = 'AEST'
+            end
+            ('Azerbaijan Standard Time  '),
+            begin
+                timeZoneOffset = '+04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Azores Standard Time  '),
+            begin
+                timeZoneOffset = '-01:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AT'
+                else
+                    timeZoneString = 'AT'
+            end
+            ('Bangladesh Standard Time  '),
+            begin
+                timeZoneOffset = '+06:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Canada Central Standard Time  '),
+            begin
+                timeZoneOffset = '-06:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'CST'
+                else
+                    timeZoneString = 'CDT'
+            end
+            ('Cape Verde Standard Time  '),
+            begin
+                timeZoneOffset = '-01:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Caucasus Standard Time  '),
+            begin
+                timeZoneOffset = '+04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Cen. Australia Standard Time  '),
+            begin
+                timeZoneOffset = '+09:30'
+                if(aDaylightSaving) then
+                    timeZoneString = 'ACST'
+                else
+                    timeZoneString = 'ACST'
+            end
+            ('Central America Standard Time  '),
+            begin
+                timeZoneOffset = '-06:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Central Asia Standard Time  '),
+            begin
+                timeZoneOffset = '+06:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Central Brazilian Standard Time  '),
+            begin
+                timeZoneOffset = '-04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'BZT'
+                else
+                    timeZoneString = 'BZT'
+            end
+            ('Central Europe Standard Time  '),
+            begin
+                timeZoneOffset = '+01:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'CET'
+                else
+                    timeZoneString = 'CET'
+            end
+            ('Central European Standard Time  '),
+            begin
+                timeZoneOffset = '+01:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'CET'
+                else
+                    timeZoneString = 'CET'
+            end
+            ('Central Pacific Standard Time  '),
+            begin
+                timeZoneOffset = '+11:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Central Standard Time  '),
+            begin
+                timeZoneOffset = '-06:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'CDT'
+                else
+                    timeZoneString = 'CST'
+            end
+            ('Central Standard Time (Mexico)  '),
+            begin
+                timeZoneOffset = '-06:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('China Standard Time  '),
+            begin
+                timeZoneOffset = '+08:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'CST'
+                else
+                    timeZoneString = 'CST'
+            end
+            ('Dateline Standard Time  '),
+            begin
+                timeZoneOffset = '-12:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'IDLW'
+                else
+                    timeZoneString = 'IDLW'
+            end
+            ('E. Africa Standard Time  '),
+            begin
+                timeZoneOffset = '+03:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('E. Australia Standard Time  '),
+            begin
+                timeZoneOffset = '+10:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AEST'
+                else
+                    timeZoneString = 'AEST'
+            end
+            ('E. Europe Standard Time  '),
+            begin
+                timeZoneOffset = '+02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'EET'
+                else
+                    timeZoneString = 'EET'
+            end
+            ('E. South America Standard Time  '),
+            begin
+                timeZoneOffset = '-03:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Eastern Standard Time  '),
+            begin
+                timeZoneOffset = '-05:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'EDT'
+                else
+                    timeZoneString = 'EST'
+            end
+            ('Egypt Standard Time  '),
+            begin
+                timeZoneOffset = '+02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Ekaterinburg Standard Time  '),
+            begin
+                timeZoneOffset = '+05:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'YETK'
+                else
+                    timeZoneString = 'YETK'
+            end
+            ('Fiji Standard Time  '),
+            begin
+                timeZoneOffset = '+12:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('FLE Standard Time  '),
+            begin
+                timeZoneOffset = '+02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'CET'
+                else
+                    timeZoneString = 'CET'
+            end
+            ('Georgian Standard Time  '),
+            begin
+                timeZoneOffset = '+04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('GMT Standard Time  '),
+            begin
+                timeZoneOffset = '+00:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'BST'
+                else
+                    timeZoneString = 'GMT'
+            end
+            ('Greenland Standard Time  '),
+            begin
+                timeZoneOffset = '-03:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Greenwich Standard Time  '),
+            begin
+                timeZoneOffset = '+00:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'BST'
+                else
+                    timeZoneString = 'GMT'
+            end
+            ('GTB Standard Time  '),
+            begin
+                timeZoneOffset = '+02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'CET'
+                else
+                    timeZoneString = 'CET'
+            end
+            ('Hawaiian Standard Time  '),
+            begin
+                timeZoneOffset = '-10:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AHST'
+                else
+                    timeZoneString = 'AHST'
+            end
+            ('India Standard Time  '),
+            begin
+                timeZoneOffset = '+05:30'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Iran Standard Time  '),
+            begin
+                timeZoneOffset = '+03:30'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Israel Standard Time  '),
+            begin
+                timeZoneOffset = '+02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Jordan Standard Time  '),
+            begin
+                timeZoneOffset = '+02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Kamchatka Standard Time  '),
+            begin
+                timeZoneOffset = '+12:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Korea Standard Time  '),
+            begin
+                timeZoneOffset = '+09:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Mauritius Standard Time  '),
+            begin
+                timeZoneOffset = '+04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Mid-Atlantic Standard Time  '),
+            begin
+                timeZoneOffset = '-02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'ADT'
+                else
+                    timeZoneString = 'AST'
+            end
+            ('Middle East Standard Time  '),
+            begin
+                timeZoneOffset = '+02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Montevideo Standard Time  '),
+            begin
+                timeZoneOffset = '-03:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'ART'
+                else
+                    timeZoneString = 'ART'
+            end
+            ('Morocco Standard Time  '),
+            begin
+                timeZoneOffset = 'UTC'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Mountain Standard Time  '),
+            begin
+                timeZoneOffset = '-07:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'MDT'
+                else
+                    timeZoneString = 'MST'
+            end
+            ('Mountain Standard Time (Mexico)  '),
+            begin
+                timeZoneOffset = '-7:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Myanmar Standard Time  '),
+            begin
+                timeZoneOffset = '+06:30'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('N. Central Asia Standard Time  '),
+            begin
+                timeZoneOffset = '+06'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Namibia Standard Time  '),
+            begin
+                timeZoneOffset = '+01:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Nepal Standard Time  '),
+            begin
+                timeZoneOffset = '+05:45'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('New Zealand Standard Time  '),
+            begin
+                timeZoneOffset = '+12:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'NZST'
+                else
+                    timeZoneString = 'NZST'
+            end
+            ('Newfoundland Standard Time  '),
+            begin
+                timeZoneOffset = '-03:30'
+                if(aDaylightSaving) then
+                    timeZoneString = 'NT'
+                else
+                    timeZoneString = 'NT'
+            end
+            ('North Asia East Standard Time  '),
+            begin
+                timeZoneOffset = '+08:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('North Asia Standard Time  '),
+            begin
+                timeZoneOffset = '+07:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Pacific SA Standard Time  '),
+            begin
+                timeZoneOffset = '-04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Pacific Standard Time  '),
+            begin
+                timeZoneOffset = '-08:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'PDT'
+                else
+                    timeZoneString = 'PST'
+            end
+            ('Pacific Standard Time (Mexico)  '),
+            begin
+                timeZoneOffset = '-6:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Pakistan Standard Time  '),
+            begin
+                timeZoneOffset = '+05:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Paraguay Standard Time  '),
+            begin
+                timeZoneOffset = '-04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Romance Standard Time  '),
+            begin
+                timeZoneOffset = '+01:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'CET'
+                else
+                    timeZoneString = 'CET'
+            end
+            ('Russian Standard Time  '),
+            begin
+                timeZoneOffset = '+03:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'MSK'
+                else
+                    timeZoneString = 'MSK'
+            end
+            ('SA Eastern Standard Time  '),
+            begin
+                timeZoneOffset = '-03:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('SA Pacific Standard Time  '),
+            begin
+                timeZoneOffset = '-05:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('SA Western Standard Time  '),
+            begin
+                timeZoneOffset = '-04:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Samoa Standard Time  '),
+            begin
+                timeZoneOffset = '-11:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('SE Asia Standard Time  '),
+            begin
+                timeZoneOffset = '+07:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Singapore Standard Time  '),
+            begin
+                timeZoneOffset = '+08:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('South Africa Standard Time  '),
+            begin
+                timeZoneOffset = '+02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Sri Lanka Standard Time  '),
+            begin
+                timeZoneOffset = '+05:30'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Syria Standard Time  '),
+            begin
+                timeZoneOffset = '+02:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Taipei Standard Time  '),
+            begin
+                timeZoneOffset = '+08:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Tasmania Standard Time  '),
+            begin
+                timeZoneOffset = '+10:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'AEST'
+                else
+                    timeZoneString = 'AEST'
+            end
+            ('Tokyo Standard Time  '),
+            begin
+                timeZoneOffset = '+09:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'JST'
+                else
+                    timeZoneString = 'JST'
+            end
+            ('Tonga Standard Time  '),
+            begin
+                timeZoneOffset = '+13:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Ulaanbaatar Standard Time  '),
+            begin
+                timeZoneOffset = '+08:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('US Eastern Standard Time  '),
+            begin
+                timeZoneOffset = '-05:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'EDT'
+                else
+                    timeZoneString = 'EST'
+            end
+            ('US Mountain Standard Time  '),
+            begin
+                timeZoneOffset = '-07:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'MDT'
+                else
+                    timeZoneString = 'MST'
+            end
+            ('UTC  '),
+            begin
+                timeZoneOffset = '+00:00'
+                timeZoneString = 'UTC'
+            end
+            ('Venezuela Standard Time  '),
+            begin
+                timeZoneOffset = '-04:30'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Vladivostok Standard Time  '),
+            begin
+                timeZoneOffset = '+10:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'VLAT'
+                else
+                    timeZoneString = 'VLAT'
+            end
+            ('W. Australia Standard Time  '),
+            begin
+                timeZoneOffset = '+08:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'WAST'
+                else
+                    timeZoneString = 'WAST'
+            end
+            ('W. Central Africa Standard Time  '),
+            begin
+                timeZoneOffset = '+01:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('W. Europe Standard Time  '),
+            begin
+                timeZoneOffset = '+01:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'CET'
+                else
+                    timeZoneString = 'CET'
+            end
+            ('West Asia Standard Time  '),
+            begin
+                timeZoneOffset = '+05:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('West Pacific Standard Time  '),
+            begin
+                timeZoneOffset = '+10:00'
+                if(aDaylightSaving) then
+                    timeZoneString = ''
+                else
+                    timeZoneString = ''
+            end
+            ('Yakutsk Standard Time  '),
+            begin
+                timeZoneOffset = '+09:00'
+                if(aDaylightSaving) then
+                    timeZoneString = 'YAKT'
+                else
+                    timeZoneString = 'YAKT'
+            end
+            (),
+            begin
+                mreturn ' '
+            end
+            endusing
+
+            if(!timeZoneString)
+                mreturn 'UTC'+timeZoneOffset
+
+            mreturn timeZoneString
+        endmethod
+
+    ;;--------------------------------------------------------------------
+
+        private static method isDate    ,boolean
+            req in  aDate               ,n
+            endparams
+            record
+                group myDate    ,d
+                    group year  ,d
+                        cc      ,d2
+                        yy      ,d2
+                    endgroup
+                    mon         ,d2
+                    day         ,d2
+                endgroup
+            endrecord
+        proc
+            myDate = aDate
+            if(year < 1901 || year > 2999)
+                mreturn false
+            using mon select
+            (1,3,5,7,9,10,12),
+                if(day < 1 || day > 31)
+                    mreturn false
+            (4,6,9,11),
+                if(day < 1 || day > 30)
+                    mreturn false
+            (2),
+            begin
+                if(day < 1 || day > 29)
+                    mreturn false
+                if(day == 29)
+                begin
+                    if(((year / 4) * 4) != year)
+                        mreturn false
+                    if(yy == 0 && ((cc / 4) * 4) == cc)
+                        mreturn false
+                end
+            end
+            (),
+                mreturn false
+            endusing
+            mreturn true
+        endmethod
+
+    ;;--------------------------------------------------------------------
+        private static method LongDatePattern   ,a
+            req in  aDate                       ,n
+            endparams
+            record
+                group myDate    ,d
+                    year        ,d4
+                    mon         ,d2
+                    day         ,d2
+                endgroup
+            endrecord
+        proc
+            myDate = aDate
+            mreturn DayNames(myDate) + ', '
+            &   + MonthNames(mon) + DateSeperator() + %string(day) + DateSeperator() + %string(year, 'XXXX')
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method ShortDatePattern  ,a
+            req in  aDate                       ,n
+            endparams
+            record
+                group myDate    ,d
+                    year        ,d4
+                    mon         ,d2
+                    day         ,d2
+                endgroup
+            endrecord
+        proc
+            myDate = aDate
+            mreturn %string(mon) + DateSeperator() + %string(day) + DateSeperator() + %string(year, 'XXXX')
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method LongTimePattern   ,a
+            req in  aTime                       ,n
+            endparams
+            record
+                group myTime    ,d
+                    hh          ,d2
+                    mm          ,d2
+                    ss          ,d2
+                endgroup
+            endrecord
+        proc
+            myTime = aTime
+            if(hh > 11) then
+                mreturn %string(hh-12) + TimeSeperator() + %string(mm, 'XX') + TimeSeperator() + %string(ss, 'XX') + ' ' + PMDesignator()
+            else
+                mreturn %string(hh) + TimeSeperator() + %string(mm, 'XX') + TimeSeperator() + %string(ss, 'XX') + ' ' + AMDesignator()
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method ShortTimePattern  ,a
+            req in  aTime                       ,n
+            endparams
+            record
+                group myTime    ,d
+                    hh          ,d2
+                    mm          ,d2
+                    ss          ,d2
+                endgroup
+            endrecord
+        proc
+            myTime = aTime
+            mreturn %string(hh, 'XX') + TimeSeperator() + %string(mm, 'XX') + TimeSeperator() + %string(ss, 'XX')
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method MonthDayPattern   ,a
+            req in  aDate                       ,n
+            endparams
+            record
+                group myDate    ,d
+                    year        ,d4
+                    mon         ,d2
+                    day         ,d2
+                endgroup
+            endrecord
+        proc
+            myDate = aDate
+            mreturn MonthNames(mon) + ' ' + %string(day, 'XX')
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method RFA1123Pattern    ,a
+            req in  group aDateTime             ,a
+                        group myDate    ,d
+                            year        ,d4
+                            mon         ,d2
+                            day         ,d2
+                        endgroup
+                        hh          ,d2
+                        mm          ,d2
+                        ss          ,d2
+                    endgroup
+            endparams
+            record
+                timeZoneString      ,a40
+                daylightSaving      ,i4
+                offset              ,i4
+            endrecord
+        proc
+            offset = %timezone(timeZoneString, daylightSaving)
+.ifdef D_GUI
+            windowsTimezoneToShort(timeZoneString, daylightSaving)
+.endc ;D_GUI
+            mreturn AbbreviatedDayNames(myDate) + ', '
+            &   + %string(day, 'XX') + ' ' + AbbreviatedMonthNames(mon) + ' ' + %string(year, 'XXXX') + ' '
+            &   + %string(hh, 'XX') + TimeSeperator() + %string(mm, 'XX') + TimeSeperator() + %string(ss, 'XX') + ' '
+            &   + %atrim(timeZoneString)
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method SortableDateTimePattern   ,a
+            req in  group aDateTime                     ,a
+                        year        ,d4
+                        mon         ,d2
+                        day         ,d2
+                        hh          ,d2
+                        mm          ,d2
+                        ss          ,d2
+                    endgroup
+            endparams
+        proc
+            mreturn  %string(year, 'XXXX') + '-' + %string(mon ,'XX') + '-' + %string(day, 'XX')
+            &   + MilitaryTimeZone(%timezone())
+            &   + %string(hh, 'XX') + TimeSeperator() + %string(mm, 'XX') + TimeSeperator() + %string(ss, 'XX')
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method UniversalSortableDateTimePtn  ,a
+            req in  group aDateTime                         ,a
+                        year        ,d4
+                        mon         ,d2
+                        day         ,d2
+                        hh          ,d2
+                        mm          ,d2
+                        ss          ,d2
+                    endgroup
+            endparams
+        proc
+            mreturn  %string(year, 'XXXX') + '-' + %string(mon ,'XX') + '-' + %string(day, 'XX')
+            &   + ' '
+            &   + %string(hh, 'XX') + TimeSeperator() + %string(mm, 'XX') + TimeSeperator() + %string(ss, 'XX')
+            &   + MilitaryTimeZone(%timezone())
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method UniversalFullDateTimePattern  ,a
+            req in  group aDateTime                         ,a
+                        group myDate    ,d
+                            year        ,d4
+                            mon         ,d2
+                            day         ,d2
+                        endgroup
+                        hh          ,d2
+                        mm          ,d2
+                        ss          ,d2
+                    endgroup
+            endparams
+        proc
+            if(hh > 11) then
+                mreturn DayNames(myDate) + ' '
+                &   + MonthNames(mon) + DateSeperator() + %string(day) + DateSeperator() + %string(year, 'XXXX') + ' '
+                &   + %string(hh-12) + TimeSeperator() + %string(mm, 'XX') + TimeSeperator() + %string(ss, 'XX') + ' ' + PMDesignator()
+            else
+                mreturn DayNames(myDate) + ' '
+                &   + MonthNames(mon) + DateSeperator() + %string(day) + DateSeperator() + %string(year, 'XXXX') + ' '
+                &   + %string(hh) + TimeSeperator() + %string(mm, 'XX') + TimeSeperator() + %string(ss, 'XX') + ' ' + AMDesignator()
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method YearMonthPattern  ,a
+            req in  aDate                       ,n
+            endparams
+            record
+                group myDate    ,d
+                    year        ,d4
+                    mon         ,d2
+                    day         ,d2
+                endgroup
+            endrecord
+        proc
+            myDate = aDate
+            mreturn MonthNames(mon) + ' ' + %string(year, 'XXXX')
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method MonthNames    ,a
+            req in  aMonth                  ,n
+            endparams
+            literal
+                longMonth       ,12a9   ,'January  ','February ','March    '
+                &                       ,'April    ','May      ','June     '
+                &                       ,'July     ','August   ','September'
+                &                       ,'October  ','November ','December '
+            endliteral
+        proc
+            if(aMonth < 1 || aMonth > 12)
+                mreturn ' '
+            mreturn %atrim(longMonth(aMonth))
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method AbbreviatedMonthNames ,a
+            req in  aMonth                          ,n
+            endparams
+            literal
+                shortMonth      ,12a3   ,'Jan','Feb','Mar','Apr','May','Jun'
+                &                       ,'Jul','Aug','Sep','Oct','Nov','Dec'
+            endliteral
+        proc
+            if(aMonth < 1 || aMonth > 12)
+                mreturn ' '
+            mreturn %atrim(shortMonth(aMonth))
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method DayNames  ,a
+            req in  aDate               ,n
+            endparams
+            literal
+                longDow         ,7a9    ,'Sunday   ','Monday   ','Tuesday  '
+                &                       ,'Wednesday','Thursday ','Friday   '
+                &                       ,'Saturday '
+            endliteral
+            record
+                group myDate    ,d
+                    year        ,d4
+                    mon         ,d2
+                    day         ,d2
+                endgroup
+            endrecord
+        proc
+            myDate = aDate
+            mreturn %atrim(longDow(%wkday(myDate)))
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method AbbreviatedDayNames   ,a
+            req in  aDate                           ,n
+            endparams
+            literal
+                shortDow        ,9a3    ,'Sun','Mon','Tue','Wed','Thu','Fri'
+                &                       ,'Sat'
+            endliteral
+            record
+                group myDate    ,d
+                    year        ,d4
+                    mon         ,d2
+                    day         ,d2
+                endgroup
+            endrecord
+        proc
+            myDate = aDate
+            mreturn %atrim(shortDow(%wkday(myDate)))
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method DateSeperator  ,a
+            endparams
+        proc
+            mreturn '/'
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method TimeSeperator  ,a
+            endparams
+        proc
+            mreturn ':'
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method AMDesignator   ,a
+            endparams
+        proc
+            mreturn 'AM'
+        endmethod
+    ;;--------------------------------------------------------------------
+        private static method PMDesignator   ,a
+            endparams
+        proc
+            mreturn 'PM'
+        endmethod
+    ;;--------------------------------------------------------------------
+
+    endclass
+
+endnamespace

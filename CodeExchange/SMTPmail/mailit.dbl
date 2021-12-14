@@ -1,0 +1,159 @@
+;*****************************************************************************
+;
+; Title:        MailIt
+;
+; Description:  A test program for the SmtpMail routine
+;
+;*****************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;*****************************************************************************
+
+main MailIt
+
+.define SMERR_SUCCESS       1
+.define SMERR_BADSERVER     2   ;Invalid server name or address
+.define SMERR_NORELAY       3   ;Mail server can't relay
+.define SMERR_NETPROB       4   ;Failed to connect to SMTP server
+.define SMERR_TOLIST        5   ;No recipient address provided
+.define SMERR_CCLIST        6
+.define SMERR_BODYFILE      7   ;Failed to open body file
+.define SMERR_SENDADDR      8
+.define SMERR_SERVERFAIL    9   ;Invalid response from SMTP server
+.define SMERR_BADLIST       10
+.define SMERR_ATTACHFILE    11  ;Failed to open attachment file
+.define SMERR_BCCLIST       12
+
+    external function
+        smtpmail    ,^val
+
+    record
+        status      ,i4         ;Return status from SmtpMail call
+        tt          ,i4         ;Terminal channel
+        server      ,a40        ;Name or IP address of SMTP server
+        domain      ,a40        ;Senders domain name
+        sender      ,a40        ;Senders e-mail address
+        sendername  ,a40        ;Senders name
+        recipient   ,a40        ;Recipient name
+        subject     ,a80        ;Subject
+        body        ,[2]a80     ;Body text
+        attachment  ,a80        ;Attachment name
+        encodetype  ,d1         ;Attachment encoding type
+        ; 0 = text
+        ; 1 = Base64
+
+proc
+
+    open(tt=%syn_freechn,i,'tt:')
+
+    xcall flags(7004020,1)
+
+    writes(tt,"")
+    writes(tt,"MailIt - A test program for SmtpMail")
+    writes(tt,"")
+
+    do
+    begin
+        display(tt,"Name of IP address of SMTP server: ")
+        reads(tt,server,done)
+    end
+    until server
+
+    do
+    begin
+        display(tt,"Enter the senders domain name (e.g. synergex.com): ")
+        reads(tt,domain,done)
+    end
+    until domain
+
+    do
+    begin
+        display(tt,"Enter the senders e-mail address: ")
+        reads(tt,sender,done)
+    end
+    until sender
+
+    display(tt,"Enter the senders name (optional): ")
+    reads(tt,sendername,done)
+
+    do
+    begin
+        display(tt,"Enter the recipients e-mail address: ")
+        reads(tt,recipient,done)
+    end
+    until recipient
+
+    subject = "A test message from MailIt"
+
+    body[1] = "This is a test e-mail message which was sent by the MailIt program using the"
+    body[2] = "SmtpMail function."
+
+    attachment = "SMTPmail_readme.txt"
+.ifdef DBLv9
+    begin
+        data chan ,i4
+        open(chan=%syn_freechn, I, attachment) [ERR=nofile]
+        close chan
+        if(FALSE)
+        begin
+nofile,
+            clear attachment
+        end
+    end
+.endc ;DBLv9
+
+    encodetype = 0
+
+    status=%smtpmail(server,domain,sender,sendername,,recipient,,
+&       subject,body,,attachment,encodetype)
+
+    if (status==SMERR_SUCCESS) then
+        writes(tt, "Message sent")
+    else
+    begin
+        case status of
+        begincase
+        SMERR_BADSERVER:
+            writes(tt, "Mail send error: Invalid server name or address")
+        SMERR_NETPROB:
+            writes(tt, "Mail send error: Failed to connect to SMTP server")
+        SMERR_TOLIST:
+            writes(tt, "Mail send error: No recipient addresses provided")
+        SMERR_NORELAY:
+            writes(tt, "Mail send error: Mail server can't relay")
+        SMERR_CCLIST:
+            writes(tt, "Mail send error: Invalid CC list")
+        SMERR_BODYFILE:
+            writes(tt, "Mail send error: Failed to open message body file")
+        SMERR_SENDADDR:
+            writes(tt, "Mail send error: Send Address")
+        SMERR_SERVERFAIL:
+            writes(tt, "Mail send error: Invalid response from SMTP server")
+        SMERR_BADLIST:
+            writes(tt, "Mail send error: Bad List")
+        SMERR_ATTACHFILE:
+            writes(tt, "Mail send error: Failed to open attachment file")
+        endcase
+        else
+        writes(tt, "Mail send error status = " + %hex(status) + ", " + %string(status))
+    end
+
+    sleep 2
+    if(false)
+    begin
+done,
+        writes(tt, "Exiting...")
+    end
+    close tt
+
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+
+    stop D_EXIT_SUCCESS
+
+end
+

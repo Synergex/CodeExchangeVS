@@ -1,0 +1,155 @@
+;******************************************************************************
+;
+; Class:		SynPsg.Rps.RpsFormat
+;
+; Description:	Represents a single Repository format.  This can either be a
+;				structure format, a global format, pr a predefined date or time
+;				format
+;
+; Author:		Steve Ives, Synergex Professional Services Group
+;
+; Date: 		19th October 2007
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+;******************************************************************************
+;
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPsg.Rps
+
+namespace SynPsg.Rps
+
+	public class RpsFormat
+		
+		;Format attribute data
+		protected p_FormatName		,a30
+		protected p_FormatType		,RpsFormatType
+		protected p_FormatString	,a30
+		
+		; Constructor (for structure formats)
+		public method RpsFormat
+			required in StructureName, a
+			required in FormatName, a
+			endparams
+		proc
+			Repository.CheckIsOpen()
+			LoadStructureFormat(StructureName,FormatName)
+		endmethod
+
+		; Constructor (for global formats)
+		public method RpsFormat
+			required in FormatName, a
+			endparams
+		proc
+			Repository.CheckIsOpen()
+			LoadGlobalFormat(FormatName)
+		endmethod
+
+		; LoadStructureFormat method
+		private method LoadStructureFormat, void
+			required in StructureName, a
+			required in FormatName, a
+			endparams
+		proc
+			try 
+			begin
+				data p_s_info, s_info
+				data tmp_FormatType, a1
+				;Set the current structure?
+				dd_struct(Repository.RpsControl,DDS_INFO,StructureName,p_s_info)
+				if (Repository.RpsControl.error)
+				begin
+					data errtxt, a120
+					s_bld(errtxt,,"Failed to set current repository structure to %a",StructureName)
+					throw new RpsFormatException(%atrim(errtxt))
+				end
+				;Save the format name
+				p_FormatName = RpsUtils.UpperCase(FormatName)
+				;Load the format information
+				dd_format(Repository.RpsControl,DDM_SINFO,p_FormatName,tmp_FormatType,p_FormatString)
+				if (Repository.RpsControl.error)
+				begin
+					data errtxt, a120
+					s_bld(errtxt,,"Failed to get repository structure format %a.%a",StructureName,FormatName)
+					throw new RpsFormatException(%atrim(errtxt))
+				end
+				using tmp_FormatType select
+				("A"), p_FormatType = RpsFormatType.Alpha
+				("N"), p_FormatType = RpsFormatType.Numeric
+				endusing
+			end
+			catch (ex)
+			begin
+				data errtxt, a120
+				s_bld(errtxt,,"Unexected error while retrieving structure %a format %a.",StructureName,FormatName)
+				throw new RpsFormatException(%atrim(errtxt))
+			end
+			endtry
+		endmethod
+		
+		; LoadGlobalFormat method
+		private method LoadGlobalFormat, void
+			required in FormatName, a
+			endparams
+		proc
+			begin
+				data tmp_FormatType, a1
+				;Save the format name
+				p_FormatName = FormatName
+				;Load format information
+				dd_format(Repository.RpsControl,DDM_INFO,p_FormatName,tmp_FormatType,p_FormatString)
+				if (Repository.RpsControl.error)
+					throw new RpsFormatException("Failed to get information for repository global format "+FormatName)
+				using tmp_FormatType select
+				("A"), p_FormatType = RpsFormatType.Alpha
+				("N"), p_FormatType = RpsFormatType.Numeric
+				endusing
+			end
+		endmethod
+		
+		;----------------------------------------------------------------------
+		;Public properties to expose the formats attributes to the outside world
+		
+		; Format name (a30)
+		public property Name, a
+			method get
+			proc
+				mreturn %atrim(p_FormatName)
+			endmethod
+		endproperty
+		
+		; Format type (enum RpsFormatType)
+		; RpsFormatType.Alpha
+		; RpsFormatType.Numeric
+		public property FormatType, RpsFormatType
+			method get
+			proc
+				mreturn p_FormatType
+			endmethod
+		endproperty
+
+		; Format string (a30)
+		public property FormatString, a
+			method get
+			proc
+				mreturn %atrim(p_FormatString)
+			endmethod
+		endproperty
+
+	endclass
+
+endnamespace
+

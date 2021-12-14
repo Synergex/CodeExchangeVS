@@ -1,0 +1,100 @@
+;;*****************************************************************************
+;;
+;; Class:       SynPsg.Rps.RpsEnumMember
+;;
+;; Description: Represents a single Repository enumeration member
+;;
+;; Author:      Steve Ives, Synergex Professional Services Group
+;;
+;; Date:        2nd November 2009
+;;
+;;*****************************************************************************
+;;
+;; This code is supplied as seen and without warranty or support, and is used
+;; at your own risk. Neither the author or Synergex accept any responsability
+;; for any loss or damage which may result from the use of this code.
+;;
+;;*****************************************************************************
+;;
+;; $Revision: 1 $
+;;
+;; $Date: 2010-04-13 17:06:56-07:00 $
+;;
+;;*****************************************************************************
+;;
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPsg.Rps
+.ifdef DBLV915
+import Synergex.SynergyDE.Collections
+.else
+import System.Collections
+.endc
+
+namespace SynPsg.Rps
+
+    public class RpsEnumMember
+		
+		;Field attribute data
+		protected p_EnumName            ,a30
+		protected p_Name				,a30
+		protected p_ExplicitValue		,a11
+		protected p_ImplicitValue		,a11
+
+		.ifdef DBLV93
+		; Constructor
+        public method RpsEnumMember
+            required in EnumName, a30
+            required in Name, a30
+			required in ExplicitValue, a11
+			required in ImplicitValue, a11
+            endparams
+        proc
+			Repository.CheckIsOpen()
+			p_EnumName = EnumName
+			p_Name = Name
+			p_ExplicitValue = ExplicitValue
+			p_ImplicitValue = ImplicitValue
+		endmethod
+		.endc
+        
+		;----------------------------------------------------------------------
+		;Public properties to expose enumeration member attributes
+
+        ; Structure name (a30)
+        public property EnumName, a
+            method get
+            proc
+                mreturn %atrim(p_EnumName)
+			endmethod
+        endproperty
+        
+        ; Member name (a30)
+        public property Name, a
+            method get
+            proc
+                mreturn %atrim(p_Name)
+            endmethod
+        endproperty
+
+		; Member explicit value (may be blank) (a11)
+		public property ExplicitValue, a
+			method get
+			proc
+				mreturn %atrim(p_ExplicitValue)
+			endmethod
+		endproperty
+
+		; Member implicit value (will not be blank) (a11)
+		public property ImplicitValue, a
+			method get
+			proc
+				mreturn %atrim(p_ImplicitValue)
+			endmethod
+		endproperty
+
+	endclass
+
+endnamespace

@@ -1,0 +1,47 @@
+import SynPSG
+
+main
+
+record
+    ttCh        ,i4
+    s1          ,string
+    s2          ,string
+    s3          ,string
+    sArray      ,[#]string
+endrecord
+
+proc
+
+    open(ttCh=%syn_freechn(),O,'TT:')
+    writes(ttch, "StringUtil test")
+
+    writes(ttch, "")
+    writes(ttch, "Datetime format ")
+    writes(ttCh, "s "+SynPSG.StringUtil.Format("{0:s}", %datetime))
+    writes(ttCh, "u "+SynPSG.StringUtil.Format("{0:u}", %datetime))
+    writes(ttCh, "D "+SynPSG.StringUtil.Format("{0:D}", %datetime))
+    writes(ttCh, "g "+SynPSG.StringUtil.Format("{0:g}", %datetime))
+    writes(ttch, "")
+
+    s1 = 'a|b|c'
+    sArray = SynPSG.StringUtil.Split(s1, '|')
+
+    writes(ttch, "")
+    display(ttch, "Split '"+s1+"' into")
+    foreach s3 in sArray
+        display(ttCh, " '"+s3+"'")
+    writes(ttch, "")
+
+    s2 = SynPSG.StringUtil.Replace(s1, 'b', 'B')
+
+    writes(ttch, "")
+    writes(ttch, "Replace 'b' with 'B' in "+s1+" gives "+s2)
+
+    writes(ttch, "")
+
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    stop D_EXIT_SUCCESS
+
+endmain

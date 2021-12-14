@@ -1,0 +1,329 @@
+;******************************************************************************
+;
+; Class:		SynPsg.Rps.Repository
+;
+; Description:	Access a Synergy/DE Repository (via ddlib.elb)
+;
+; Author:		Steve Ives, Synergex Professional Services Group
+;
+; Date: 		19th October 2007
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+;******************************************************************************
+;
+import SynPsg.Rps
+.ifdef DBLV915
+import Synergex.SynergyDE.Collections
+.else
+import System.Collections
+.endc
+
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+namespace SynPsg.Rps
+
+	public class Repository
+
+		public static RpsControl	,dcs
+
+		private record p_InstanceData
+		
+			p_c_info				,c_info
+
+			p_MainFile				,a255
+			p_TextFile				,a255
+			
+			p_Structures			,@RpsStructureCollection
+			p_Files					,@RpsFileCollection
+			p_Templates				,@RpsTemplateCollection
+			p_Formats				,@RpsFormatCollection
+			p_DateFormats			,@RpsFormatCollection
+			p_TimeFormats			,@RpsFormatCollection
+
+		endrecord
+
+		;----------------------------------------------------------------------
+		; Constructors
+		
+		; Constructor for default Repository
+		public method Repository
+			endparams
+		proc
+			OpenRps()
+		endmethod
+
+		; Constructor for specific Repository
+		public method Repository
+			required in MainFile, a
+			required in TextFile, a
+			endparams
+		proc
+			OpenRps(MainFile,TextFile)
+		endmethod
+
+		;----------------------------------------------------------------------
+		; Destructor
+		method ~Repository
+		proc
+			CloseRps()
+		endmethod
+		
+		;----------------------------------------------------------------------
+		;Private methods
+		
+		;Open the default repository
+		private method OpenRps, void
+			endparams
+		proc
+			dd_init(RpsControl,,,p_MainFile,p_TextFile)
+			if (RpsControl.error)
+				throw new RpsException("Failed to open repository")
+			GetControlRecord()
+		endmethod
+
+		;Open a specified repository
+		private method OpenRps, void
+			required in MainFile, a
+			required in TextFile, a
+			endparams
+		proc
+			dd_init(RpsControl,MainFile,TextFile,p_MainFile,p_TextFile)
+			if (RpsControl.error)
+				throw new RpsException("Failed to open repository")
+			GetControlRecord()
+		endmethod
+		
+		;Get the control record from the currently open repository
+		private method GetControlRecord, void
+		proc
+			;Retrieve the repository control record
+			dd_control(RpsControl,DDC_INFO,p_c_info)
+			if (RpsControl.error)
+				throw new RpsException("Failed to get repository control record")
+		endmethod
+		
+		;Close the current repository
+		private method CloseRps, void
+		proc
+			;If it looks like the repository is open
+			if ((RpsControl.mchn_r)&&(%chopen(RpsControl.mchn_r))
+				& &&(RpsControl.tchn_r)&&(%chopen(RpsControl.tchn_r)))
+			begin
+				;Close it
+				try 
+					dd_exit(RpsControl)
+				catch (ex)
+					nop
+				endtry
+			end
+			;And clear down our instance data
+			init RpsControl
+			init p_InstanceData
+
+		endmethod
+		
+		;----------------------------------------------------------------------
+		;Public methods
+
+		; Check the repository is open. Other classes can use this method to
+		; open the Repository if it is not already open.  This would be the
+		; case if an instance of the Repository class had not been created.
+		; For example, a programmer might want to use an instance of a
+		; RpsStructure class without having to instantiate the Repository class.
+		;
+		public static method CheckIsOpen, void
+			endparams
+		proc
+			if ((RpsControl.mchn_r)&&(%chopen(RpsControl.mchn_r))
+				& &&(RpsControl.tchn_r)&&(%chopen(RpsControl.tchn_r)))
+				mreturn
+			dd_init(RpsControl)
+			if (RpsControl.error)
+				throw new RpsException("Failed to open repository")
+		endmethod
+
+		;Close the current repository and open the default one
+		public method Open, void
+			endparams
+		proc
+			CloseRps()
+			OpenRps()
+		endmethod
+
+		;Close the current repository and open a specified one
+		public method Open, void
+			required in MainFile, a
+			required in TextFile, a
+			endparams
+		proc
+			CloseRps()
+			OpenRps(MainFile,TextFile)
+		endmethod
+		
+		;----------------------------------------------------------------------
+		;Public properties
+		
+		; Repository main file spec (a255)
+		public property MainFile, a
+			method get
+			proc
+				mreturn %atrim(p_MainFile)
+			endmethod
+		endproperty
+		
+		; Repository text file spec (a255)
+		public property TextFile, a
+			method get
+			proc
+				mreturn %atrim(p_TextFile)
+			endmethod
+		endproperty
+		
+		; Last modification timestamp (a14, YYYYMMDDHHMMSS)
+		; This property needs to be a DATETIME
+		public property LastModified, a
+			method get
+			proc
+				mreturn p_c_info.ci_tstamp
+			endmethod
+		endproperty
+		
+		; Last structure addition / deletion (a14, YYYYMMDDHHMMSS)
+		; This property needs to be a DATETIME
+		public property LastStructureAddDelete, a
+			method get
+			proc
+				mreturn p_c_info.ci_str_tstamp
+			endmethod
+		endproperty
+		
+		; Repository version (a8)
+		public property Version, a
+			method get
+			proc
+				mreturn p_c_info.ci_ver
+			endmethod
+		endproperty
+		
+		;----------------------------------------------------------------------
+		;Structures
+		
+		public property Structures, @RpsStructureCollection
+			method get
+			proc
+				;Load the structures collection the first time it is referenced
+				if (p_Structures==^null)
+					p_Structures = new RpsStructureCollection(RpsLoadMode.Load)
+				mreturn p_Structures
+			endmethod
+		endproperty
+
+		public method GetStructure, @RpsStructure
+			required in StructureName, a
+			endparams
+		proc
+			mreturn new RpsStructure(StructureName)
+		endmethod
+		
+		;----------------------------------------------------------------------
+		;Files
+		
+		public property Files, @RpsFileCollection
+			method get
+			proc
+				;Load the files collection the first time it is referenced
+				if (p_Files==^null)
+					p_Files = new RpsFileCollection()
+				mreturn p_Files
+			endmethod
+		endproperty
+
+		public method GetFile, @RpsFile
+			required in FileName, a
+			endparams
+		proc
+			mreturn new RpsFile(FileName)
+		endmethod
+
+		;----------------------------------------------------------------------
+		;Templates
+
+		public property Templates, @RpsTemplateCollection
+			method get
+			proc
+				;Load the templates collection the first time it is referenced
+				if (p_Templates==^null)
+					p_Templates = new RpsTemplateCollection()
+				mreturn p_Templates
+			endmethod
+		endproperty
+
+		public method GetTemplate, @RpsTemplate
+			required in TemplateName, a
+			endparams
+		proc
+			mreturn new RpsTemplate(TemplateName)
+		endmethod
+
+		;----------------------------------------------------------------------
+		;Formats
+		
+		;Global format collection
+		public property Formats, @RpsFormatCollection
+			method get
+			proc
+				;Load the formats collection the first time it is referenced
+				if (p_Formats==^null)
+					p_Formats = new RpsFormatCollection(RpsGlobalFormatType.Format)
+				mreturn p_Formats
+			endmethod
+		endproperty
+
+		;Predefined date format collection
+		public property DateFormats, @RpsFormatCollection
+			method get
+			proc
+				;Load the date formats collection the first time it is referenced
+				if (p_DateFormats==^null)
+					p_DateFormats = new RpsFormatCollection(RpsGlobalFormatType.DateFormat)
+				mreturn p_DateFormats
+			endmethod
+		endproperty
+
+		;Predefined time format collection
+		public property TimeFormats, @RpsFormatCollection
+			method get
+			proc
+				;Load the time formats collection the first time it is referenced
+				if (p_TimeFormats==^null)
+					p_TimeFormats = new RpsFormatCollection(RpsGlobalFormatType.TimeFormat)
+				mreturn p_TimeFormats
+			endmethod
+		endproperty
+		
+		;Retrieve a global or predefined format
+		public method GetFormat, @RpsFormat
+			required in FormatName, a
+			endparams
+		proc
+			mreturn new RpsFormat(FormatName)
+		endmethod
+
+		
+	endclass
+
+endnamespace
+

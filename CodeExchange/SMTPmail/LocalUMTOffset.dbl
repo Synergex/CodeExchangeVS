@@ -1,0 +1,260 @@
+;; return the offset for current timezone to UMT timezone
+function localUMTOffset ,^val
+;endparams
+
+.ifdef DBLv93
+    record
+        minsOffset	,i4
+        UMToffset	,i4
+        hours	,i4
+proc
+    minsOffset = %timezone()
+    if(minsOffset < 0) then
+    begin
+        minsOffset = -minsOffset
+        hours = %trunc(minsOffset / 60)
+        UMToffset = (hours * 100) + (minsOffset - (hours * 60))
+        UMToffset = -UMToffset
+    end
+    else
+    begin 
+        hours = %trunc(minsOffset / 60)
+        UMToffset = (hours * 100) + (minsOffset - (hours * 60))
+    end
+    freturn UMToffset
+
+.else ;DBLv93
+
+.define TZ_INI_PATH  'DAT:'
+
+.align
+    record ivars
+        ch          ,i4
+        count       ,i4
+        status      ,i4
+        dstFlag     ,i4
+
+    record
+        b_month     ,d2
+        b_week      ,d1
+        b_day       ,d1
+        b_hour      ,d4
+        e_month     ,d2
+        e_week      ,d1
+        e_day       ,d1
+        e_hour      ,d4
+        target_month,d2
+        target_week ,d1
+        target_day  ,d1
+        target_hour ,d4
+        data_buf    ,a50
+        offset      ,d5
+        useDST      ,d1
+        group monthDayHour  ,d
+            month   ,d2
+            day     ,d2
+            hour    ,d2
+        endgroup
+        group testDayHour    ,d
+            day     ,d2
+            hour    ,d4
+        endgroup
+        group changeDate    ,d
+            year    ,d4
+            month   ,d2
+            day     ,d2
+        endgroup
+        tempDay     ,d1
+        group today ,a20
+            year    ,d4
+            month   ,d2
+            day     ,d2
+            hour    ,d2
+            minute  ,d2
+            ,a8
+        endgroup
+        tagName     ,a250
+        attrValue   ,a250
+        textValue   ,a250
+        message     ,a250
+
+    proc
+        clear ^i(ivars),useDST
+
+        ;; Read the localTZ.ini file for settings. These settings are in the following format:
+        ;;[Local-Time-Zone]
+        ;;UMToffset = -0700
+        ;;useDST = 1
+        ;;beginMonth = 3
+        ;;beginWeek = 2
+        ;;beginDay = 0
+        ;;beginHour = 2
+        ;;endMonth = 11
+        ;;endWeek = 1
+        ;;endDay = 0
+        ;;endHour = 2
+
+        open(ch=%syn_freechn, i, TZ_INI_PATH+"localTZ.ini")
+        ;; Check for local-time-zone tag
+        repeat
+        begin
+            reads(ch,data_buf,endoffile)
+            locase data_buf
+            if (data_buf == '[local-time-zone]')
+                exitloop
+        end
+        ;; now that we've found the section tag, read in the data
+        repeat
+        begin
+            reads(ch,data_buf,endoffile)
+            locase data_buf
+            using data_buf select
+            ('umtoffset'),
+            begin
+                offset = %getAttrValue(data_buf)
+                ; if necessary, convert hours to "military" hours
+                if (offset < 100 && offset > -100)
+                    offset *= 100
+                if (offset > 1200 || offset < -1200)
+                    offset = 0
+            end
+            ('usedst'),
+                useDST = %getAttrValue(data_buf)
+            ('beginmonth'),
+                b_month = %getAttrValue(data_buf)
+            ('beginweek'),
+                b_week = %getAttrValue(data_buf)
+            ('beginday'),
+                b_day = %getAttrValue(data_buf)
+            ('beginhour'),
+            begin
+                b_hour = %getAttrValue(data_buf)
+                ; if necessary, convert hour to military time
+                if (b_hour < 100)
+                    b_hour *= 100
+            end
+            ('endmonth'),
+                e_month = %getAttrValue(data_buf)
+            ('endweek'),
+                e_week = %getAttrValue(data_buf)
+            ('endday'),
+                e_day = %getAttrValue(data_buf)
+            ('endhour'),
+            begin
+                e_hour = %getAttrValue(data_buf)
+                ; if necessary, convert hour to military time
+                if (e_hour < 100)
+                    e_hour *= 100
+            end
+            endusing
+        end
+    endoffile,
+        close ch
+
+        if (usedst)
+        begin
+            ;; check our return values
+            if (b_month<1 || b_month>12 || e_month<1 || e_month>12)
+                exit
+            if (b_week<1 || e_week<1)
+                exit
+            if (b_day<0 || b_day>6 || e_day<0 || e_day>6)
+                exit
+
+            today = %datetime
+            ;; see if we even need to calculate DST begin/end times based on today's month
+            if (today.month != b_month && today.month != e_month) then
+            begin
+                if (b_month < e_month) then
+                ;; We're in the Northern Hemisphere...
+                    if (today.month > b_month && today.month < e_month)
+                        offset += 100
+                    else
+                        if (today.month > b_month || today.month < e_month)
+                            offset += 100
+            end
+            else
+            begin
+                ;; We need to calculate the actual day & time of the Time Change since today's date
+                ;; is in one of the time change months
+                changeDate.year = today.year
+                changeDate.month = today.month
+                changeDate.day = 01
+                ;; Get the day of the first day of the month. 0 = Sunday, 6 = Saturday
+                tempDay = %wkday(changeDate) - 1
+                if (today.month == b_month) then
+                begin
+                    target_month = b_month
+                    target_week = b_week
+                    target_day = b_day
+                    target_hour = b_hour
+                end
+                else
+                begin
+                    target_month = e_month
+                    target_week = e_week
+                    target_day = e_day
+                    target_hour = e_hour
+                end
+                target_week -= 1
+                using (target_day - tempDay) select
+                (>0),
+                    changeDate = %ndate(%jperiod(changeDate)+(target_day - tempDay))
+                (<0),
+                    changeDate = %ndate(%jperiod(changeDate)+(target_day - tempDay)+7)
+                endusing
+                if (target_week > 0)
+                    changeDate = %ndate(%jperiod(changeDate) + (7 * target_week))
+                ;; See if we've overrun the correct month. This will happen if the week was
+                ;; set to "5" to indicate the last week of the month
+                while (changeDate.month > target_month)
+                    changeDate = %ndate(%jperiod(changeDate) - 7)
+                testDayHour.day = changeDate.day
+                testDayHour.hour = target_hour
+                if (today.month == b_month) then
+                    if (^d(today(7:6)) >= testDayHour)
+                        offset += 100
+                    else
+                        if (^d(today(7:6)) < testDayHour)
+                            offset += 100
+            end
+        end
+
+        freturn (offset)
+
+    end
+
+function getAttrValue   ,^val
+    data_buf    ,a
+    stack record iVars
+        data_length ,i4
+        valPos      ,i4
+    stack record wrkVars
+        retVal      ,d5
+proc
+    clear ^i(iVars), wrkVars
+    data_length = %trim(data_buf)
+    valPos = %instr(1,data_buf,'=') + 1
+    if (valPos > 2)
+        while (data_buf(valPos:1).eqs.' ' && valPos<=data_length)
+            valPos += 1
+    if (valPos <= data_length)
+    begin
+        onerror badDigit
+        using data_buf(valPos:(data_length - valPos + 1)) select
+        ('true'),
+            retVal = 1
+        ('yes'),
+            retVal = 1
+        (),
+            retVal = data_buf(valPos:(data_length - valPos + 1))
+        endusing
+badDigit,
+        offerror
+    end
+
+    freturn retVal
+
+.endc ;DBLv93
+end
+

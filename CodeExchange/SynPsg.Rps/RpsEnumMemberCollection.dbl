@@ -1,0 +1,292 @@
+;;*****************************************************************************
+;;
+;; Class:		SynPsg.Rps.RpsEnumMemberCollection
+;;
+;; Description:	Represents a collection of members for a Repository enumeration
+;;
+;; Author:		Steve Ives, Synergex Professional Services Group
+;;
+;; Date: 		2nd November 2009
+;;
+;;*****************************************************************************
+;;
+;; This code is supplied as seen and without warranty or support, and is used
+;; at your own risk. Neither the author or Synergex accept any responsability
+;; for any loss or damage which may result from the use of this code.
+;;
+;;*****************************************************************************
+;;
+;; $Revision: 1 $
+;;
+;; $Date: 2010-04-13 17:06:56-07:00 $
+;;
+;;*****************************************************************************
+;;
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPsg.Rps
+.ifdef DBLV915
+import Synergex.SynergyDE.Collections
+.else
+import System.Collections
+.endc
+
+namespace SynPsg.Rps
+
+	public class RpsEnumMemberCollection
+		
+		private p_Collection, @ArrayList
+
+		; Destructor
+		method ~RpsEnumMemberCollection
+		proc
+			clear p_Collection
+		endmethod
+		
+		.ifdef DBLV93
+		
+		; Constructor (don't load any members)
+		public method RpsEnumMemberCollection
+			endparams
+		proc
+			p_Collection = new ArrayList()
+		endmethod
+
+		; Constructor (load members for named enum)
+		public method RpsEnumMemberCollection
+			required in EnumName, a
+			endparams
+		proc
+			p_Collection = new ArrayList()
+			Repository.CheckIsOpen()
+			LoadMembers(EnumName)
+		endmethod
+		
+		; Load members
+		private method LoadMembers, void
+			required in EnumName, a
+			endparams
+			record local_data
+				MemHandleName, int
+				MemHandleValue, int
+				ix, int
+			endrecord
+			structure strEnumValue
+				,a11
+			endstructure
+		proc
+			init local_data
+			try 
+			begin
+				data p_e_info, e_info
+				;Set the current enum and get enum information
+				dd_enum(Repository.RpsControl,DDE_INFO,EnumName,p_e_info)
+				if (Repository.RpsControl.error)
+					throw new RpsEnumException("Failed to get information for repository enumeration "+EnumName)
+				;Do we have any members to load?
+				if (p_e_info.ei_nmmbrs)
+				begin
+					;Size the member names and values arrays and get the data
+					MemHandleName = %mem_proc(DM_ALLOC,^size(strIdentifier)*p_e_info.ei_nmmbrs)
+					MemHandleValue = %mem_proc(DM_ALLOC,^size(strEnumValue)*p_e_info.ei_nmmbrs)
+					dd_enum(Repository.RpsControl,DDE_MBRS,p_e_info.ei_nmmbrs,^m(strIdentifier[1],MemHandleName),^m(strEnumValue[1],MemHandleValue))
+					if (Repository.RpsControl.error)
+						throw new RpsEnumException("Failed to get members for repository enumeration "+EnumName)
+					;Add members to the collection
+					for ix from 1 thru p_e_info.ei_nmmbrs
+					begin
+						data MemberName , a30
+						data ExplicitValue, a11
+						data ImplicitValue, a11, ""
+						MemberName = ^m(strIdentifier[ix],MemHandleName)
+						ExplicitValue = ^m(strEnumValue[ix],MemHandleValue)
+						if (ExplicitValue) then 
+							ImplicitValue = ExplicitValue
+						else
+						begin
+							;;Figure out the implicit value for the new member
+							if (p_Collection.Count==0) then 
+								ImplicitValue = "0"
+							else
+							begin
+								;Workaround for bug in %integer with negative numbers in 9.2.1
+								data mbr, @RpsEnumMember
+								data tmpd, d18
+								mbr = (RpsEnumMember)p_Collection[p_Collection.Count]
+								tmpd = mbr.ImplicitValue
+								ImplicitValue = tmpd + 1 [LEFT]
+;								ImplicitValue = integer(((RpsEnumMember)p_Collection[p_Collection.Count]).ImplicitValue) + 1 [LEFT]
+							end
+						end
+						p_Collection.Add(new RpsEnumMember(EnumName,MemberName,ExplicitValue,ImplicitValue))
+					end
+				end
+			end
+			finally
+			begin
+				;Free arrays
+				if (MemHandleName)
+                    MemHandleName = %mem_proc(DM_FREE,MemHandleName)
+				if (MemHandleValue)
+					MemHandleValue = %mem_proc(DM_FREE,MemHandleValue)
+			end
+			endtry
+		endmethod	
+
+		;-----------------------------------------------------------------------
+		;The follwoing members make the collection look just like an ArrayList
+		
+		;Gets or sets the number of elements that the collection can contain.
+		public property Capacity, int
+			method get
+			proc
+				mreturn p_Collection.Capacity
+			endmethod
+			method set
+			proc
+				p_Collection.Capacity = value
+			endmethod
+		endproperty
+
+		;Gets the number of elements actually contained in the collection.
+		public property Count, int
+			method get
+			proc
+				mreturn p_Collection.Count
+			endmethod
+		endproperty
+
+		;Gets or sets the element at the specified index.
+		public property Indexer, @RpsEnumMember
+			required in Index, int
+			method get
+			proc
+				mreturn (RpsEnumMember)p_Collection[Index]
+			endmethod
+			method set
+			proc
+				p_Collection[Index] = value
+			endmethod
+		endproperty
+
+		;Gets or sets the element at the specified index.
+		public property Indexer, @RpsEnumMember
+			required in MemberName, a
+			method get
+				record 
+					Index	,int
+					Found	,boolean
+				endrecord
+			proc
+				Found = false
+				for Index from 1 thru p_Collection.Count
+				begin
+					if (((RpsEnumMember)p_Collection[Index]).Name==MemberName)
+					begin
+						Found = true
+						exitloop
+					end
+				end
+				if (Found) then 
+					mreturn (RpsEnumMember)p_Collection[Index]
+				else
+					mreturn ^null
+			endmethod
+		endproperty
+
+		;Adds an element to the end of the collection. 
+		public method Add, int
+			required in RpsEnumMember, @RpsEnumMember
+			endparams
+		proc
+			mreturn p_Collection.Add(RpsEnumMember)
+		endmethod
+
+		;Removes the element at the specified index of the collection.
+		public method RemoveAt, void
+			required in Index, int
+		proc
+			p_Collection.RemoveAt(Index)
+		endmethod
+
+		;Searches for the specified element and returns the one-based index
+		;of the first occurrence within the entire collection.
+		public method IndexOf, int
+			required in RpsEnumMember, @RpsEnumMember
+		proc
+			mreturn p_Collection.IndexOf(RpsEnumMember)
+		endmethod
+
+		;Searches for the specified element and returns the one-based index
+		;of the first occurrence within the range of elements in the collection
+		;that extends from the specified index to the last element.
+		public method IndexOf, int
+			required in RpsEnumMember, @RpsEnumMember
+			required in StartIndex, int
+		proc
+			mreturn p_Collection.IndexOf(RpsEnumMember,StartIndex)
+		endmethod
+
+		;Searches for the specified element and returns the one-based index
+		;of the first occurrence within the range of elements in the collection
+		;that starts at the specified index and contains the specified number of
+		;elements. 
+		public method IndexOf, int
+			required in RpsEnumMember, @RpsEnumMember
+			required in StartIndex, int
+			required in Count, int
+		proc
+			mreturn p_Collection.IndexOf(RpsEnumMember,StartIndex,Count)
+		endmethod
+
+		;Removes all elements from the collection.
+		public method Clear, void
+		proc
+			p_Collection.Clear()
+		endmethod
+
+		;Inserts an element into the collection at the specified index.
+		public method Insert, void
+			required in AtIndex, int
+			required in RpsEnumMember, @RpsEnumMember
+			endparams
+		proc
+			p_Collection.Insert(AtIndex,RpsEnumMember)
+		endmethod
+
+		;Searches for the specified object and returns the one-based index of
+		;the last occurrence within the entire collection. 
+		public method LastIndexOf, int
+			required in RpsEnumMember, @RpsEnumMember
+		proc
+			mreturn p_Collection.LastIndexOf(RpsEnumMember)
+		endmethod
+
+		;Searches for the specified object and returns the one-based index of
+		;the last occurrence within the range of elements in the collection that
+		;extends from the first element to the specified index.
+		public method LastIndexOf, int
+			required in RpsEnumMember, @RpsEnumMember
+			required in StartIndex, int
+		proc
+			mreturn p_Collection.LastIndexOf(RpsEnumMember,StartIndex)
+		endmethod
+
+		;Searches for the specified object and returns the one-based index of
+		;the last occurrence within the range of elements in the collection that
+		;contains the specified number of elements and ends at the specified index. 
+		public method LastIndexOf, int
+			required in RpsEnumMember, @RpsEnumMember
+			required in StartIndex, int
+			required in Count, int
+		proc
+			mreturn p_Collection.LastIndexOf(RpsEnumMember,StartIndex,Count)
+		endmethod
+		
+		.endc
+		
+	endclass
+
+endnamespace

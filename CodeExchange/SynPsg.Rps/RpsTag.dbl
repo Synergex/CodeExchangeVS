@@ -1,0 +1,140 @@
+;******************************************************************************
+;
+; Class:		SynPsg.Rps.RpsTag
+;
+; Description:	Represents a single tag definition for a Repository structure
+;
+; Author:		Steve Ives, Synergex Professional Services Group
+;
+; Date: 		19th October 2007
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+;******************************************************************************
+;
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPsg.Rps
+
+namespace SynPsg.Rps
+
+	public class RpsTag
+		
+		;Tag attribute data
+		protected p_tg_info	,tg_info
+		protected p_TagName	,a30
+		
+		; Constructor
+		public method RpsTag
+			required in StructureName, a
+			required in TagName, a
+			endparams
+		proc
+			Repository.CheckIsOpen()
+			LoadTag(StructureName,TagName)
+		endmethod
+
+		; LoadTag method
+		private method LoadTag, void
+			required in StructureName, a
+			required in TagName, a
+			endparams
+		proc
+			;Save the tag name
+			p_TagName = RpsUtils.UpperCase(TagName)
+			begin
+				data p_s_info, s_info
+				;Set the current structure?
+				dd_struct(Repository.RpsControl,DDS_INFO,StructureName,p_s_info)
+				if (Repository.RpsControl.error)
+				begin
+					data errtxt, a120
+					s_bld(errtxt,,"Failed to set current repository structure to %a.",StructureName)
+                    throw new RpsTagException(%atrim(errtxt))
+				end
+				;Load tag information
+				dd_tag(Repository.RpsControl,DDTG_INFO,p_TagName,p_tg_info)
+				if (Repository.RpsControl.error)
+				begin
+					data errtxt,a120
+					s_bld(errtxt,,"Failed to load structure %a tag %a.",StructureName,TagName)
+					throw new RpsTagException(errtxt)
+				end
+			end
+		endmethod
+		
+		;----------------------------------------------------------------------
+		;Public properties to expose tag data to the outside world
+		
+		; Tag name (a30)
+		public property Name, a
+			method get
+			proc
+				mreturn %atrim(p_TagName)
+			endmethod
+		endproperty
+		
+		; Sequence number (d3)
+		public property SequenceNumber, int
+			method get
+			proc
+				mreturn p_tg_info.tgi_seqnm
+			endmethod
+		endproperty
+
+		; Tag field comparison connector (enum RpsTagComparison)
+		;	CompareAnd, 1
+		;	CompareOr, 2
+		public property ComparisonConnector, RpsTagComparison
+			method get
+			proc
+				mreturn (RpsTagComparison)integer(p_tg_info.tgi_tagcon)
+			endmethod
+		endproperty
+
+		; Field name if si_tagtyp = TAGFLD (a30)
+		public property Field, a
+			method get
+			proc
+				mreturn %atrim(p_tg_info.tgi_tagfld)
+			endmethod
+		endproperty
+
+		; Tag field comparison operator (enum RpsTagOperator)
+		;	OpEQ, 1
+		;	OpNE, 2
+		;	OpLE, 3
+		;	OpLT, 4
+		;	OpGE, 5
+		;	OpGT, 6
+		public property ComparisonOperator, RpsTagOperator
+			method get
+			proc
+				mreturn (RpsTagOperator)integer(p_tg_info.tgi_tagcmp)
+			endmethod
+		endproperty
+
+		; Tag field comparison value (a15)
+		public property ComparisonValue, a
+			method get
+			proc
+				mreturn %atrim(p_tg_info.tgi_tagval)
+			endmethod
+		endproperty
+
+	endclass
+
+endnamespace
+

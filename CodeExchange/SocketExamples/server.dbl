@@ -1,0 +1,398 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Synergy Language Socket API - TCP Server Example
+;
+; Module: server.dbl
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifdef DBLv9
+namespace SynPSG.CodeExchange.SocketExamples
+.endc ;DBLv9
+
+    main
+
+.include "DBLDIR:synsock.def"
+
+.define SERVERPORT      1234
+.define TTCHN           100
+
+.define SHUTDOWN_PREFIX     "*SHUTDOWN "
+.define SHUTDOWN_SERVER     SHUTDOWN_PREFIX+"SERVER*"
+.define SHUTDOWN_CONNECTION SHUTDOWN_PREFIX+"CONNECTION*"
+
+        external function
+            server_recv_peek    ,i
+            server_recv         ,i
+
+        structure message
+            text                ,a1
+
+        record
+            err                 ,i4 ;error number
+            using_msg_peek      ,i4 ;using SS_MSG_PEEK
+            only_process_one_msg,i4 ;only process one message from one client
+            socket              ,i4 ;server socket
+            client_socket       ,i4 ;client socket
+            client_port         ,i4 ;client port
+            client_inaddr       ,i4 ;client internet address
+            client_host         ,a126 ;client host name
+            shutdown            ,i4 ;1=shutdown client connection, 2=shutdown server
+            num_recv            ,i4 ;number of recv's done to get message in hdl
+            hdl                 ,D_HANDLE ;memory handle
+            hdl_size            ,i4 ;size of contents of hdl
+            pos                 ,i4 ;position in %instr
+
+    proc
+
+        xcall flags(7004020, 1)
+
+        open(TTCHN, O, "TT:")
+
+        xcall cmdln(client_host)
+        if(%instr(1, client_host, ' -? ') .or. %instr(1, client_host, ' -h '))
+        begin
+            writes(TTCHN, "dbr server [-p] [-one]")
+            writes(TTCHN, "")
+            writes(TTCHN, " -p = use SS_MSG_PEEK technique")
+            writes(TTCHN, " -one = only process one message, from one client")
+            writes(TTCHN, "")
+
+            call anyKey
+
+            close TTCHN
+            stop D_EXIT_SUCCESS
+        end
+
+        using_msg_peek = (%instr(1, client_host, ' -p ') .ne. 0)
+        only_process_one_msg = (%instr(1, client_host, ' -one ') .ne. 0)
+
+        clear hdl, num_recv
+
+        if(using_msg_peek) then
+            writes(TTCHN, "Socket Server example (using SS_MSG_PEEK)")
+        else
+            writes(TTCHN, "Socket Server example")
+        writes(TTCHN, "")
+
+        ;Create the server’s socket
+        writes(TTCHN, "Creating socket")
+        err = %ss_socket(socket, SS_SOCK_STREAM)
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+
+        ;Bind server port and use any network interface in host
+        writes(TTCHN, "Binding socket")
+        err = %ss_bind(socket, SERVERPORT, SS_INADDR_ANY)
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+
+        ;Listen for connections
+        writes(TTCHN, "Listening")
+        err = %ss_listen(socket)
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+
+        ;enter a loop, accepting connections from client(s)
+        do
+        begin
+            ;Wait for a connection from a client
+            writes(TTCHN, "Accepting client connections")
+            err = %ss_accept(socket, client_socket)
+            using err select
+            (SS_SUCCESS),
+            begin
+                ;get the remote endpoint
+                err = %ss_getsockname(socket, client_port, client_inaddr)
+                if (err .ne. SS_SUCCESS)
+                    goto unexpected_failure
+                err = %ss_gethostbyaddr(client_inaddr, client_host)
+                if (err .ne. SS_SUCCESS)
+                    goto unexpected_failure
+
+                clear shutdown
+
+                ;enter a loop, accepting messages from a single client
+                do
+                begin
+                    writes(TTCHN, "Waiting for message from client : "
+&                       +client_host(1:%trim(client_host))
+&                       +":"+%string(client_port))
+
+                    if(using_msg_peek) then
+                        err = %server_recv_peek(client_socket, hdl, num_recv)
+                    else
+                        err = %server_recv(client_socket, hdl, num_recv)
+                    using err select
+                    (SS_SUCCESS),
+                        nop
+                    (SS_ETIMEDOUT),
+                        ;timeout occurred, so shutdown connection to client
+                        shutdown = 1
+                    (),
+                        goto unexpected_failure
+                    endusing
+
+                    ;Display the message from the client
+                    if(hdl) then
+                    begin
+                        hdl_size = %mem_proc(DM_GETSIZE, hdl)
+                        writes(TTCHN, "Client message is : "+^m(hdl))
+                        writes(TTCHN, "Received "+%string(hdl_size)+" bytes"
+&                           +" in "+%string(num_recv)+" recv's")
+
+                        ;Check to see if we got a shutdown signal anywhere in the
+                        ; received message.
+                        ; Note, even if you send the shutdown message in its own
+                        ; message, you may actually receive the message appended to
+                        ; the end of another message.  With Windows 2003 SP2
+                        ; (and later) Microsoft introduced a network optimization
+                        ; which can combine multiple TCP/IP packets.  You should
+                        ; process all TCP/IP messages character by character, to
+                        ; make sure that you process the message properly.
+                        pos = %instr(1, ^m(hdl), SHUTDOWN_PREFIX)
+                        if(pos .gt. 0)
+                        begin
+                            using ^m(message.text(pos,hdl_size),hdl) select
+                            (SHUTDOWN_CONNECTION),
+                                shutdown = 1
+                            (SHUTDOWN_SERVER),
+                                shutdown = 2
+                            (SHUTDOWN_PREFIX), ;just in case
+                                shutdown = 2
+                            endusing
+                        end
+                        hdl = %mem_proc(DM_FREE, hdl)
+                    end
+                    else
+                    begin
+                        writes(TTCHN, "Client message is blank")
+                        hdl_size = 0
+                    end
+
+                    ;Send acknowledgement
+                    err = %ss_sendbuf(client_socket, "OK RECV="+%string(hdl_size))
+                    using err select
+                    (SS_SUCCESS),
+                        nop
+                    (SS_EACCES),
+                        writes(TTCHN, "EACCESS error")
+                    (SS_EDESTADDRREQ),
+                        writes(TTCHN, "EDESTADDRREQ error")
+                    (),
+                        goto unexpected_failure
+                    endusing
+
+                    ;force exit here, as we're only looking for one client message
+                    if(only_process_one_msg)
+                        shutdown = 2
+                end
+                until(shutdown .ge. 1)
+
+                ;Close the socket to the client
+                writes(TTCHN, "Closing client connection")
+                err = %ss_close(client_socket)
+                if (err .ne. SS_SUCCESS)
+                    goto unexpected_failure
+
+            end
+            (SS_ETIMEDOUT),
+                ;timeout occurred, so shutdown server
+                shutdown = 2
+            (),
+                goto unexpected_failure
+            endusing
+        end
+        until(shutdown .ge. 2)
+
+        ;Close the server’s socket descriptor
+        writes(TTCHN, "Closing socket")
+        err = %ss_close(socket)
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+
+        call anyKey
+
+        close TTCHN
+        stop D_EXIT_SUCCESS
+
+;------------------------------------------------------------------------
+
+    unexpected_failure,
+
+        writes(TTCHN, "Unexpected failure in call to socket function.")
+        writes(TTCHN, "Error code returned was: " + %string(err))
+        if(hdl)
+        begin
+            hdl_size = %mem_proc(DM_GETSIZE, hdl)
+            writes(TTCHN, "Partial client message is : "+^m(hdl))
+            writes(TTCHN, "Received "+%string(hdl_size)+" bytes"
+&               +" in "+%string(num_recv)+" recv's")
+            hdl = %mem_proc(DM_FREE, hdl)
+        end
+        writes(TTCHN, "Program terminated.")
+
+        call anyKey
+
+        close TTCHN
+        stop D_EXIT_FAILURE
+
+;------------------------------------------------------------------------
+
+    anyKey,
+
+.ifdef D_GUI
+        writes(TTCHN, "")
+        display(TTCHN, "Press any key to continue : ")
+        onerror anyKeyDone
+        accept(TTCHN, err, WAIT:10)
+    anyKeyDone,
+        offerror
+.endc ;D_GUI
+
+        return
+
+;------------------------------------------------------------------------
+
+    end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Get one message from the client
+
+    function server_recv
+        client_socket       ,n              ;REQ IN - client socket
+        hdl                 ,n              ;REQ OUT - hdl for message
+        num_recv            ,n              ;REQ OUT - number of message segments
+
+        structure message
+            text                ,a1
+
+        record
+            err                 ,i4
+            hdl_size            ,i4
+            bytes_received      ,i4
+            packet              ,a32
+
+    proc
+
+        clear hdl, num_recv
+
+        ;Wait for 2 minutes
+        err = %ss_select(client_socket, 120, 0)
+        if (err .ne. SS_SUCCESS)
+            freturn err
+
+        repeat
+        begin
+            ;get the next 32 characters from the system buffers
+            clear packet
+            bytes_received = -1
+            err = %ss_recv(client_socket, packet, bytes_received)
+            if (err .ne. SS_SUCCESS)
+            begin
+                call add_bytes_received
+                freturn err
+            end
+            ;Socket lost
+            if(bytes_received .eq. -1)
+                freturn SS_ENOTCONN
+
+            call add_bytes_received
+
+            ;No more information to receive
+            if(bytes_received .ne. ^size(packet))
+                exitloop
+        end
+
+        freturn SS_SUCCESS
+
+;------------------------------------------------------------------------
+
+    add_bytes_received,
+
+        if(bytes_received .gt. 0)
+        begin
+            ;increase size of dynamic memory area to store entire message
+            if(hdl) then
+            begin
+                hdl_size = %mem_proc(DM_GETSIZE, hdl)
+                hdl = %mem_proc(DM_RESIZ, hdl_size+bytes_received, hdl)
+            end
+            else
+            begin
+                hdl_size = 0
+                hdl = %mem_proc(DM_ALLOC.bor.DM_STATIC, bytes_received)
+            end
+            ^m(message.text(hdl_size+1:bytes_received),hdl) = packet
+            incr num_recv
+        end
+
+        return
+    end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Get one message from the client (using USING_MSG_PEEK)
+
+    function server_recv_peek
+        client_socket       ,n              ;REQ IN - client socket
+        hdl                 ,i              ;REQ OUT - hdl for message
+        num_recv            ,n              ;REQ OUT - number of message segments
+
+        structure message
+            text                ,a1
+
+        record
+            err                 ,i4
+            message_length      ,i4
+            bytes_received      ,i4
+            group packet        ,a
+                length              ,i4
+            endgroup
+
+    proc
+
+        clear hdl, num_recv
+
+        ;Wait for 2 minutes
+        err = %ss_select(client_socket, 120, 0)
+        if (err .ne. SS_SUCCESS)
+            freturn err
+
+        ;Peek into packet to find out the packet length
+        clear packet
+        bytes_received = -1
+        err = %ss_recv(client_socket, packet, bytes_received, SS_MSG_PEEK)
+        if (err .ne. SS_SUCCESS)
+            freturn err
+        ;Socket lost
+        if(bytes_received .eq. -1)
+            freturn SS_ENOTCONN
+
+        if(bytes_received .eq. ^size(packet))
+        begin
+            message_length = %ss_ntohl(packet.length)
+            num_recv = 1 ;got a message
+
+            if(message_length .gt. 4)
+            begin
+                hdl = %mem_proc(DM_ALLOC.bor.DM_STATIC, message_length)
+
+                ;Receive packet based on the length obtained with the peek
+                err = %ss_recvbuf(client_socket, ^m(hdl))
+                if (err .ne. SS_SUCCESS)
+                    freturn err
+
+                ;Now remove the first four bytes, as they're not part of the
+                ; "official" message
+                ^m(hdl) = ^m(message.text(5,message_length), hdl)
+                hdl = %mem_proc(DM_RESIZ, message_length-4, hdl)
+            end
+        end
+
+        freturn SS_SUCCESS
+    end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifdef DBLv9
+endnamespace
+.endc ;DBLv9

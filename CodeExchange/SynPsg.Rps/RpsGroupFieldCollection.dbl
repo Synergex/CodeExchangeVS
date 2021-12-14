@@ -1,0 +1,438 @@
+;******************************************************************************
+;
+; Class:		SynPsg.Rps.RpsGroupFieldCollection
+;
+; Description:	Represents a collection of fields for a group field
+;
+; Author:		Steve Ives, Synergex Professional Services Group
+;
+; Date: 		1tth November 2007
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+;******************************************************************************
+;
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPsg.Rps
+.ifdef DBLV915
+import Synergex.SynergyDE.Collections
+.else
+import System.Collections
+.endc
+
+namespace SynPsg.Rps
+
+	public class RpsGroupFieldCollection
+		
+		private p_Collection, @ArrayList
+
+		; Constructor (for an empty collection)
+		public method RpsGroupFieldCollection
+			endparams
+		proc
+			p_Collection = new ArrayList()
+		endmethod
+
+		; Constructor (default capacity)
+		public method RpsGroupFieldCollection
+			required in StructureName, a
+			required in GroupName, a
+			endparams
+		proc
+			p_Collection = new ArrayList()
+			Repository.CheckIsOpen()
+			LoadFields(StructureName,GroupName)
+		endmethod
+		
+		; Constructor (specified capacity)
+		public method RpsGroupFieldCollection
+			required in StructureName, a
+			required in GroupName, a
+			required in Capacity, int
+			endparams
+		proc
+			p_Collection = new ArrayList(Capacity)
+			Repository.CheckIsOpen()
+			LoadFields(StructureName,GroupName)
+		endmethod
+		
+		; Destructor
+		method ~RpsGroupFieldCollection
+		proc
+			clear p_Collection
+		endmethod
+
+		; Load group fields
+		private method LoadFields, void
+			required in StructureName, a
+			required in GroupName, a
+			endparams
+			record local_data
+				MemHandle, int
+				ix, int
+			endrecord
+		proc
+			init local_data
+			try 
+			begin
+				data p_s_info, s_info
+				data p_f_info, f_info
+
+				;Set the current structure and get structure information
+				dd_struct(Repository.RpsControl,DDS_INFO,StructureName,p_s_info)
+				if (Repository.RpsControl.error)
+					throw new RpsGroupException("Failed to get information for repository structure "+StructureName)
+
+				;Get field information for group field
+				dd_field(Repository.RpsControl,DDF_INFO,GroupName,p_f_info)
+				if (Repository.RpsControl.error)
+				begin
+					data msg, a128
+					s_bld(msg,,"Failed to get information for repository field %a.%a",StructureName,GroupName)
+					throw new RpsGroupException(atrim(msg))
+				end
+
+				;Make sure this really is a group
+				if (!p_f_info.fi_group)
+				begin
+					data msg, a128
+					s_bld(msg,,"Repository field %a.%a is not a group!",StructureName,GroupName)
+					throw new RpsGroupException(atrim(msg))
+				end
+				
+				;Is this an implicit group?
+				if (p_f_info.fi_struct) then 
+				begin
+					;Implicit group, we need to get the group fields from another structure
+					data ReferencedStructure, a30
+					data refd_s_info, s_info
+
+					;Get the name of the implicit groups structure
+					dd_field(Repository.RpsControl,DDF_TEXT,p_f_info.fi_struct,ReferencedStructure)
+					if (Repository.RpsControl.error)
+					begin
+						data msg, a128
+						s_bld(msg,,"Failed to get referenced structure name for repository field %a.%a",StructureName,GroupName)
+						throw new RpsGroupException(atrim(msg))
+					end
+
+					;Get the implicit group structures information
+					dd_struct(Repository.RpsControl,DDS_INFO,ReferencedStructure,refd_s_info)
+					if (Repository.RpsControl.error)
+						throw new RpsGroupException("Failed to get information for referenced structure "+ReferencedStructure)
+
+					;Make sure the referenced structure has fields
+					if (!refd_s_info.si_childct)
+						throw new RpsGroupException("Referenced structure "+atrim(ReferencedStructure)+ " has no fields!")
+							
+					;Get a list of the fields for the implicit groups structure
+					MemHandle = %mem_proc(DM_ALLOC,^size(strIdentifier)*refd_s_info.si_childct)
+					dd_field(Repository.RpsControl,DDF_SLIST,refd_s_info.si_childct,^m(strIdentifier[1],MemHandle))
+					if (Repository.RpsControl.error)
+						throw new RpsGroupException("Failed to get field names for referenced structure "+ReferencedStructure)
+
+					;Add fields to the collection
+					for ix from 1 thru refd_s_info.si_childct
+					begin
+						data ReferencedField, a30
+						ReferencedField = ^m(strIdentifier[ix],MemHandle)
+						p_Collection.Add(new RpsField(ReferencedStructure,ReferencedField))
+					end
+
+				end
+				else
+				begin
+					;Explicit group, we the group fields are defined locally
+
+					;Do we have any fields to load?
+					if (p_f_info.fi_mbrct)
+					begin
+
+						;Set context to the requested group field
+						dd_field(Repository.RpsControl,DDF_GROUP,GroupName)
+						if (Repository.RpsControl.error)
+							throw new RpsGroupException("Failed to set field context to group "+GroupName)
+
+						;Size the field names array and get field names
+						MemHandle = %mem_proc(DM_ALLOC,^size(strIdentifier)*p_f_info.fi_mbrct)
+						dd_field(Repository.RpsControl,DDF_SLIST,p_f_info.fi_mbrct,^m(strIdentifier[1],MemHandle))
+						if (Repository.RpsControl.error)
+							throw new RpsGroupException("Failed to get field names for group "+GroupName)
+
+						;Add fields to the collection
+						for ix from 1 thru p_f_info.fi_mbrct
+							p_Collection.Add(new RpsField(StructureName,GroupName,^m(strIdentifier[ix],MemHandle)))
+
+						;Reset field context
+						dd_field(Repository.RpsControl,DDF_ENDGROUP)
+						if (Repository.RpsControl.error)
+							throw new RpsGroupException("Failed to reset field context from group "+GroupName)
+
+					end
+				end
+			end
+			finally
+			begin
+				;Free field names array
+				if (MemHandle)
+                    MemHandle = %mem_proc(DM_FREE,MemHandle)
+			end
+			endtry
+		endmethod
+		
+		; Remove overlay fields from the collection
+		public method RemoveOverlays, void
+			record 
+				index, int
+				field, @RpsField
+			endrecord
+		proc
+			index=1
+			repeat
+			begin
+				if (index<=(p_Collection.Count)) then
+				begin
+					field=(RpsField)p_Collection[index]
+					if (field.OverlaysField) then
+						p_Collection.RemoveAt(index)
+					else
+						index+=1
+				end
+				else
+					exitloop
+			end
+		endmethod
+
+		; Remove fields marked as "Excluded by Language" from the collection
+		public method RemoveExcludedByLanguage, void
+			record 
+				index, int
+				field, @RpsField
+			endrecord
+		proc
+			index=1
+			repeat
+			begin
+				if (index<=(p_Collection.Count)) then
+				begin
+					field=(RpsField)p_Collection[index]
+					if (field.ExcludedByLanguage) then
+						p_Collection.RemoveAt(index)
+					else
+						index+=1
+				end
+				else
+					exitloop
+			end
+		endmethod
+
+		; Remove fields marked as "Excluded by Toolkit" from the collection
+		public method RemoveExcludedByToolkit, void
+			record 
+				index, int
+				field, @RpsField
+			endrecord
+		proc
+			index=1
+			repeat
+			begin
+				if (index<=(p_Collection.Count)) then
+				begin
+					field=(RpsField)p_Collection[index]
+					if (field.ExcludedByToolkit) then
+						p_Collection.RemoveAt(index)
+					else
+						index+=1
+				end
+				else
+					exitloop
+			end
+		endmethod
+
+		; Remove fields marked as "Excluded by ReportWriter" from the collection
+		public method RemoveExcludedByReportWriter, void
+			record 
+				index, int
+				field, @RpsField
+			endrecord
+		proc
+			index=1
+			repeat
+			begin
+				if (index<=(p_Collection.Count)) then
+				begin
+					field=(RpsField)p_Collection[index]
+					if (field.ExcludedByReportWriter) then
+						p_Collection.RemoveAt(index)
+					else
+						index+=1
+				end
+				else
+					exitloop
+			end
+		endmethod
+
+		; Remove fields marked as "Excluded by Web" from the collection
+		public method RemoveExcludedByWeb, void
+			record 
+				index, int
+				field, @RpsField
+			endrecord
+		proc
+			index=1
+			repeat
+			begin
+				if (index<=(p_Collection.Count)) then
+				begin
+					field=(RpsField)p_Collection[index]
+					if (field.ExcludedByWeb) then
+						p_Collection.RemoveAt(index)
+					else
+						index+=1
+				end
+				else
+					exitloop
+			end
+		endmethod
+
+		;-----------------------------------------------------------------------
+		;The follwoing members make the collection look just like an ArrayList
+		
+		;Gets or sets the number of elements that the collection can contain.
+		public property Capacity, int
+			method get
+			proc
+				mreturn p_Collection.Capacity
+			endmethod
+			method set
+			proc
+				p_Collection.Capacity = value
+			endmethod
+		endproperty
+
+		;Gets the number of elements actually contained in the collection.
+		public property Count, int
+			method get
+			proc
+				mreturn p_Collection.Count
+			endmethod
+		endproperty
+
+		;Gets or sets the element at the specified index.
+		public property Indexer, @RpsField
+			required in Index, int
+			method get
+			proc
+				mreturn (RpsField)p_Collection[Index]
+			endmethod
+			method set
+			proc
+				p_Collection[Index] = value
+			endmethod
+		endproperty
+
+		;Adds an element to the end of the collection. 
+		public method Add, int
+			required in RpsField, @RpsField
+			endparams
+		proc
+			mreturn p_Collection.Add(RpsField)
+		endmethod
+
+		;Removes the element at the specified index of the collection.
+		public method RemoveAt, void
+			required in Index, int
+		proc
+			p_Collection.RemoveAt(Index)
+		endmethod
+
+		;Searches for the specified element and returns the one-based index
+		;of the first occurrence within the entire collection.
+		public method IndexOf, int
+			required in RpsField, @RpsField
+		proc
+			mreturn p_Collection.IndexOf(RpsField)
+		endmethod
+
+		;Searches for the specified element and returns the one-based index
+		;of the first occurrence within the range of elements in the collection
+		;that extends from the specified index to the last element.
+		public method IndexOf, int
+			required in RpsField, @RpsField
+			required in StartIndex, int
+		proc
+			mreturn p_Collection.IndexOf(RpsField,StartIndex)
+		endmethod
+
+		;Searches for the specified element and returns the one-based index
+		;of the first occurrence within the range of elements in the collection
+		;that starts at the specified index and contains the specified number of
+		;elements. 
+		public method IndexOf, int
+			required in RpsField, @RpsField
+			required in StartIndex, int
+			required in Count, int
+		proc
+			mreturn p_Collection.IndexOf(RpsField,StartIndex,Count)
+		endmethod
+
+		;Removes all elements from the collection.
+		public method Clear, void
+		proc
+			p_Collection.Clear()
+		endmethod
+
+		;Inserts an element into the collection at the specified index.
+		public method Insert, void
+			required in AtIndex, int
+			required in RpsField, @RpsField
+			endparams
+		proc
+			p_Collection.Insert(AtIndex,RpsField)
+		endmethod
+
+		;Searches for the specified object and returns the one-based index of
+		;the last occurrence within the entire collection. 
+		public method LastIndexOf, int
+			required in RpsField, @RpsField
+		proc
+			mreturn p_Collection.LastIndexOf(RpsField)
+		endmethod
+
+		;Searches for the specified object and returns the one-based index of
+		;the last occurrence within the range of elements in the collection that
+		;extends from the first element to the specified index.
+		public method LastIndexOf, int
+			required in RpsField, @RpsField
+			required in StartIndex, int
+		proc
+			mreturn p_Collection.LastIndexOf(RpsField,StartIndex)
+		endmethod
+
+		;Searches for the specified object and returns the one-based index of
+		;the last occurrence within the range of elements in the collection that
+		;contains the specified number of elements and ends at the specified index. 
+		public method LastIndexOf, int
+			required in RpsField, @RpsField
+			required in StartIndex, int
+			required in Count, int
+		proc
+			mreturn p_Collection.LastIndexOf(RpsField,StartIndex,Count)
+		endmethod
+
+	endclass
+
+endnamespace

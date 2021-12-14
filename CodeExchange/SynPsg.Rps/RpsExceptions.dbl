@@ -1,0 +1,107 @@
+
+import System
+
+namespace SynPsg.Rps
+
+	public class RpsException extends ApplicationException
+		public method RpsException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+
+	public class RpsStructureException extends RpsException
+		public method RpsStructureException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+	
+	public class RpsFieldException extends RpsException
+		public method RpsFieldException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+
+	public class RpsFileException extends RpsException
+		public method RpsFileException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+
+	public class RpsTagException extends RpsException
+		public method RpsTagException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+
+	public class RpsFormatException extends RpsException
+		public method RpsFormatException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+
+	public class RpsKeyException extends RpsException
+		public method RpsKeyException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+
+	public class RpsTemplateException extends RpsException
+		public method RpsTemplateException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+
+	public class RpsRelationException extends RpsException
+		public method RpsRelationException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+
+	public class RpsGroupException extends RpsException
+		public method RpsGroupException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+	
+	.ifdef DBLV93
+	public class RpsEnumException extends RpsException
+		public method RpsEnumException
+			required in ErrorText, string
+			endparams
+			parent(ErrorText)
+		proc
+		endmethod
+	endclass
+	.endc
+	
+endnamespace

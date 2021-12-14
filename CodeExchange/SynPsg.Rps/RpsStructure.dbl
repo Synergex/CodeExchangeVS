@@ -1,0 +1,284 @@
+;******************************************************************************
+;
+; Class:		SynPsg.Rps.RpsStructure
+;
+; Description:	Represents a single Repository structure definition
+;
+; Author:		Steve Ives, Synergex Professional Services Group
+;
+; Date: 		19th October 2007
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+;******************************************************************************
+;
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPsg.Rps
+.ifdef DBLV915
+import Synergex.SynergyDE.Collections
+.else
+import System.Collections
+.endc
+
+namespace SynPsg.Rps
+
+	public class RpsStructure
+
+		;Structure attribute data
+		protected p_s_info				,s_info
+		protected p_StructureName		,a30		; Structure name
+		protected p_StructureAlias		,a30		; Structure alias (CodeGen)
+		protected p_Description			,a40		; Description
+		protected p_LongDescription		,a1800		; Long description
+		protected p_UserText			,a60		; User text
+		protected p_Fields				,@RpsFieldCollection
+		protected p_Keys				,@RpsKeyCollection
+		protected p_Files				,@RpsFileCollection
+		protected p_Tags				,@RpsTagCollection
+		protected p_Formats				,@RpsFormatCollection
+		protected p_Relations			,@RpsRelationCollection
+
+		; Constructor, load structure by name, load all fields
+		public method RpsStructure
+			required in StructureName, a
+			endparams
+		proc
+			Repository.CheckIsOpen()
+			LoadStructure(StructureName)
+		endmethod
+
+		; Constructor, load structure by name, fields passed in
+		public method RpsStructure
+			required in StructureName, a
+			required in Fields, @RpsFieldCollection
+			endparams
+		proc
+			p_Fields = Fields
+			Repository.CheckIsOpen()
+			LoadStructure(StructureName)
+		endmethod
+
+		; Destructor
+		method ~RpsStructure
+		proc
+			clear p_Fields, p_Keys, p_Files, p_Tags, p_Formats, p_Relations
+		endmethod
+
+		; LoadStructure method
+		private method LoadStructure, void
+			required in StructureName, a
+			endparams
+		proc
+
+			;Save structure name
+			p_StructureName = RpsUtils.UpperCase(StructureName)
+
+			;Load structure information
+			dd_struct(Repository.RpsControl,DDS_INFO,p_StructureName,p_s_info)
+			if (Repository.RpsControl.error)
+				throw new RpsStructureException("Failed to get information for repository structure "+p_StructureName)
+
+			;Load the structures text-based attributes
+
+			;Description
+			if (p_s_info.si_desc)
+			begin
+				xcall dd_struct(Repository.RpsControl,DDS_TEXT,p_s_info.si_desc,p_Description)
+				if (Repository.RpsControl.error)
+					throw new RpsStructureException("Failed to get description for repository structure "+p_StructureName)
+			end
+
+			;Long description
+			if (p_s_info.si_ldesc)
+			begin
+				dd_struct(Repository.RpsControl,DDS_TEXT,p_s_info.si_ldesc,p_LongDescription)
+				if (Repository.RpsControl.error)
+					throw new RpsStructureException("Failed to get long description for repository structure "+p_StructureName)
+			end
+
+			;User text string
+			if (p_s_info.si_utext)
+			begin
+				dd_struct(Repository.RpsControl,DDS_TEXT,p_s_info.si_utext,p_UserText)
+				if (Repository.RpsControl.error)
+					throw new RpsStructureException("Failed to get user text for repository structure "+p_StructureName)
+			end
+
+		endmethod
+
+		;----------------------------------------------------------------------
+		;Public properties to expose the structures attributes
+
+		; Fields collection
+		public property Fields, @RpsFieldCollection
+			method get
+			proc
+				;Load the fields collection the first time it is referenced
+				if (p_Fields==^null)
+					p_Fields = new RpsFieldCollection(p_StructureName)
+				mreturn p_Fields
+			endmethod
+		endproperty
+
+		; Keys collection
+		public property Keys, @RpsKeyCollection
+			method get
+			proc
+				;Load the keys collection the first time it is referenced
+				if (p_Keys==^null)
+					p_Keys = new RpsKeyCollection(p_StructureName)
+				mreturn p_Keys
+			endmethod
+		endproperty
+
+		; Files collection
+		public property Files, @RpsFileCollection
+			method get
+			proc
+				;Load the files collection the first time it is referenced
+				if (p_Files==^null)
+					p_Files = new RpsFileCollection(p_StructureName)
+				mreturn p_Files
+			endmethod
+		endproperty
+
+		; Tags collection
+		public property Tags, @RpsTagCollection
+			method get
+			proc
+				;Load the tags collection the first time it is referenced
+				if (p_Tags==^null)
+					p_Tags = new RpsTagCollection(p_StructureName)
+				mreturn p_Tags
+			endmethod
+		endproperty
+
+		; Formats collection
+		public property Formats, @RpsFormatCollection
+			method get
+			proc
+				;Load the formats collection the first time it is referenced
+				if (p_Formats==^null)
+					p_Formats = new RpsFormatCollection(p_StructureName)
+				mreturn p_Formats
+			endmethod
+		endproperty
+
+		; Relations collection
+		public property Relations, @RpsRelationCollection
+			method get
+			proc
+				;Load the relations collection the first time it is referenced
+				if (p_Relations==^null)
+					p_Relations = new RpsRelationCollection(p_StructureName)
+				mreturn p_Relations
+			endmethod
+		endproperty
+
+		; Structure name (a30)
+		public property Name, a
+			method get
+			proc
+				mreturn %atrim(p_StructureName)
+			endmethod
+		endproperty
+
+		; Structure alias (a30)
+		; This property would not normally be here, it was added so that
+		; CodeGen can override a structure name via it's structure alias
+		; mechanism.  For other uses this property should be removed.
+		public property Alias, a
+			method get
+			proc
+				mreturn %atrim(p_StructureAlias)
+			endmethod
+			method set
+			proc
+				p_StructureAlias = value
+			endmethod
+		endproperty
+
+		; File type (a15, ie "DBL ISAM", "ASCII")
+		public property FileType, a
+			method get
+			proc
+				mreturn %atrim(p_s_info.si_filtyp)
+			endmethod
+		endproperty
+
+		; Description (a40)
+		public property Description, a
+			method get
+			proc
+				mreturn %atrim(p_Description)
+			endmethod
+		endproperty
+
+		; Long description (a1800)
+		public property LongDescription, a
+			method get
+			proc
+				mreturn %atrim(p_LongDescription)
+			endmethod
+		endproperty
+
+		; User text (a60)
+		public property UserText, a
+			method get
+			proc
+				mreturn %atrim(p_UserText)
+			endmethod
+		endproperty
+
+		; Record size (d5)
+		public property Length, int
+			method get
+			proc
+				mreturn p_s_info.si_recsz
+			endmethod
+		endproperty
+
+		; Number of fields/groups in first level (d3)
+		public property ChildCount, int
+			method get
+			proc
+				mreturn p_s_info.si_childct
+			endmethod
+		endproperty
+
+		; Structure tag type (enum RpsTagType)
+		;	None, 0
+		;	FieldAndValue, 1
+		;	RecordSize, 2
+		public property TagType, RpsTagType
+			method get
+			proc
+				mreturn (RpsTagType)integer(p_s_info.si_tagtyp)
+			endmethod
+		endproperty
+
+		; First (or only) file assigned to (a30)
+		public property FirstFile, a
+			method get
+			proc
+				mreturn %atrim(p_s_info.si_file)
+			endmethod
+		endproperty
+
+	endclass
+
+endnamespace
+

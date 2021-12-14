@@ -1,0 +1,2326 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+main ;synckodbc
+.include 'INC:synckodbc.def'
+
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.include 'WND:tools.def'
+.include 'WND:tkctl.def'
+.include 'WND:inpctl.def'
+
+.define APP_NAME        'SYNCKODBC'
+.define APP_VERSION     'v1.2'
+
+.define NUM_SYSCATFILES 10              ;number of system catalog files to show
+.define NUM_ODBCENVVARS 33              ;number of xfODBC environment variables to show
+
+.define GENESIS_HOME    'GENESIS_HOME'  ;logical containing location of connect files
+
+.define EDIT_COMMAND    'EDIT_COMMAND'  ;logical containing edit commands
+
+.ifdef D_GUI
+.define MAX_WND_SIZE    76
+.else
+.define MAX_WND_SIZE    78
+.endc
+
+;menu column array entries
+.define MC_MAIN         1
+.define MC_INPUT        2
+.define MC_SELECT       3
+.define MC_LIST         4
+
+.include 'INC:synckodbc.def'
+
+    external function
+        add_dir_sep     ,a
+        format_name     ,a
+        get_dictsource  ,a
+        get_datasource  ,a
+
+    record clr
+        mbuffer         ,a1024          ;menu column buffer
+        genesishome     ,a255           ;genesis_home value
+
+.align
+    record clr_i
+        colidm          ,i4             ;column ID main
+        colido          ,i4             ;column ID options
+        genesishomelen  ,i4             ;length
+        sts             ,i4             ;status
+
+proc
+
+    clear clr, ^i(clr_i), cmn, ^i(cmn_i)
+
+    xcall u_start(, 1)
+
+    ; Determine O/S for command
+    xcall envrn(envrn)
+
+    ; set the header text and left justify
+    xcall e_sect(APP_NAME, D_HEADER, D_CENTER, D_CLEAR)
+
+    ; make sure GENESIS_HOME is setup
+    xcall getlog(GENESIS_HOME, genesishome, genesishomelen)
+    if (.not.genesishomelen)
+    begin
+        sts = %u_msgbox("Environment variable " + GENESIS_HOME + " is not defined",
+&           D_MOK+D_MICONSTOP, APP_NAME + " " + APP_VERSION + " ERROR")
+        xcall u_finish
+        stop D_EXIT_FAILURE
+    end
+
+    ;add trailing directory seperator
+    genesishome = %add_dir_sep(genesishome)
+    genesishomelen = %trim(genesishome)
+
+    xcall e_state(D_ON, D_VALSTCHG)
+
+    ; set the toolkit environment methods
+    using envrn select
+    (6), ;OpenVMS
+    begin
+        xcall e_method(D_METH_APPCLOSE, 'app_close',
+&           D_METH_LIBRARY, 'tklib_sh',
+&           D_METH_UTILS, 'app_utils',
+&           D_METH_ENTRST, 'app_entrst')
+
+        activex_list = -1
+    end
+    (8), ;UNIX
+    begin
+        xcall e_method(D_METH_APPCLOSE, 'app_close',
+&           D_METH_UTILS, 'app_utils',
+&           D_METH_ENTRST, 'app_entrst')
+
+        activex_list = -1
+    end
+    (), ;Windows
+    begin
+        xcall e_method(D_METH_APPCLOSE, 'app_close',
+&           D_METH_UTILS, 'app_utils',
+&           D_METH_ENTRST, 'app_entrst')
+
+        xcall getlog('ACTIVEX_LIST', mbuffer, sts)
+        if(sts .eq. 1) then
+        begin
+            using mbuffer select
+            ('0'),
+                activex_list = -1 ;disable ALL activex lists
+            ('1'),
+                activex_list = 1  ;force all lists to be activex lists
+            (),
+                activex_list = 0  ;use default (activex) list type
+            endusing
+        end
+        else
+            activex_list = 0
+    end
+    endusing
+
+    using activex_list select
+    (.gt.0),
+        list_options = 'ACTIVEX'
+    (.lt.0),
+        list_options = 'NOACTIVEX'
+    (0),
+        list_options = 'ACTIVEX'
+    endusing
+
+    ;create menu columns, but do not place
+    xcall mb_column(mbuffer, 'OKCANCEL', "General  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'O_EXIT', "OK", F4_KEY)
+    xcall mb_entry(mbuffer, 'O_ABANDON', "Cancel", F3_KEY)
+    xcall mb_line(mbuffer)
+    xcall mb_entry(mbuffer, 'U_ABOUT', "About")
+    xcall mb_entry(mbuffer, 'O_QUIT', "Exit program")
+    xcall mb_end(mbuffer, colid(MC_MAIN))
+
+    xcall mb_column(mbuffer, 'INPUT', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'I_FRST', "First field")
+    xcall mb_entry(mbuffer, 'I_LAST', "Last field")
+    xcall mb_entry(mbuffer, 'I_NEXT', "Next field")
+    xcall mb_entry(mbuffer, 'I_PREV', "Prev field")
+    xcall mb_entry(mbuffer, 'E_LEFT', "Left 1 character", LEFT_KEY)
+    xcall mb_entry(mbuffer, 'E_RIGHT', "Right 1 character", RIGHT_KEY)
+    xcall mb_entry(mbuffer, 'E_CDEL', "Delete character", CTRL_H_KEY)
+    xcall mb_end(mbuffer, colid(MC_INPUT))
+
+    xcall mb_column(mbuffer, 'SELECT', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'S_DOWN', "Next item", DOWN_KEY)
+    xcall mb_entry(mbuffer, 'S_UP', "Prev item", UP_KEY)
+    xcall mb_end(mbuffer, colid(MC_SELECT))
+
+    xcall mb_column(mbuffer, 'LIST', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'S_LEFT', "Scroll left", LEFT_KEY)
+    xcall mb_entry(mbuffer, 'S_RIGHT', "Scroll right", RIGHT_KEY)
+    xcall mb_entry(mbuffer, 'S_DOWN', "Next item", DOWN_KEY)
+    xcall mb_entry(mbuffer, 'S_UP', "Prev item", UP_KEY)
+    xcall mb_entry(mbuffer, 'S_PGDN', "Next page")
+    xcall mb_entry(mbuffer, 'S_PGUP', "Prev page")
+    xcall mb_entry(mbuffer, 'S_TOP', "Top of list")
+    xcall mb_entry(mbuffer, 'S_BOTTOM', "Bottom of list")
+    xcall mb_end(mbuffer, colid(MC_LIST))
+
+    ;create method set
+    close_msid = %u_wndevents(D_CREATE, , D_EVENT_CLOSE, "X_O_ABANDON")
+
+
+    ;create menu(s) for main navigation options
+    xcall mb_column(mbuffer, 'MAIN', "General  ", D_GLOBAL)
+    xcall mb_entry(mbuffer, 'U_ABOUT', "About")
+    xcall mb_entry(mbuffer, 'O_QUIT', "Exit program", F3_KEY)
+    xcall mb_end(mbuffer, colidm)
+
+    xcall mb_column(mbuffer, 'OPTIONS', "Options  ")
+    xcall mb_entry(mbuffer, 'ENV_VARS', "Show xfODBC environment variables")
+    xcall mb_entry(mbuffer, 'CF_SELECT', "Select connect file")
+    xcall mb_entry(mbuffer, 'CF_VIEW', "View connect file")
+    xcall mb_entry(mbuffer, 'CF_DATE', "System catalog dates")
+    xcall mb_entry(mbuffer, 'CF_EDIT', "Edit connect file")
+    xcall mb_end(mbuffer, colido)
+
+    xcall m_defcol(2)
+
+    xcall e_sect("F3 = Exit", D_INFO, D_LEFT, D_CLEAR)
+
+    mbuffer = '[CF_SELECT]'
+    repeat
+    begin
+        xcall m_column(D_PLACE, colido)
+        if(connectfile) then
+            xcall m_enable(D_ENTRY, colido, 'CF_VIEW', 'CF_DATE', 'CF_EDIT')
+        else
+            xcall m_disable(D_ENTRY, colido, 'CF_VIEW', 'CF_DATE', 'CF_EDIT')
+        xcall m_process(mbuffer)
+        xcall m_column(D_REMOVE, colido)
+        using g_entnam select
+        ('O_EXIT','O_ABANDON','O_QUIT'),
+            exitloop
+        ('ENV_VARS'),
+            xcall show_envvars
+        ('CF_SELECT'),
+        begin
+            xcall get_connect_file
+
+            ; set the header text and left justify
+            xcall e_sect(APP_NAME+"  Connect file="+%atrim(connectfile)
+&               , D_HEADER, D_CENTER, D_CLEAR)
+
+            ;next menu option
+            if(connectfile) then
+                mbuffer = '[CF_VIEW]'
+            else
+                mbuffer = '[CF_SELECT]'
+        end
+        ('CF_VIEW'),
+            xcall cf_view
+        ('CF_DATE'),
+            xcall catalog_dates
+        ('CF_EDIT'),
+            xcall cf_edit(genesishome(1:genesishomelen))
+        endusing
+
+        ;closed application
+        if(g_entnam .eq. 'O_QUIT')
+            exitloop
+    end
+
+    xcall u_finish
+    freturn D_EXIT_SUCCESS
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; get the required connect file
+
+subroutine get_connect_file
+
+.include 'WND:tools.def'
+
+.include 'INC:synckodbc.def'
+
+    external function
+        open_connectfile,i
+
+.align
+    record clr_i
+        sts             ,i4             ;status
+        chan            ,i4             ;channel
+        bld_id          ,i4             ;build id
+        wndidp          ,i4             ;input window
+        col_id          ,i4             ;menu column
+
+.align
+    record clr
+        mbuffer         ,a1024          ;menu buffer
+
+.align
+    record inp_rec
+        filename        ,a255
+
+proc
+
+    xcall e_enter
+
+    xcall m_column(D_REMOVE, D_ALL)
+
+    xcall m_column(D_PLACE, colid(MC_MAIN))
+
+    xcall e_sect("F4 = OK, F3 = Cancel", D_INFO, D_LEFT, D_CLEAR)
+
+    using envrn select
+    (6, 8), ;OpenVMS, UNIX
+    begin
+        xcall mb_column(mbuffer, 'ODBC_X', "Options  ",, D_NOPLC)
+        xcall mb_entry(mbuffer, 'I_DRILL', "List "+GENESIS_HOME+" files", F7_KEY)
+        xcall mb_end(mbuffer, col_id)
+
+        xcall ib_input(bld_id, 'DATE_LIST', 7, MAX_WND_SIZE)
+
+        xcall ib_field(bld_id, 'filename', D_FLD_TYPE, D_ALPHA,
+&           D_FLD_SIZE, ^size(inp_rec.filename)/5,
+&           D_FLD_DIM, 5,
+&           D_FLD_FPOS, 2, 20,
+&           D_FLD_POS, 2, 2,
+&           D_FLD_PROMPT, "Connect file",
+&           D_FLD_HYPERLINK, 'CF_HYPER',
+&           D_FLD_DRILL, 'CF_DRILL')
+
+        xcall ib_end(bld_id, wndidp)
+    end
+    (), ;Windows
+    begin
+        xcall mb_column(mbuffer, 'ODBC_X', "Options  ",, D_NOPLC)
+        xcall mb_entry(mbuffer, 'I_DRILL', "List "+GENESIS_HOME+" files", F7_KEY)
+        xcall mb_entry(mbuffer, 'I_HYPER', "Use 'Open File' dialog", CTRL_O_KEY)
+        xcall mb_end(mbuffer, col_id)
+
+        xcall ib_input(bld_id, 'DATE_LIST', 3, MAX_WND_SIZE)
+
+        xcall ib_field(bld_id, 'filename', D_FLD_TYPE, D_ALPHA,
+&           D_FLD_SIZE, ^size(inp_rec.filename),
+&           D_FLD_VIEWLEN, ^size(inp_rec.filename)/5,
+&           D_FLD_FPOS, 2, 20,
+&           D_FLD_POS, 2, 2,
+&           D_FLD_PROMPT, "Connect file",
+&           D_FLD_HYPERLINK, 'CF_HYPER',
+&           D_FLD_DRILL, 'CF_DRILL')
+
+        xcall ib_end(bld_id, wndidp)
+
+        xcall u_wndevents(D_ASSIGN, close_msid, wndidp)
+
+        xcall b_button(wndidp, "O_EXIT", DSB_TEXT, "OK")
+        xcall b_button(wndidp, "O_ABANDON", DSB_TEXT, "Cancel")
+        xcall b_buttonset(wndidp, DSB_BOTTOM,, DSB_BEGIN)
+    end
+    endusing
+
+    xcall u_window(D_PLACE, wndidp, 1, 1)
+
+    filename = connectfile
+    xcall i_display(wndidp,, inp_rec)
+    xcall i_next(wndidp,, '*FRST*')
+
+    do
+    begin
+        xcall m_column(D_PLACE, col_id)
+        xcall i_input(wndidp,, inp_rec, colid(MC_INPUT), colid(MC_SELECT),
+&           colid(MC_LIST), D_NOTERM)
+        xcall m_column(D_REMOVE, col_id)
+        if(g_select) then
+            call proc_menu
+        else
+        begin
+            if(g_setsts) then
+                call proc_break
+            else
+                call proc_set
+        end
+    end
+    until(g_entnam .eq. 'O_EXIT' .or. g_entnam .eq. 'O_ABANDON' .or.
+&       g_entnam .eq. 'O_QUIT')
+
+    if(g_entnam .ne. 'O_QUIT') then
+        clear g_entnam
+    else
+        xcall m_signal('O_QUIT')
+
+    xcall e_exit
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+proc_menu,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call validate
+        if(sts)
+        begin
+            xcall i_display(wndidp,, inp_rec)
+            xcall i_next(wndidp,, '*FRST*')
+
+            clear g_entnam
+        end
+    end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+proc_break,
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+proc_set,
+
+    call validate
+    if(sts) then
+        xcall i_next(wndidp,, '*FRST*')
+    else
+        g_entnam = 'O_EXIT'
+
+    return
+
+;----------------------------------------------------------------------------
+
+validate,
+
+    ;assume ok
+    clear sts
+
+    if(filename) then
+    begin
+        chan = %open_connectfile(filename)
+        if(chan) then
+        begin
+            close chan
+
+            connectfile = filename
+        end
+        else
+        begin
+            sts = %u_msgbox("Cannot open "+GENESIS_HOME+":"+
+&               %atrim(filename)
+&               , D_MOK+D_MICONEXCLAM, "Connect file error"
+&               , colid(MC_SELECT))
+
+            filename = connectfile
+            sts = 1
+        end
+    end
+    else
+    begin
+        sts = %u_msgbox("Please specify a connect file"
+&           , D_MOK+D_MICONEXCLAM, "Connect file error"
+&           , colid(MC_SELECT))
+
+        filename = connectfile
+        sts = 1
+    end
+
+    return
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Drill Method
+
+subroutine cf_drill
+    .include 'WND:inpinf.def'       ; Group argument of input info
+    group a_inp_rec                 ; The data_area argument passed to the
+        filename    ,a255           ;  calling input routine.
+    endgroup
+
+.include 'WND:tools.def'
+
+.ifdef D_GUI
+.include "DBLDIR:activex.def"
+.endc ;D_GUI
+
+.include 'INC:synckodbc.def'
+
+    external function
+        get_connect_array ,i
+
+    record clr_i
+        handle          ,D_HANDLE       ;handle for array of connect filenames
+        count           ,i4             ;count of connect filenames
+        status          ,i4             ;status
+        bld_id          ,i4             ;input windows build id
+        wndidp          ,i4             ;input window id
+        cls_id          ,i4             ;listclass id
+        lst_id          ,i4             ;list id
+        axl_id          ,i4             ;activex list id
+        error           ,i4             ;error
+        req             ,i4             ;list processor requesthandle
+        ctr             ,i4             ;counter
+
+    record clr
+        mbuffer         ,a1024          ;menu column build buffer
+
+    record inp_rec                          ;list input window
+        filename        ,a255
+
+proc
+    clear clr, ^i(clr_i)
+
+    xcall e_enter
+
+    xcall m_column(D_REMOVE, D_ALL)
+
+    xcall m_column(D_PLACE, colid(MC_MAIN))
+
+    xcall e_sect("F4 = OK, F3 = Cancel", D_INFO, D_LEFT, D_CLEAR)
+
+    ;force window to be 78 chars wide
+    ; allows room for long connect filenames in the list header
+    if(^size(inp_rec)+3 .le. MAX_WND_SIZE) then
+        ctr = MAX_WND_SIZE+1
+    else
+        ctr = ^size(inp_rec)+3
+
+    xcall ib_input(bld_id, 'CFDRILL_LIST', 1, ctr)
+    xcall ib_dsp_area(bld_id, 1, 1, 1, MAX_WND_SIZE)
+
+    xcall ib_field(bld_id, 'filename', D_FLD_TYPE, D_ALPHA,
+&       D_FLD_SIZE, ^size(inp_rec.filename),
+&       D_FLD_FPOS, 1, 1)
+
+    xcall ib_end(bld_id, wndidp)
+
+    xcall l_class(cls_id, 'CFDRILL_LC', 1, 1, NUM_ODBCENVVARS, 1,,,,,,
+&       'cf_drill_load', list_options, error)
+
+    xcall l_create(lst_id, wndidp, inp_rec,, 'CFDRILL_LC',,,,,
+&       1,, error)
+
+    using envrn select
+    (6, 8), ;OpenVMS, UNIX
+        nop
+    (), ;Windows
+    begin
+        xcall l_method(lst_id, D_LWNDEVENT, close_msid)
+
+        xcall l_button(lst_id, 'O_EXIT', DSB_TEXT, "OK")
+        xcall l_button(lst_id, 'O_ABANDON', DSB_TEXT, "Cancel")
+    end
+    endusing
+
+    xcall l_sect(lst_id, " xfODBC connect files ", D_TITLE, D_CLEAR, D_CENTER)
+
+    if(activex_list .gt. 0) then
+    begin
+        xcall l_sect(lst_id, "Connect filename|",
+&           D_HEADER, D_CLEAR, D_LEFT)
+    end
+    else
+    begin
+        xcall l_sect(lst_id, " Connect filename",
+&           D_HEADER, D_CLEAR, D_LEFT)
+    end
+
+    ; Get array of connect files
+    count = %get_connect_array(handle)
+
+    using count select
+    (0),
+        xcall u_message("No connect files found in "+GENESIS_HOME)
+    (.lt.0),
+        xcall u_message("Error "+%string(count)+" in GET_CONNECT_ARRAY")
+    (),
+    begin
+        req = D_LNOP
+        do
+        begin
+            xcall l_select(lst_id, req, inp_rec,,,,,, colid(MC_LIST),,,,,,,
+&               handle, count)
+            if(g_select) then
+                call mnu_cols
+            else
+            begin
+                if(inp_rec.filename) then
+                begin
+                    xcall i_force(inp_rec.filename)
+                    g_entnam = 'O_EXIT'
+                end
+                else
+                    g_entnam = 'O_ABANDON'
+            end
+        end
+        until(g_entnam .eq. 'O_EXIT' .or. g_entnam .eq. 'O_ABANDON' .or.
+&           g_entnam .eq. 'O_QUIT')
+    end
+    endusing
+
+    if(handle)
+        handle = %mem_proc(DM_FREE, handle)
+
+    if(g_entnam .ne. 'O_QUIT') then
+        clear g_entnam
+    else
+        xcall m_signal('O_QUIT')
+
+    xcall e_exit
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        if(inp_rec.filename)
+            xcall i_force(inp_rec.filename)
+    end
+    ('O_ABANDON', 'O_QUIT'),
+        nop
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; List load method for system catalog date
+
+subroutine cf_drill_load ,stack
+    a_listid        ,n                      ; List id
+    a_req           ,n                      ; Request flag
+    group a_data                            ; List input window data
+        filename      ,a255
+    endgroup
+    a_inpid         ,n                      ; Input window id
+    a_disable       ,n                      ; (Optional) Disable flag
+    a_index         ,n                      ; Loading index
+
+    a_handle        ,n                      ; handle
+    a_count         ,n                      ; count
+
+.include 'WND:tools.def'
+
+.include 'INC:synckodbc.def'
+
+    structure files
+        filename        ,a255
+
+proc
+
+    clear a_data
+
+    using a_index select
+    (1 thru a_count),
+    begin
+        a_data.filename = ^m(files[a_index].filename, a_handle)
+
+        xcall i_display(a_inpid,, a_data)
+    end
+    (),
+        a_req = D_LEOF
+    endusing
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; get an array of connect files
+
+function get_connect_array ;i
+    a_handle        ,i
+
+.include 'INC:synckodbc.def'
+
+    external function
+        get_dictsource  ,a
+        add_dir_sep     ,a
+
+.align
+    record clr_i
+        count           ,i4             ;number of connect files
+        chn_pipe        ,i4             ;channel
+        len             ,i4             ;length of genesis_home
+        status          ,i4             ;status
+
+.align
+    record clr
+        genesishome     ,a255           ;genesis_home
+        buffer          ,a255           ;read buffer
+
+    structure files
+        filename        ,a255
+
+proc
+    clear clr, ^i(clr_i)
+
+    ; Get path of GENESIS_HOME
+    xcall getlog(GENESIS_HOME, genesishome, len)
+
+    chn_pipe = %syn_freechn
+
+    using (envrn) select
+    (6), ;OpenVMS
+    begin
+        open(chn_pipe, I, '|directory/columns=1/noheading/notrailing '
+&           + genesishome(1:len)) [ERR=open_error]
+    end
+    (8), ;UNIX
+    begin
+        buffer = 'ls -A -1 -p -d '+ genesishome(1:len) + '/*'
+        open(chn_pipe, I, '|ls -A -1 -p -d '
+&           + genesishome(1:len)+'/*') [ERR=open_error]
+    end
+    ( ), ;Windows
+    begin
+        genesishome = '"' + genesishome(1:len) + '"'
+        len += 2
+        open(chn_pipe, I, '|cmd /c dir /a-d /b '
+&           + genesishome(1:len)) [ERR=open_error]
+    end
+    endusing
+
+    if(0)
+    begin
+open_error,
+        freturn -%error
+    end
+
+    clear count, buffer
+    repeat
+    begin
+        reads(chn_pipe, buffer, done)
+
+        if(.not.buffer)
+            nextloop
+
+        using envrn select
+        (6), ;OpenVMS
+        begin
+            ;is this an OpenVMS directory
+            if(%instr(1, buffer ,'.DIR;'))
+                nextloop
+
+            buffer = buffer - genesishome(1:len)
+        end
+        (8), ;UNIX
+        begin
+            ;is this a unix directory
+            if(buffer(%trim(buffer):1) .eq. '/')
+                nextloop
+            ;is this a unix directory
+            if(buffer(%trim(buffer):1) .eq. ':')
+                exitloop
+
+            genesishome = %add_dir_sep(genesishome(1:len))
+
+            buffer = buffer - genesishome(1:%trim(genesishome))
+        end
+        endusing
+
+        ;look for dictsource, if found, then it's a connect file
+        if(%get_dictsource(buffer))
+        begin
+            count += 1
+            if(count .gt. 1) then
+                a_handle = %mem_proc(DM_RESIZ, ^size(files)*count, a_handle)
+            else
+                a_handle = %mem_proc(DM_ALLOC .bor. DM_STATIC, ^size(files))
+            ^m(files[count].filename, a_handle) = buffer
+        end
+    end
+
+done,
+    close chn_pipe
+
+    freturn count
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Hyperlink Method
+
+subroutine cf_hyper
+    .include 'WND:inpinf.def'       ; Group argument of input info
+    group inp_rec                   ; The data_area argument passed to the
+        filename    ,a255           ;  calling input routine.
+    endgroup
+
+.include 'WND:tools.def'
+
+.include 'INC:synckodbc.def'
+
+    external function
+        open_connectfile,i
+        get_dir_sep     ,a
+
+.align
+    record
+        file_name       ,a255           ;filename
+        name            ,a255           ;just filename
+        type            ,a255           ;just filetype
+        group file      ,a              ;filename parse info
+            node          ,a255
+            dev           ,a255
+            dir           ,a255
+        endgroup
+        group genhm     ,a              ;GENESIS_HOME parse info
+            node          ,a255
+            dev           ,a255
+            dir           ,a255
+        endgroup
+        dir_sep         ,a1             ;directory terminator
+
+.align
+    record
+        chan            ,i4             ;channel
+        col_id          ,i4             ;menu column
+        mbuffer         ,a1024          ;menu buffer
+
+.define NUM_FILTERS     2
+
+.align
+    record
+        filters         ,NUM_FILTERS a30        ,'*','*.*'
+        filter_desc     ,NUM_FILTERS a30        ,"Connect files","All files"
+
+proc
+
+    xcall e_enter
+
+    xcall m_column(D_REMOVE, D_LOCAL)
+
+    ;create menu columns, but do not place
+    xcall mb_column(mbuffer, 'GETFILENAME', "General  ")
+    xcall mb_entry(mbuffer, 'O_EXIT', "OK", F4_KEY)
+    xcall mb_entry(mbuffer, 'O_ABANDON', "Cancel", F3_KEY)
+    xcall mb_entry(mbuffer, 'O_BROWSE', "Browse", F7_KEY)
+    xcall mb_end(mbuffer, col_id)
+
+    xcall e_sect("F4 = OK, F3 = Cancel, F7 = Browse", D_INFO, D_LEFT, D_CLEAR)
+
+    xcall i_force(, file_name)
+    if(.not.file_name)
+        file_name = inp_rec.filename
+    if(.not.file_name)
+        file_name = GENESIS_HOME+':'
+
+    if(%u_getfilename(file_name, "Select xfODBC connect file",
+&       NUM_FILTERS, filter_desc, filters, file_name, '',
+&       colid(MC_INPUT), colid(MC_SELECT), colid(MC_LIST)))
+    begin
+        xcall parse(file_name,, file.node, file.dev, file.dir, name, type)
+
+        ;if we've got a directory terminator, make sure it's correct
+        dir_sep = %get_dir_sep
+        if(%instr(1, file_name, dir_sep)) then
+        begin
+            xcall parse(GENESIS_HOME+':'+name,,
+&               genhm.node, genhm.dev, genhm.dir)
+
+            using envrn select
+            (6), ;OpenVMS
+            begin
+                upcase file
+                upcase genhm
+            end
+            (8), ;UNIX
+            begin
+                nop
+            end
+            (), ;Windows
+            begin
+                locase file
+                locase genhm
+            end
+            endusing
+        end
+        else
+            clear file, genhm
+
+        ;is file spec same as GENESIS_HOME
+        if(file .and. file .ne. genhm) then
+            xcall u_message("Connect files must be in "+GENESIS_HOME+":")
+        else
+        begin
+            using type select
+            ('.ddf', '.DDF'),
+            begin
+                ;got default filetype
+                ; check for connect file without filetype first,
+                ; and if that fails, check again with filetype
+
+                ;if connectfile.ddf and connectfile (no filetype) both exist
+                ; in GENESIS_HOME:, and both are connect files, you cannot
+                ; use drill to open .DDF file
+
+                file_name = name
+                chan = %open_connectfile(name, '.')
+                if(chan) then
+                    close chan
+                else
+                begin
+                    file_name = %atrim(name) + type
+                    chan = %open_connectfile(name, type)
+                    if(chan) then
+                        close chan
+                    else
+                    begin
+                        ;should never get here
+                        clear file_name
+                    end
+                end
+            end
+            (' '),
+                file_name = name
+            (),
+                file_name = %atrim(name) + type
+            endusing
+
+            ;at this stage, the file_name variable only contains the
+            ; filename portion of the file specification.  Any device or
+            ; directory specification will have been removed.
+            ; Program assumes that all connect files are in GENESIS_HOME:
+            xcall i_force(file_name)
+        end
+    end
+
+    xcall e_exit
+
+    xreturn
+
+.undefine NUM_FILTERS
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; display date last updated for system catalog files
+
+subroutine catalog_dates
+
+.include 'WND:tools.def'
+
+.include 'INC:synckodbc.def'
+
+    record clr_i
+        status          ,i4             ;status
+        bld_id          ,i4             ;input windows build id
+        wndidp          ,i4             ;input window id
+        cls_id          ,i4             ;listclass id
+        lst_id          ,i4             ;list id
+        error           ,i4             ;error
+        req             ,i4             ;list processor requesthandle
+        ctr             ,i4             ;counter
+
+    record clr
+        mbuffer         ,a1024          ;menu column build buffer
+
+    record inp_rec                          ;list input window
+        filename        ,a30
+        filedate        ,a23
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    xcall e_enter
+
+    xcall m_column(D_REMOVE, D_ALL)
+
+    xcall m_column(D_PLACE, colid(MC_MAIN))
+
+    xcall m_disable(D_ENTRY, colid(MC_MAIN), 'O_ABANDON')
+
+    xcall e_sect("F4 = OK", D_INFO, D_LEFT, D_CLEAR)
+
+    ;force window to be 78 chars wide
+    ; allows room for long connect filenames in the list header
+    if(^size(inp_rec)+3 .le. MAX_WND_SIZE) then
+        ctr = MAX_WND_SIZE+1
+    else
+        ctr = ^size(inp_rec)+3
+
+    xcall ib_input(bld_id, 'DATE_LIST', 1, ctr)
+    xcall ib_dsp_area(bld_id, 1, 1, 1, MAX_WND_SIZE)
+
+    xcall ib_field(bld_id, 'filename', D_FLD_TYPE, D_ALPHA,
+&       D_FLD_SIZE, ^size(inp_rec.filename),
+&       D_FLD_FPOS, 1, 2)
+
+    xcall ib_field(bld_id, 'filedate', D_FLD_TYPE, D_ALPHA,
+&       D_FLD_SIZE, ^size(inp_rec.filedate),
+&       D_FLD_FPOS, 1, 33)
+
+    xcall ib_end(bld_id, wndidp)
+
+    xcall l_class(cls_id, 'DATE_LC', 1, 1, 10, 1,, 2, 1,,,
+&       'catalog_dates_load', list_options, error)
+
+    xcall l_create(lst_id, wndidp, inp_rec,, 'DATE_LC',,,,,
+&       1, NUM_SYSCATFILES, error)
+
+    using envrn select
+    (6, 8), ;OpenVMS, UNIX
+        nop
+    (), ;Windows
+    begin
+        xcall l_method(lst_id, D_LWNDEVENT, close_msid)
+
+        xcall l_button(lst_id, 'O_EXIT', DSB_TEXT, "OK",,, "O")
+    end
+    endusing
+
+    xcall l_sect(lst_id, " System Catalog Dates ", D_TITLE, D_CLEAR, D_CENTER)
+
+    xcall l_sect(lst_id, "DICTSOURCE", D_FOOTER, D_CLEAR, D_POSITION, 1, 1)
+    xcall l_sect(lst_id, "DATASOURCE", D_FOOTER, D_CLEAR, D_POSITION, 2, 1)
+
+    if(activex_list .gt. 0) then
+        xcall l_sect(lst_id, "System Catalog files|Date last updated|",
+&           D_HEADER, D_CLEAR, D_LEFT)
+    else
+        xcall l_sect(lst_id, " System Catalog files           "
+&           + "Date last updated",
+&           D_HEADER, D_CLEAR, D_LEFT)
+
+    req = D_LNOP
+    do
+    begin
+        xcall l_select(lst_id, req, inp_rec,,,,,, colid(MC_LIST))
+        if(g_select) then
+            call mnu_cols
+        else
+        begin
+            if(g_setsts) then
+                call set_proc
+            else
+                call brk_proc
+        end
+    end
+    until(g_entnam .eq. 'O_EXIT' .or. g_entnam .eq. 'O_ABANDON' .or.
+&       g_entnam .eq. 'O_QUIT')
+
+
+    if(g_entnam .ne. 'O_QUIT') then
+        clear g_entnam
+    else
+        xcall m_signal('O_QUIT')
+
+    xcall e_exit
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+        nop
+    ('O_ABANDON', 'O_QUIT'),
+        nop
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; List load method for system catalog date
+
+subroutine catalog_dates_load ,stack
+    a_listid        ,n                      ; List id
+    a_req           ,n                      ; Request flag
+    group a_data                            ; List input window data
+        filename      ,a30
+        filedate      ,a23
+    endgroup
+    a_inpid         ,n                      ; Input window id
+    a_disable       ,n                      ; (Optional) Disable flag
+    a_index         ,n                      ; Loading index
+    ; a_method_data ,a                      ; Optional method data argument
+
+.include 'WND:tools.def'
+
+.include 'INC:synckodbc.def'
+
+    external function
+        get_dictsource  ,a
+        get_datasource  ,a
+
+    literal
+        systemcatalog   ,NUM_SYSCATFILES a30
+&           ,'GENESIS_COLUMNS'
+&           ,'GENESIS_DEPENDS'
+&           ,'GENESIS_FORKEYS'
+&           ,'GENESIS_INDEXES'
+&           ,'GENESIS_TABLES'
+&           ,'GENESIS_USERS'
+&           ,'GENESIS_VIEWS'
+&           ,'GENESIS_XCOLUMNS'
+&           ,'SODBC_GROUPS'
+&           ,'SODBC_USERS'
+
+
+.align
+    static record
+        dictsource      ,a255           ;dictsource
+
+.align
+    record clr
+        date            ,a23            ;getfa date
+        file_name       ,a255           ;file name
+
+.align
+    record clr_i
+        chan            ,i4             ;spare channel
+
+proc
+
+    clear a_data
+
+    using a_index select
+    (1),
+    begin
+        dictsource = %get_dictsource(connectfile)
+
+        xcall l_sect(a_listid, "DICTSOURCE="+dictsource(1:%trim(dictsource)),
+&           D_FOOTER, D_CLEAR, D_POSITION, 1, 1)
+        xcall l_sect(a_listid, "DATASOURCE="+%get_datasource(connectfile, 1),
+&           D_FOOTER, D_CLEAR, D_POSITION, 2, 1)
+    end
+    (.gt. NUM_SYSCATFILES),
+        goto nomore_items
+    endusing
+
+    if(dictsource)
+    begin
+        call check_dictsource_files
+        xcall i_display(a_inpid,, a_data)
+    end
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+nomore_items,
+
+    a_req = D_LEOF
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+check_dictsource_files,
+
+    a_data.filename = systemcatalog(a_index)
+
+    file_name = %atrim(dictsource) + systemcatalog(a_index)
+
+    chan = %syn_freechn
+    open(chan, I:I, file_name) [ERR=nofile]
+
+    xcall getfa(chan, 'CDT', a_data.filedate)
+
+    close chan
+
+    if(0)
+    begin
+nofile,
+        a_data.filedate = "Error "+%string(%error)+" opening file"
+    end
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Drill Method
+
+subroutine cf_view
+
+.include 'WND:tools.def'
+
+.ifdef D_GUI
+.include "DBLDIR:activex.def"
+.endc ;D_GUI
+
+.include 'INC:synckodbc.def'
+
+    external function
+        get_connect_data ,i
+
+    record clr_i
+        handle          ,i4             ;handle for array of text lines
+        count           ,i4             ;number of text linst
+        status          ,i4             ;status
+        bld_id          ,i4             ;input windows build id
+        wndidp          ,i4             ;input window id
+        cls_id          ,i4             ;listclass id
+        lst_id          ,i4             ;list id
+        axl_id          ,i4             ;activex list id
+        error           ,i4             ;error
+        req             ,i4             ;list processor requesthandle
+        ctr             ,i4             ;counter
+
+    record clr
+        mbuffer         ,a1024          ;menu column build buffer
+
+    record inp_rec                          ;list input window
+        text            ,a255
+
+proc
+    clear clr, ^i(clr_i)
+
+    xcall e_enter
+
+    xcall m_column(D_REMOVE, D_ALL)
+
+    xcall m_column(D_PLACE, colid(MC_MAIN))
+
+    xcall m_disable(D_ENTRY, colid(MC_MAIN), 'O_ABANDON')
+
+    xcall e_sect("F4 = OK", D_INFO, D_LEFT, D_CLEAR)
+
+    ;force window to be 78 chars wide
+    ; allows room for long connect filenames in the list header
+    if(^size(inp_rec)+3 .le. MAX_WND_SIZE) then
+        ctr = MAX_WND_SIZE+1
+    else
+        ctr = ^size(inp_rec)+3
+
+    xcall ib_input(bld_id, 'CFVIEW_LIST', 1, ctr)
+    xcall ib_dsp_area(bld_id, 1, 1, 1, MAX_WND_SIZE)
+
+    xcall ib_field(bld_id, 'text', D_FLD_TYPE, D_ALPHA,
+&       D_FLD_SIZE, ^size(inp_rec.text),
+&       D_FLD_FPOS, 1, 1)
+
+    xcall ib_end(bld_id, wndidp)
+
+    ;override list_options
+    xcall l_class(cls_id, 'CFVIEW_LC', 1, 1, 20,,,,,,,
+&       'cf_view_load', 'NOACTIVEX', error)
+
+    xcall l_create(lst_id, wndidp, inp_rec,, 'CFVIEW_LC',,,,,
+&       1,, error)
+
+    using envrn select
+    (6, 8), ;OpenVMS, UNIX
+        nop
+    (), ;Windows
+    begin
+        xcall l_method(lst_id, D_LWNDEVENT, close_msid)
+
+        xcall l_button(lst_id, 'O_EXIT', DSB_TEXT, "OK")
+    end
+    endusing
+
+    xcall l_sect(lst_id, " View xfODBC connect file "
+&       , D_TITLE, D_CLEAR, D_CENTER)
+
+    ; Get array of connect files
+    count = %get_connect_data(handle)
+
+    using count select
+    (0),
+        xcall u_message("No text found in connect file")
+    (.lt.0),
+        xcall u_message("Error "+%string(count)+" in GET_CONNECT_DATA")
+    (),
+    begin
+        req = D_LNOP
+        do
+        begin
+            xcall l_select(lst_id, req, inp_rec,,,,,, colid(MC_LIST)
+&               ,,,,,,, handle, count)
+            if(g_select) then
+                call mnu_cols
+            else
+                nop ;no break processing
+        end
+        until(g_entnam .eq. 'O_EXIT' .or. g_entnam .eq. 'O_ABANDON' .or.
+&           g_entnam .eq. 'O_QUIT')
+    end
+    endusing
+
+    if(handle)
+        handle = %mem_proc(DM_FREE, handle)
+
+    if(g_entnam .ne. 'O_QUIT') then
+        clear g_entnam
+    else
+        xcall m_signal('O_QUIT')
+
+    xcall e_exit
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+        nop
+    ('O_ABANDON', 'O_QUIT'),
+        nop
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; List load method for system catalog date
+
+subroutine cf_view_load ,stack
+    a_listid        ,n                      ; List id
+    a_req           ,n                      ; Request flag
+    group a_data                            ; List input window data
+        filename      ,a255
+    endgroup
+    a_inpid         ,n                      ; Input window id
+    a_disable       ,n                      ; (Optional) Disable flag
+    a_index         ,n                      ; Loading index
+
+    a_handle        ,n                      ; handle
+    a_count         ,n                      ; count
+
+.include 'WND:tools.def'
+
+.include 'INC:synckodbc.def'
+
+    structure txt
+        text            ,a255
+
+proc
+
+    clear a_data
+
+    using a_index select
+    (1 thru a_count),
+    begin
+        a_data.filename = ^m(txt[a_index].text, a_handle)
+
+        xcall i_display(a_inpid,, a_data)
+    end
+    (),
+        a_req = D_LEOF
+    endusing
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; get an array containing the data from a connect file
+
+function get_connect_data ;i
+    a_handle        ,i
+
+.include 'WND:tools.def'
+
+.include 'INC:synckodbc.def'
+
+    external function
+        get_dictsource  ,a
+        open_connectfile,i
+
+.align
+    record clr_i
+        count           ,i4             ;number of text lines in connect file
+        chan            ,i4             ;channel
+        sts             ,i4             ;status
+        pos             ,i4             ;position
+
+.align
+    record clr
+        buffer          ,a255           ;read buffer
+
+    structure txt
+        text            ,a255
+
+proc
+    clear clr, ^i(clr_i)
+
+    chan = %open_connectfile(connectfile)
+
+    if(chan) then
+    begin
+        repeat
+        begin
+            reads(chan, buffer, done)
+
+            ;look for dictsource, if found, then it's a connect file
+            count += 1
+            if(count .gt. 1) then
+                a_handle = %mem_proc(DM_RESIZ, ^size(txt)*count, a_handle)
+            else
+                a_handle = %mem_proc(DM_ALLOC .bor. DM_STATIC, ^size(txt))
+
+            ;replace control chars with spaces
+            for pos from 1 thru %trim(buffer)
+            begin
+                using buffer(pos:1) select
+                (.lt.' ', .gt.'~'),
+                    clear buffer(pos:1)
+                endusing
+            end
+
+            ^m(txt[count].text, a_handle) = buffer
+        end
+done,
+        close chan
+    end
+    else
+    begin
+        sts = %u_msgbox("Cannot open "+GENESIS_HOME+":"+%atrim(connectfile),
+&           D_MOK+D_MICONEXCLAM, "Connect file Error", colid(MC_SELECT))
+    end
+
+    freturn count
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; edit the required connect file
+
+subroutine cf_edit
+    a_genesishome   ,a              ;REQUIRED genesus_home
+
+
+.include 'WND:tools.def'
+
+.include 'INC:synckodbc.def'
+
+    external function
+        open_connectfile,i
+
+.align
+    record clr_i
+        sts             ,i4             ;status
+        chan            ,i4             ;channel
+        bld_id          ,i4             ;build id
+        wndidp          ,i4             ;input window
+
+        len             ,i4             ;length
+
+.align
+    record clr
+        editcommand     ,a255           ;edit command
+
+proc
+
+    xcall getlog(EDIT_COMMAND, editcommand, len)
+
+    if(.not.len)
+    begin
+        using envrn select
+        (6), ;OpenVMS
+            editcommand = 'EDIT'
+        (8), ;UNIX
+            editcommand = 'vi'
+        (), ;Windows
+            editcommand = 'notepad'
+        endusing
+
+        len = %trim(editcommand)
+    end
+
+    using envrn select
+    (6, 8), ;OpenVMS, UNIX
+    begin
+        ;spawn editor
+        xcall spawn(editcommand(1:len)+' '+a_genesishome
+&           +connectfile(1:%trim(connectfile)))
+
+        xcall u_redraw
+    end
+    (), ;Windows
+    begin
+        ;add quotes around filename before spawning editor
+        xcall spawn(editcommand(1:len)+' "'+a_genesishome
+&           +connectfile(1:%trim(connectfile))+'"')
+    end
+    endusing
+
+    xreturn
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; display xfODBC logicals
+
+subroutine show_envvars
+
+.include 'WND:tools.def'
+
+.ifdef D_GUI
+.include "DBLDIR:activex.def"
+.endc ;D_GUI
+
+.include 'INC:synckodbc.def'
+
+    record clr_i
+        status          ,i4             ;status
+        bld_id          ,i4             ;input windows build id
+        wndidp          ,i4             ;input window id
+        cls_id          ,i4             ;listclass id
+        lst_id          ,i4             ;list id
+        axl_id          ,i4             ;activex list id
+        error           ,i4             ;error
+        req             ,i4             ;list processor requesthandle
+        ctr             ,i4             ;counter
+
+    record clr
+        mbuffer         ,a1024          ;menu column build buffer
+
+    record inp_rec                          ;list input window
+        logical         ,a30            ;logical name
+        log_value       ,a255           ;logical value
+
+proc
+    clear clr, ^i(clr_i)
+
+    xcall e_enter
+
+    xcall m_column(D_REMOVE, D_ALL)
+
+    xcall m_column(D_PLACE, colid(MC_MAIN))
+
+    xcall m_disable(D_ENTRY, colid(MC_MAIN), 'O_ABANDON')
+
+    xcall e_sect("F4 = OK", D_INFO, D_LEFT, D_CLEAR)
+
+    ;force window to be 78 chars wide
+    ; allows room for long connect filenames in the list header
+    if(^size(inp_rec)+3 .le. MAX_WND_SIZE) then
+        ctr = MAX_WND_SIZE+1
+    else
+        ctr = ^size(inp_rec)+3
+
+    xcall ib_input(bld_id, 'ENVVAR_LIST', 1, ctr)
+    xcall ib_dsp_area(bld_id, 1, 1, 1, MAX_WND_SIZE)
+
+    xcall ib_field(bld_id, 'logical', D_FLD_TYPE, D_ALPHA,
+&       D_FLD_SIZE, ^size(inp_rec.logical),
+&       D_FLD_FPOS, 1, 2)
+
+    xcall ib_field(bld_id, 'log_value', D_FLD_TYPE, D_ALPHA,
+&       D_FLD_SIZE, ^size(inp_rec.log_value),
+&       D_FLD_FPOS, 1, 33)
+
+    xcall ib_end(bld_id, wndidp)
+
+    xcall l_class(cls_id, 'ENVVAR_LC', 1, 1, NUM_ODBCENVVARS, 1,,,,,,
+&       'show_envvars_load', list_options, error)
+
+    xcall l_create(lst_id, wndidp, inp_rec,, 'ENVVAR_LC',,,,,
+&       1, NUM_SYSCATFILES, error)
+
+    xcall l_sect(lst_id, " xfODBC environment variables "
+&       , D_TITLE, D_CLEAR, D_CENTER)
+
+    if(activex_list .gt. 0) then
+        xcall l_sect(lst_id, "Environment var|Value|",
+&           D_HEADER, D_CLEAR, D_LEFT)
+    else
+        xcall l_sect(lst_id, " Environment variable           "
+&           + "Value",
+&           D_HEADER, D_CLEAR, D_LEFT)
+
+    using envrn select
+    (6, 8), ;OpenVMS, UNIX
+        nop
+    (), ;Windows
+    begin
+        xcall l_method(lst_id, D_LWNDEVENT, close_msid)
+
+        xcall l_button(lst_id, 'O_EXIT', DSB_TEXT, "OK",,, "O")
+
+.ifdef D_GUI
+.ifndef DBLNET
+        if(activex_list .gt. 0)
+        begin
+            xcall l_status(lst_id, D_LAXCTRL, axl_id)
+            ctr = %ax_set(axl_id, 'RowMode', 1)
+
+            ;adjust the axlist and shrink columns
+            if(%ax_call(axl_id, 'GetColumnWidth', 1, ctr))
+                xcall ax_call(axl_id, 'SetColumnWidth', 1, (ctr*0.65))
+        end
+.endc ;DBLNET
+.endc ;D_GUI
+    end
+    endusing
+
+    req = D_LNOP
+    do
+    begin
+        xcall l_select(lst_id, req, inp_rec,,,,,, colid(MC_LIST))
+        if(g_select) then
+            call mnu_cols
+        else
+        begin
+            if(g_setsts) then
+                call set_proc
+            else
+                call brk_proc
+        end
+    end
+    until(g_entnam .eq. 'O_EXIT' .or. g_entnam .eq. 'O_ABANDON' .or.
+&       g_entnam .eq. 'O_QUIT')
+
+
+    if(g_entnam .ne. 'O_QUIT') then
+        clear g_entnam
+    else
+        xcall m_signal('O_QUIT')
+
+    xcall e_exit
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+        nop
+    ('O_ABANDON', 'O_QUIT'),
+        nop
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; List load method for system catalog date
+
+subroutine show_envvars_load ,stack
+    a_listid        ,n                      ; List id
+    a_req           ,n                      ; Request flag
+    group a_data                            ; List input window data
+        logical       ,a30
+        log_value     ,a255
+    endgroup
+    a_inpid         ,n                      ; Input window id
+    a_disable       ,n                      ; (Optional) Disable flag
+    a_index         ,n                      ; Loading index
+    ; a_method_data ,a                      ; Optional method data argument
+
+.include 'WND:tools.def'
+
+.include 'INC:synckodbc.def'
+
+    literal
+        envvar          ,NUM_ODBCENVVARS a30
+&           ,'CONNECTDIR'
+&           ,'GENESIS_HOME'
+&           ,'GENESIS_INITSQL'
+&           ,'GENESIS_MSG_FILE'
+&           ,'SODBC_DBA'
+&           ,'SODBC_CNVFIL'
+&           ,'SODBC_CNVOPT'
+&           ,'SODBC_COLLAPSE'
+&           ,'SODBC_INIFIL'
+&           ,'SODBC_MCBA'
+&           ,'SODBC_NOGROUPNAME'
+&           ,'SODBC_NONULL'
+&           ,'SODBC_ODBCNAME'
+&           ,'SODBC_TMPOPT'
+&           ,'SODBC_USEFORMAT'
+&           ,'VORTEX_API_LOGFILE'
+&           ,'VORTEX_API_LOGOPTS'
+&           ,'VORTEX_HOST_LOGFILE'
+&           ,'VORTEX_HOST_LOGOPTS'
+&           ,'VORTEX_HOST_SYSLOG'
+&           ,'VORTEX_ODBC_CHAR'
+&           ,'SDMS_AUDIT'
+&           ,'SDMS_AUDIT_FULL'
+&           ,'SDMS_AUDIT_MODE'
+&           ,'SDMS_AUDIT_SRV'
+&           ,'SDMS2_AUDIT'
+&           ,'SDMS2_LOG'
+&           ,'SDMS2_FULL'
+&           ,'SYNBASEDATE'
+&           ,'SYNCENTURY'
+&           ,'TRIM_HOME'
+&           ,'VORTEX_SHM_MEM'
+&           ,'VORTEX_SHM_BASE'
+
+
+.align
+    record clr
+        env_var         ,a255           ;logical
+
+.align
+    record clr_i
+        len             ,i4             ;length
+
+proc
+
+    clear a_data
+
+    using a_index select
+    (1 thru NUM_ODBCENVVARS),
+    begin
+        xcall getlog(envvar(a_index), env_var, len)
+
+        a_data.logical = envvar(a_index)
+        if(len) then
+            a_data.log_value = env_var(1:len)
+        else
+            a_data.log_value = 'undefined'
+
+        xcall i_display(a_inpid,, a_data)
+    end
+    (),
+        a_req = D_LEOF
+    endusing
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; get dictsource from connect file
+
+function get_dictsource ;a
+    a_connectfile   ,a              ;REQUIRED connect file
+
+    external function
+        add_dir_sep     ,a
+        locase          ,a
+        open_connectfile,i
+        trim_char       ,a
+
+.align
+    record clr
+        cf_buf          ,a255           ;connectfile read buffer
+        dictsource      ,a255           ;dictsource
+
+.align
+    record clr_i
+        chan            ,i4             ;connectfile channel
+        len             ,i4             ;trimmed length of string
+        pos             ,i4             ;position in string
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    chan = %open_connectfile(a_connectfile)
+    if(chan)
+    begin
+
+        repeat
+        begin
+            reads(chan, cf_buf, dict_eof)
+
+            if(pos=%instr(1, %locase(cf_buf), 'dictsource'))
+            begin
+                pos += 10
+
+                len = %trim(cf_buf)
+
+                ;skip leading spaces and tabs
+                while(pos .lt. len .and.
+&                   (cf_buf(pos:1) .eq. ' ' .or.
+&                   cf_buf(pos:1) .eq. %char(9)))
+                    pos += 1
+
+                ;skip trailing spaces and tabs
+                while(len .gt. pos .and.
+&                   (cf_buf(len:1) .eq. ' ' .or.
+&                   cf_buf(len:1) .eq. %char(9)))
+                    len -= 1
+
+                if(pos .le. len)
+                begin
+                    cf_buf = cf_buf(pos, len)
+
+                    ;remove double quotes
+                    cf_buf = %trim_char(cf_buf, '"')
+
+                    ;remove single quotes
+                    cf_buf = %trim_char(cf_buf, "'")
+
+                    ;add trailing directory seperator
+                    dictsource = %add_dir_sep(cf_buf)
+                end
+
+                exitloop
+            end
+        end
+
+dict_eof,
+        close chan
+    end
+
+    freturn dictsource(1:%trim(dictsource))
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; get datasource from connect file
+
+function get_datasource ;a
+    a_connectfile   ,a              ;REQUIRED connect file
+    a_convert       ,n              ;OPTIONAL convert datasource into
+    ; correctly formatted directory
+
+    external function
+        add_dir_sep     ,a
+        get_dir_sep     ,a
+        locase          ,a
+        open_connectfile,i
+        trim_char       ,a
+
+.align
+    record clr
+        cf_buf          ,a255           ;connectfile read buffer
+        datasource      ,a255           ;datasource
+
+.align
+    record clr_i
+        chan            ,i4             ;connectfile channel
+        len             ,i4             ;trimmed length of string
+        pos             ,i4             ;position in string
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    chan = %open_connectfile(a_connectfile)
+    if(chan)
+    begin
+
+        repeat
+        begin
+            reads(chan, cf_buf, dict_eof)
+
+            if(pos=%instr(1, %locase(cf_buf), 'datasource'))
+            begin
+                pos += 10
+
+                len = %trim(cf_buf)
+
+                ;skip leading spaces and tabs
+                while(pos .lt. len .and.
+&                   (cf_buf(pos:1) .eq. ' ' .or.
+&                   cf_buf(pos:1) .eq. %char(9)))
+                    pos += 1
+
+                ;skip trailing spaces and tabs
+                while(len .gt. pos .and.
+&                   (cf_buf(len:1) .eq. ' ' .or.
+&                   cf_buf(len:1) .eq. %char(9)))
+                    len -= 1
+
+                if(pos .le. len)
+                begin
+                    cf_buf = cf_buf(pos, len)
+
+                    ;remove double quotes
+                    cf_buf = %trim_char(cf_buf, '"')
+
+                    ;remove single quotes
+                    cf_buf = %trim_char(cf_buf, "'")
+
+                    ;note - not adding directory seperator unless converting
+                    datasource = cf_buf
+                end
+
+                exitloop
+            end
+        end
+
+dict_eof,
+        close chan
+    end
+
+    ;convert into a real directory specification
+    if(^passed(a_convert) .and. a_convert .and. datasource)
+    begin
+        ;remove semicolons
+        datasource = %trim_char(datasource, ';')
+
+        ;change \\ into \
+        while(pos = %instr(1, datasource, '\\'))
+        begin
+            datasource(pos, ^size(datasource)) =
+&               datasource(pos+1, ^size(datasource))
+        end
+
+        datasource = %add_dir_sep(datasource)
+    end
+
+    freturn datasource(1:%trim(datasource))
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; open connect file (returns channel number)
+
+function open_connectfile ;i
+    a_connectfile   ,a              ;REQUIRED connect filename
+    a_filetype      ,a              ;OPTIONAL connect filetype
+
+.align
+    record
+        cf_chan         ,i4             ;connect file channel
+        errnum          ,i4             ;error number
+
+proc
+
+    cf_chan = %syn_freechn
+
+    if(^passed(a_filetype) .and. a_filetype) then
+        open(cf_chan, I:S, GENESIS_HOME+':'+%atrim(a_connectfile)+a_filetype)
+&           [ERR=cf_openerror]
+    else
+        ;try opening file without filetype
+        open(cf_chan, I:S, GENESIS_HOME+':'+%atrim(a_connectfile)+'.')
+&           [ERR=cf_openerror]
+
+    if(0)
+    begin
+cf_openerror,
+        errnum = %error
+        if(.not.(^passed(a_filetype) .and. a_filetype)) then
+        begin
+            ;try again, just incase there was a valid filetype in filename
+            open(cf_chan, I:S, GENESIS_HOME+':'+%atrim(a_connectfile))
+&               [ERR=cf_openerror2]
+            if(0)
+            begin
+cf_openerror2,
+                errnum = %error
+                clear cf_chan
+            end
+        end
+        else
+            clear cf_chan
+    end
+
+    freturn cf_chan
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; get the directory seperator used on this system.
+;
+; If a directory is provided, it is checked for xfServer syntax, and if it is
+; an xfServer directory, the directory seperator is "calculated" from the
+; directory provided.
+;
+; else, it determines the directory seperator using xcall envrn
+;
+function get_dir_sep   ;a
+    a_directory     ,a              ;OPTIONAL directory specification
+    a_invalid       ,n              ;OPTIONAL RETURNED dir spec is invalid
+
+.align
+    record clr_i
+        envrn           ,i4             ;local sysmte environment
+        pos             ,i4             ;position of @
+        dir_sep         ,a1             ;directory seperator
+
+proc
+
+    if(^passed(a_directory) .and. a_directory) then
+    begin
+        ;get position of last character in directory spec for xfServer
+        if(pos = %instr(1, a_directory, '@'))
+            pos -= 1
+    end
+    else
+        clear pos
+
+    if(^passed(a_invalid))
+        clear a_invalid
+
+    ;are we using xfServer
+    if(pos) then
+    begin
+        ;not using a logical
+        if(a_directory(pos:1) .ne. ':') then
+        begin
+            clear dir_sep
+
+            ;check for unix delimeter
+            if(%instr(1, a_directory(1:pos), '/'))
+                dir_sep = '/'
+
+            ;check for MS windows delimeter
+            if(%instr(1, a_directory(1:pos), '\'))
+            begin
+                if(dir_sep)
+                begin
+                    if(^passed(a_invalid))
+                        a_invalid = 1
+                    freturn ':'
+                end
+                dir_sep = '\'
+            end
+
+            ;check for VMS delimeter
+            if(%instr(1, a_directory(1:pos), '['))
+            begin
+                if(dir_sep)
+                begin
+                    if(^passed(a_invalid))
+                        a_invalid = 1
+                    freturn ':'
+                end
+                dir_sep = ']'
+            end
+
+            if(.not. dir_sep)
+                dir_sep = ':'
+        end
+        else
+        begin
+            ;using a logical
+            dir_sep = ':'
+        end
+    end
+    else
+    begin
+        xcall envrn(envrn)
+
+        using envrn select
+        (6),        ;OpenVMS
+            dir_sep = ']'
+        (8),        ;UNIX
+            dir_sep = '/'
+        (),         ;WINDOWS
+            dir_sep = '\'
+        endusing
+    end
+
+    freturn dir_sep
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; add the appropriate directory seperator on the "end" of the directory path.
+
+function add_dir_sep   ;a
+    a_directory     ,a              ;[REQUIRED] directory
+    a_dir_sep       ,a              ;[OPTIONAL] directory seperator
+
+    external function
+        get_dir_sep     ,a
+
+.align
+    record
+        pos             ,i4             ;position of @
+        directory       ,a255           ;directory spec
+        dir_sep         ,a1             ;directory seperator
+
+proc
+
+    directory = a_directory
+
+    if(^passed(a_dir_sep) .and. a_dir_sep) then
+        dir_sep = a_dir_sep
+    else
+        dir_sep = %get_dir_sep(directory)
+
+    ;get position of last character in directory spec for xfServer
+    if(pos = %instr(1, directory, '@'))
+        pos -= 1
+
+    ;if pos is set, then we have an xfServer filespec
+    if(pos) then
+    begin
+        if(directory(pos:1) .ne. ':' .and.
+&           directory(pos:1) .ne. dir_sep)
+            directory = directory(1:pos) + dir_sep +
+&               directory(pos+1, ^size(directory))
+    end
+    else
+    begin
+        if(directory)
+        begin
+            pos = %trim(directory)
+            if(directory(pos:1) .ne. ':' .and.
+&               directory(pos:1) .ne. dir_sep)
+                directory = directory(1: %trim(directory)) + dir_sep
+        end
+    end
+
+    freturn directory(1: %trim(directory))
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; trim char from a variavle
+
+function trim_char ;a
+    a_string        ,a      ;REQUIRED
+    a_char          ,a      ;REQUIRED
+
+.align
+    record
+        len             ,i4
+
+proc
+    len = %trim(a_string)
+
+    if(a_string(1:1) .eq. a_char .and. a_string(len:1) .eq. a_char
+&       .and. len .gt. 1)
+        freturn a_string(2, len-1)
+
+    freturn a_string(1: len)
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; modify filenames so that they can be displayed correctly using u_message
+
+function format_name
+    a_name          ,a              ;REQUIRED file name
+
+.align
+    record
+        pos             ,i4
+        start           ,i4
+        name            ,a 255+20
+
+proc
+
+    name = a_name
+    start = 1
+
+    ;make sure that all "\n"  strings are really "\\n" strings
+    ; to avoid display problems in u_message/u_msgbox
+    while(pos = %instr(start, name, '\n'))
+    begin
+        if(pos.gt.1) then
+        begin
+            if(name(pos-1:1) .ne. '\')
+            begin
+                name(pos+1, ^size(name)) = name(pos, ^size(name))
+                name(pos:1) = '\'
+            end
+        end
+        else
+            name = '\' + name
+        start = pos+2
+    end
+
+    freturn name(1:%trim(name))
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function upcase ;a
+    a_text          ,a
+
+.align
+    record
+        handle          ,D_HANDLE
+
+proc
+
+    handle = %mem_proc(DM_ALLOC, %size(a_text))
+
+    ^m(handle) = a_text
+    upcase ^m(handle)
+
+    freturn ^m(handle)
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function locase ;a
+    a_text          ,a
+
+.align
+    record
+        handle          ,D_HANDLE
+
+proc
+
+    handle = %mem_proc(DM_ALLOC, %size(a_text))
+
+    ^m(handle) = a_text
+    locase ^m(handle)
+
+    freturn ^m(handle)
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine x_o_abandon
+; Method to be executed when user closes a window
+; Signal O_ABANDON menu entry
+
+proc
+
+    xcall m_signal('O_ABANDON')
+
+    xreturn
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Method to be executed when application is closed
+
+subroutine app_close
+    a_noclr         ,n
+    a_cancel        ,n
+    a_type          ,n
+
+proc
+
+    if(a_type .eq. 0)
+        xreturn
+
+    a_cancel = TRUE
+    xcall m_signal('O_QUIT')
+
+    xreturn
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Toolkit utility functions
+
+subroutine app_utils, reentrant
+    a_record        ,a      ;(Optional)
+
+.include 'WND:tools.def'
+
+.align
+    record clr
+        fontname        ,a50            ;font name
+
+.align
+    record clr_i
+        size            ,i4             ;fond size
+
+proc
+    using g_entnam select
+    ("U_ABOUT"),
+    begin
+        xcall u_about(APP_NAME, APP_VERSION, %datecompiled)
+        clear g_select
+    end
+    ("U_FONT"),
+        call change_font
+    endusing
+
+    xreturn
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++
+; change font
+
+change_font,
+
+.ifdef D_GUI
+    xcall u_wndfont(D_GETFONT, DF_CURRENT, fontname, size)
+    xcall u_wndfont(D_CHOOSEFONT, fontname, size,, TRUE)
+    xcall u_wndfont(D_SETFONT, DF_CURRENT, fontname, size)
+.endc
+    clear g_select
+    return
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine app_entrst
+    a_nomod         ,n
+    a_reset         ,n
+
+proc
+
+    if(.not.a_nomod)
+        a_reset = 0
+
+    xreturn
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

@@ -1,0 +1,300 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Synergy Language Socket API - TCP Client Example
+;
+; Module: client.dbl
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifdef DBLv9
+namespace SynPSG.CodeExchange.SocketExamples
+.endc ;DBLv9
+
+    main
+
+.include "DBLDIR:synsock.def"
+
+.define SERVERPORT      1234
+.define TTCHN           100
+
+.define SHUTDOWN_PREFIX     "*SHUTDOWN "
+.define SHUTDOWN_SERVER     SHUTDOWN_PREFIX+"SERVER*"
+.define SHUTDOWN_CONNECTION SHUTDOWN_PREFIX+"CONNECTION*"
+
+        external function
+            client_recv         ,i
+
+        record
+            err                 ,i4 ;error number
+            using_msg_peek      ,i4 ;using SS_MSG_PEEK
+            only_process_one_msg,i4 ;only process one message then shutdown
+            socket              ,i4 ;socket
+            server_in_addr      ,i4 ;server internet address
+            server_name         ,a126 ;server name
+            group packet        ,a
+                length              ,i4
+                message             ,a256
+            endgroup
+            ackHdl              ,D_HANDLE ;handle for acknowledgement
+
+    proc
+
+        xcall flags(7004020, 1)
+
+        open(TTCHN, O, "TT:")
+
+        xcall cmdln(message)
+
+        if(%instr(1, message, ' -? ') .or. %instr(1, message, ' -h '))
+        begin
+            writes(TTCHN, "dbr client [-p] [-one]")
+            writes(TTCHN, "")
+            writes(TTCHN, " -p = use SS_MSG_PEEK technique")
+            writes(TTCHN, " -one = only process one message, from one client")
+            writes(TTCHN, "")
+            writes(TTCHN, "")
+            writes(TTCHN, "Special messages:")
+            writes(TTCHN, "  "+SHUTDOWN_CONNECTION+" = close current connection")
+            writes(TTCHN, "  "+SHUTDOWN_SERVER+"     = shutdown remote server")
+            writes(TTCHN, "")
+
+            call anyKey
+
+            close TTCHN
+            stop D_EXIT_SUCCESS
+        end
+
+        using_msg_peek = (%instr(1, message, ' -p ') .ne. 0)
+        only_process_one_msg = (%instr(1, message, ' -one ') .ne. 0)
+
+        if(using_msg_peek) then
+            writes(TTCHN, "Socket Client example (using SS_MSG_PEEK)")
+        else
+            writes(TTCHN, "Socket Client example")
+        writes(TTCHN, "")
+
+        ;Get the server name to connect to
+        display(TTCHN, "Enter server to connect to : ")
+        reads(TTCHN, server_name)
+        if(.not.server_name)
+        begin
+            server_name = "localhost"
+            writes(TTCHN, "Using "+server_name(1:%trim(server_name)))
+        end
+
+        ;Get IP address for the server we’re connecting to
+        err = %ss_gethostbyname(server_name, server_in_addr)
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+
+        ;Create the socket for the client
+        writes(TTCHN, "Creating socket")
+        err = %ss_socket(socket, SS_SOCK_STREAM)
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+
+        ;Connect to the server
+        writes(TTCHN, "Connecting to server")
+        err = %ss_connect(socket, SERVERPORT, server_in_addr)
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+
+.ifndef DBLNET
+        ;Register a fatal error message, so that if the Synergy runtime dies,
+        ; a shutdown message will be sent to the server
+        if(only_process_one_msg) then
+            err = %ss_fatal(socket, SHUTDOWN_SERVER+" ;%s/%s/%d/%d/%d;")
+        else
+            err = %ss_fatal(socket, SHUTDOWN_CONNECTION+" ;%s/%s/%d/%d/%d;")
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+.endc ;DBLNET
+
+        repeat
+        begin
+            display(TTCHN, "Enter message to send : ")
+            reads(TTCHN, message)
+
+            if(.not.message) then
+            begin
+                message = SHUTDOWN_CONNECTION
+
+                ;make life easy for a single message test
+                if(only_process_one_msg)
+                    message = "This is a 75 character socket test message,"
+&                       + " ending with a period character."
+
+                writes(TTCHN, "Sending "+message(1:%trim(message)))
+            end
+            else
+                writes(TTCHN, "Sending message")
+
+            ;Send the message
+            if(using_msg_peek) then
+            begin
+                packet.length = %ss_htonl(4+%trim(packet.message))
+                err = %ss_sendbuf(socket, packet(1:4+%trim(packet)))
+            end
+            else
+                err = %ss_sendbuf(socket, message(1:%trim(message)))
+            if (err .ne. SS_SUCCESS)
+                goto unexpected_failure
+
+            call getAcknowledment
+
+            if(message .eq. SHUTDOWN_PREFIX)
+                exitloop
+
+            ;force exit here, as we're only looking for one client message
+            if(only_process_one_msg)
+                exitloop
+        end
+
+        ;Normally, clients don't shutdown the remote server when they're done,
+        ; but in this case, we only want to process a single message.
+        if(only_process_one_msg)
+        begin
+            ;Send a shutdown message
+            writes(TTCHN, "Sending shutdown server message")
+            message = SHUTDOWN_SERVER
+            if(using_msg_peek) then
+            begin
+                packet.length = %ss_htonl(4+%trim(packet.message))
+                err = %ss_sendbuf(socket, packet(1:4+%trim(packet)))
+            end
+            else
+                err = %ss_sendbuf(socket, message(1:%trim(message)))
+
+            call getAcknowledment
+        end
+
+        ;Close the socket
+        writes(TTCHN, "Closing connection")
+        err = %ss_close(socket)
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+
+        call anyKey
+        close TTCHN
+        stop D_EXIT_SUCCESS
+
+;------------------------------------------------------------------------
+
+    unexpected_failure,
+        writes(TTCHN, "Unexpected failure in call to socket function.")
+        writes(TTCHN, "Error code returned was: " + %string(err))
+        writes(TTCHN, "Program terminated.")
+
+        call anyKey
+        close TTCHN
+        stop D_EXIT_FAILURE
+
+;------------------------------------------------------------------------
+
+    anyKey,
+
+.ifdef D_GUI
+        writes(TTCHN, "")
+        display(TTCHN, "Press any key to continue : ")
+        onerror anyKeyDone
+        accept(TTCHN, err, WAIT:10)
+    anyKeyDone,
+        offerror
+.endc ;D_GUI
+
+        return
+
+;------------------------------------------------------------------------
+
+    getAcknowledment,
+
+        err = %client_recv(socket, ackHdl)
+        if(ackHdl)
+        begin
+            writes(TTCHN, "Response="+^m(ackHdl))
+            ackHdl = %mem_proc(DM_FREE, ackHdl)
+        end
+        if (err .ne. SS_SUCCESS)
+            goto unexpected_failure
+        return
+
+;------------------------------------------------------------------------
+    end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Get message from the server
+
+    function client_recv
+        client_socket       ,n              ;REQ IN - client socket
+        hdl                 ,n              ;REQ OUT - hdl for message
+
+        structure message
+            text                ,a1
+
+        record
+            err                 ,i4
+            hdl_size            ,i4
+            bytes_received      ,i4
+            packet              ,a32
+
+    proc
+
+        clear hdl
+
+        ;Wait for 2 minutes
+        err = %ss_select(client_socket, 120, 0)
+        if (err .ne. SS_SUCCESS)
+            freturn err
+
+        repeat
+        begin
+            ;get the next 32 characters from the system buffers
+            clear packet
+            bytes_received = -1
+            err = %ss_recv(client_socket, packet, bytes_received)
+            if (err .ne. SS_SUCCESS)
+            begin
+                call add_bytes_received
+                freturn err
+            end
+            ;Socket lost
+            if(bytes_received .eq. -1)
+                freturn SS_ENOTCONN
+
+            call add_bytes_received
+
+            ;No more information to receive
+            if(bytes_received .ne. ^size(packet))
+                exitloop
+        end
+
+        freturn SS_SUCCESS
+
+;------------------------------------------------------------------------
+
+    add_bytes_received,
+
+        if(bytes_received .gt. 0)
+        begin
+            ;increase size of dynamic memory area to store entire message
+            if(hdl) then
+            begin
+                hdl_size = %mem_proc(DM_GETSIZE, hdl)
+                hdl = %mem_proc(DM_RESIZ, hdl_size+bytes_received, hdl)
+            end
+            else
+            begin
+                hdl_size = 0
+                hdl = %mem_proc(DM_ALLOC.bor.DM_STATIC, bytes_received)
+            end
+            ^m(message.text(hdl_size+1:bytes_received),hdl) = packet
+        end
+
+        return
+    end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifdef DBLv9
+endnamespace
+.endc ;DBLv9
+

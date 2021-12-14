@@ -1,0 +1,1928 @@
+;*****************************************************************************
+;
+; Title:        UpsTrack
+;
+; Description:  An example of using the UPS consignment tracking web service
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+; Versions:     Synergy/DE V8.1.3a and higher (requires HTTPS)
+;
+; Platforms:    All platforms (requires OpenSSL to be installed)
+;
+;*****************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;*****************************************************************************
+;
+; The following code provides an example of using the Synergy XML API and the
+; Synergy HTTP API to interact with the "UPS OnLine Tools Tracking" web service.
+;
+; THIS CODE WILL NOT WORK UNTIL YOU HAVE TAKEN SEVERAL STEPS:
+;
+;  - Sign up for a login at UPS.COM
+;  - Obtain a UPS "Developer Key" and a UPS "XML Access Key"
+;  - Install and configure OpenSSL on your system
+;  - Create an HTTPS "CA File"
+;  - Setup the environment by specifying various environment variables
+;
+; Before you can do anything, you will need to sign up for developer access
+; at UPS.COM.  Once you have obtained a username and password, you next need to
+; apply (on-line) for a "developer key" which will be delivered to you by
+; e-mail.  Once you have your developer key, you will have access to download
+; the tools and documentation for the Tracking application.  There are two
+; variants, an HTTP version, and an XML version - go for the XML version.
+; You will also need to obtain an "XML Access Key", again by filling out a
+; form on the web site.  Once you have your username, password, and XML access
+; key, you will need to define them using these environment variables:
+;
+;  UPS_USERID       Your UPS user ID (obtained from UPS.COM)
+;  UPS_PASWORD      The password associated with the UPS user id
+;  UPS_ACCESS_CODE  Your XML access code (obtained from UPS.COM)
+;
+; UPS only exposes their tracking service via HTTPS (SSL), so in order to use
+; this software you will need to install and configure the freeware OpenSSL
+; product.  OpenSSL is available in binary form for some operating systems
+; (including OpenVMS and Linux).  If you can't find a binary OpenSSL
+; distribution for your system then you can download the source code from:
+;
+;  http://www.openssl.org
+;
+; At the time of writing, Synergy currently uses OpenSSL V0.9.7, however I have
+; also tested this software with OpenSSL V0.9.8.  If you do have to download
+; OpenSSL in source code format, then you will need a Perl interpreter, a C
+; compiler, and a macro assembler.  Don't panic, all of these things are freely
+; available, and although it sounds quite daunting at first, obtaining the tools
+; and building OpenSSL is relatively painless.  Refer to the installation
+; instructions that you will find in text files in the OpenSSL root folder.
+; If OpenSSL is installed or configured, you will see a message "HTTPS is not
+; available".
+;
+; In order to use HTTPS as a client, you must provide a "CA File".  This is a
+; file which contains the public key information for all of the HTTPS
+; certification authorities that you are willing to trust.  The easiest way
+; to so this is to make sure that Internet Explorer has the appropriate
+; certificates installed (refer to the developer documentation from UPS for
+; more information on this) and then export those certificates to a file which
+; you can use with the Synergy HTTPS API. CA files exported from Internet
+; explorer are in a different format to that required for use with the Synergy
+; API, but you will find instructions on exporting and converting the file in
+; the Synergy Language Reference Manual.
+;
+; If you need to go through a proxy server in order to access the internet then
+; you will need to define the proxy server for the HTTP API. This is done with
+; these environment variables:
+;
+;  HTTP_PROXY_HOST     Host name or IP address of proxy server
+;  HTTP_PROXY_PORT     Proxy server port number
+;  HTTP_PROXY_SUBNET   (may not be needed)
+;  HTTP_PROXY_LOCAL    (may not be needed)
+;
+; Refer to the Synergy Language Reference manual for further information.
+;
+;*****************************************************************************
+.ifdef UPSTRACK_INCLUDE ;BEGINNING OF INCLUDE SECTION
+;*****************************************************************************
+.undefine UPSTRACK_INCLUDE
+
+;-----------------------------------------------------------------------------
+.ifdef UPSTRACK_INTERNAL
+.undefine UPSTRACK_INTERNAL
+;
+; HTTP configuration.  You will need to create a CA file containing appropriate
+; SSL certificates for the UPS servers.  Threre is a discussion on making sure
+; that you have the correct certificates in the developer documentation for the
+; UPS OnLine Tools Tracking service.  Follow these instructions to install the
+; certificates into an IE browser, then refer to the Synergy HTTPS documentation
+; for instructions on how to export certificates from IE and use the OpenSSL
+; utility to convert them into the correct .pem format.  The default CA file
+; name is CA_FILE.PEM, but can be chjanged below.
+;
+.define D_HTTPS_CA_FILE     "ca_file.pem"           ;HTTPS "CA file"
+.define D_HTTPS_LOG_FILE    "UpsTrack.log"          ;HTTP log file
+.define D_HTTPS_TIMEOUT     10                      ;HTTP request timeout
+;
+.endc ;UPSTRACK_INTERNAL
+;-----------------------------------------------------------------------------
+
+.ifndef UPSTRACK_DEFINES
+.define UPSTRACK_DEFINES
+
+;Shipment field
+.define SH_DATA(shipment,field)
+&   ^m(ups_shipment.field,shipment)
+
+;Number of packages in a shipment
+.define SH_PKGCNT(shipment)
+&   SH_DATA(shipment,sh_package_count)
+
+;Packages data handle in a shipment
+.define SH_PKGS(shipment)
+&   SH_DATA(shipment,sh_packages)
+
+;A package record
+.define PK_REC(shipment,pkgno)
+&   ^m(ups_package[pkgno],SH_PKGS(shipment))
+
+;A package field
+.define PK_DATA(shipment,pkgno,field)
+&   ^m(ups_package[pkgno].field,SH_PKGS(shipment))
+
+;Number of activities for a package
+.define PK_ACTCNT(shipment,pkgno)
+&   PK_DATA(shipment,pkgno,pk_activity_count)
+
+;Activities data handle in a package
+.define PK_ACTS(shipment,pkgno)
+&   PK_DATA(shipment,pkgno,pk_activities)
+
+;An activity record
+.define AC_REC(shipment,pkgno,acno)
+&   ^m(ups_activity[acno],PK_ACTS(shipment,pkgno))
+
+;An activity field
+.define AC_DATA(shipment,pkgno,acno,field)
+&   ^m(ups_activity[acno].field,PK_ACTS(shipment,pkgno))
+
+.endc
+
+external function
+    CanadianProvince        ,a
+    FormatDate              ,a
+    FormatTime              ,a
+    IsoToCountry            ,a
+    UpsPackageType          ,a
+    UpsPickupType           ,a
+    UsState                 ,a
+
+structure ups_shipment                  ;A shipment
+
+    sh_shipmentid           ,a35        ;Shipment identification (tracking) #
+    sh_shipper              ,a10        ;UPS shipper number
+
+    sh_from_add1            ,a35        ;Shipper address
+    sh_from_add2            ,a35        ;Address 2
+    sh_from_add3            ,a35        ;Address 3
+    sh_from_city            ,a30        ;City
+    sh_from_state           ,a5         ;State or province code
+    sh_from_zip             ,a16        ;Zip or postal code
+    sh_from_cntry           ,a3         ;ISO country code
+
+    sh_to_add1              ,a35        ;Ship to address
+    sh_to_add2              ,a35        ;Address 2
+    sh_to_add3              ,a35        ;Address 3
+    sh_to_city              ,a30        ;City
+    sh_to_state             ,a5         ;State or province code
+    sh_to_zip               ,a16        ;Zip or postal code
+    sh_to_cntry             ,a3         ;ISO country code
+
+    sh_service_code         ,a3         ;UPS service code
+    sh_service_desc         ,a35        ;Ups service description
+    sh_refcode              ,a2         ;Reference number type code
+    sh_refval               ,a35        ;Reference number value
+    sh_pickupdate           ,d8         ;Pickup date
+    sh_sched_deldate        ,d8         ;Scheduled delivery date
+    sh_sched_deltime        ,d6         ;Scheduled delivery time
+    sh_resched_deldate      ,d8         ;Rescheduled delivery date
+    sh_resched_deltime      ,d6         ;Rescheduled delivery time
+
+    group sh_ivars,i
+        sh_package_count      ,i4         ;Number of packages in shipment
+        sh_packages           ,D_HANDLE   ;Packages data handle
+    endgroup
+
+    ;A UPS shipment contains one or more packages
+
+structure ups_package                   ;A package
+
+    pk_trackno              ,a21        ;Tracking number
+
+    pk_weight               ,d9.2       ;Weight
+    pk_weight_uom           ,a3         ;Unit of measure, default "LBS"
+    pk_weight_uom_desc      ,a35        ;Unit of measure description
+
+    pk_refcode              ,a2         ;Reference number type code
+    pk_refvalue             ,a35        ;Reference number value
+
+    group pk_ivars ,i
+        pk_activity_count     ,i4         ;Number of activities for this package
+        pk_activities         ,D_HANDLE   ;Activity data handle
+    endgroup
+
+    ;A UPS package may have one or more activities
+
+structure ups_activity                  ;An activity
+
+    ac_add1                 ,a30        ;Address 1
+    ac_add2                 ,a30        ;Address 2
+    ac_add3                 ,a30        ;Address 3
+    ac_city                 ,a30        ;City
+    ac_state                ,a5         ;State or province
+    ac_zip                  ,a16        ;Zip or postal code
+    ac_country              ,a3         ;ISO country code
+    ac_lcode                ,a2         ;Activity location code
+    ac_ldesc                ,a30        ;Activity location description
+    ac_lsigned              ,a15        ;Signed for by name
+    ac_status               ,a1         ;Status type code
+    ac_stdesc               ,a80        ;Status type description
+    ac_stcode               ,a2         ;Status code (more detail)
+    ac_date                 ,d8         ;Activity date
+    ac_time                 ,d6         ;Activity time
+
+;*****************************************************************************
+.else ;UPSTRACK_INCLUDE ;END OF INCLUDE SECTION, BEGINNING OF PROGRAM CODE
+;*****************************************************************************
+
+;=============================================================================
+;
+; Title:        UpsTrackTest
+;
+; Description:  An example of using the UPS consignment tracking web service
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.main UpsTrackTest
+
+.define UPSTRACK_INCLUDE
+.include "INC:UpsTrack.dbl"
+
+    record ivars
+        ok              ,i4         ;OK to continue
+        tt              ,i4         ;Terminal channel
+        status          ,i4         ;Status from tracking routine
+        ups_error       ,i4         ;UPS error number
+        shipment        ,i4         ;Shipment data handle
+        count           ,i4         ;Loop counter
+        count1          ,i4         ;Loop counter
+        len             ,i4         ;Length of a string
+
+    record avars
+        userid          ,a20        ;UPS user id
+        password        ,a20        ;UPS password
+        accesscode      ,a20        ;UPS XML access code
+        url             ,a64        ;URL of server to use
+        errtxt          ,a76        ;Error text
+        char            ,a1         ;A character
+        trackno         ,a18        ;Tracking number to use
+        tracknos        ,[7]a18     ;UPS test tracking numbers
+&           ,"1Z12345E0291980793"       ;2nd day air letter
+&           ,"1Z12345E6692804405"       ;International worldwide express
+&           ,"1Z12345E0390515214"       ;Multiple packages UPS ground
+&           ,"1Z12345E1392654435"       ;Next day air saver letter
+&           ,"1Z12345E6892410845"       ;2nd delivery attempt
+&           ,"1Z12345E029198079"        ;Invalid tracking number
+&           ,"1Z12345E1591910450"       ;Valid but no tracking available
+
+.define D_URL_TEST  "https://wwwcie.ups.com/ups.app/xml/Track"  ;Testing
+.define D_URL_LIVE  "https://www.ups.com/ups.app/xml/Track"     ;Live
+
+.proc
+
+    ok = 1
+    open(tt=%syn_freechn,i,"tt:")
+    xcall flags(7004020,1)
+
+    writes(tt,"")
+    writes(tt,"")
+    writes(tt,"This example uses an API from 2005")
+    writes(tt," and does not use the current UPS API")
+    writes(tt,"")
+
+    xcall getlog("UPS_USERID",userid,len)
+    if (!len)
+    begin
+        writes(tt,"Environment variable UPS_USERID has not been defined!")
+        clear ok
+    end
+
+    xcall getlog("UPS_PASSWORD",password,len)
+    if (!len)
+    begin
+        writes(tt,"Environment variable UPS_PASSWORD has not been defined!")
+        clear ok
+    end
+
+    xcall getlog("UPS_ACCESS_CODE",accesscode,len)
+    if (!len)
+    begin
+        writes(tt,"Environment variable UPS_ACCESS_CODE has not been defined!")
+        clear ok
+    end
+
+    if (!ok) then
+        sleep 5
+    else
+    begin
+
+        repeat
+        begin
+            writes(tt,"")
+            writes(tt,"")
+            writes(tt,"UPS Tracking")
+            writes(tt,"")
+            display(tt,"Test, Live or Exit (T/L/E): ")
+            accept(tt,char)
+            upcase char
+
+            using char select
+            ("T"),  call test
+            ("L"),  call live
+            ("E"),  exitloop
+            (),
+            begin
+                writes(tt,"")
+                writes(tt,"Invalid option")
+                sleep 0.5
+            end
+            endusing
+
+        end
+
+    end
+
+    close tt
+    stop D_EXIT_SUCCESS
+
+test,
+
+    url = D_URL_TEST
+    writes(tt,"")
+    writes(tt,"UPS Tracking - TEST MODE")
+
+    repeat
+    begin
+
+        writes(tt,"")
+        display(tt,"Tracking number (1-7 or E): ")
+        accept(tt,char)
+        upcase char
+
+        using char select
+        ("1" thru "7"),
+        begin
+            trackno = tracknos[^d(char)]
+            call track_it
+        end
+        ("E"),
+            exitloop
+        (),
+        begin
+            writes(tt,"")
+            writes(tt,"Invalid option")
+            sleep 0.5
+        end
+        endusing
+
+    end
+
+    return
+
+live,
+
+    url = D_URL_LIVE
+    writes(tt,"")
+    writes(tt,"UPS Tracking - LIVE MODE")
+
+    repeat
+    begin
+
+        writes(tt,"")
+        display(tt,"Tracking number (enter to exit): ")
+        reads(tt,trackno)
+
+        if (!trackno)
+            exitloop
+
+        upcase trackno
+
+        call track_it
+
+    end
+
+    return
+
+
+track_it,
+
+    writes(tt,"")
+    writes(tt,"Contacting UPS...")
+
+    status = %UpsTrack(userid,password,accesscode,url,trackno,shipment,ups_error,errtxt)
+
+    using status select
+    (0),
+        call display_it
+    (-1),
+    begin
+        using ups_error select
+        (151018), ;Invalid tracking number
+            writes(tt,%atrim(errtxt))
+        (151044), ;No tracking information available
+            writes(tt,%atrim(errtxt))
+        (),
+            writes(tt,"UPS error "+%string(ups_error)+" ("+%atrim(errtxt)+")")
+        endusing
+        sleep 1
+        writes(tt,"")
+        writes(tt,"")
+    end
+    (-2),
+    begin
+        writes(tt,"You have not configured D_UPS_USERID, "+
+&           "D_UPS_PASSWORD, or D_UPS_ACCESS_CODE")
+        sleep 1
+        writes(tt,"")
+        writes(tt,"")
+    end
+    (),
+    begin
+        writes(tt,"Failure, error="+%string(status)+" ("+%atrim(errtxt)+")")
+        sleep 1
+        writes(tt,"")
+        writes(tt,"")
+    end
+    endusing
+
+    return
+
+display_it,
+
+    writes(tt,"")
+
+    writes(tt,"Tracking #: "+%atrim(SH_DATA(shipment,sh_shipmentid)))
+    writes(tt,"Shipper #: "+%atrim(SH_DATA(shipment,sh_shipper)))
+
+    writes(tt,"")
+    writes(tt,"Shipped from:")
+    writes(tt,SH_DATA(shipment,sh_from_add1))
+    writes(tt,SH_DATA(shipment,sh_from_add2))
+
+    if (SH_DATA(shipment,sh_from_city))
+        writes(tt,
+&           %atrim(SH_DATA(shipment,sh_from_city))+", "+
+&           %atrim(SH_DATA(shipment,sh_from_state))+", "+
+&           %atrim(SH_DATA(shipment,sh_from_zip)))
+    writes(tt,%IsoToCountry(SH_DATA(shipment,sh_from_cntry)))
+    writes(tt,"")
+
+    writes(tt,"Shipped to:")
+    writes(tt,SH_DATA(shipment,sh_to_add1))
+    writes(tt,SH_DATA(shipment,sh_to_add2))
+    writes(tt,%atrim(SH_DATA(shipment,sh_to_city))+", "+
+&       %atrim(SH_DATA(shipment,sh_to_state))+", "+
+&       %atrim(SH_DATA(shipment,sh_to_zip)))
+    writes(tt,%IsoToCountry(SH_DATA(shipment,sh_to_cntry)))
+    writes(tt,"")
+
+    writes(tt,"UPS Service:        "+%atrim(SH_DATA(shipment,sh_service_desc)))
+
+    writes(tt,"Customer Reference:"+%atrim(SH_DATA(shipment,sh_refval)))
+
+    writes(tt,"Pickup date:       "+%FormatDate(SH_DATA(shipment,sh_pickupdate)))
+
+    if (SH_DATA(shipment,sh_sched_deldate)) then
+        writes(tt,"Scheduled delivery:"+
+&           %FormatDate(SH_DATA(shipment,sh_sched_deldate))+", "+
+&           %FormatTime(SH_DATA(shipment,sh_sched_deltime)))
+    else
+        writes(tt,"Scheduled delivery:")
+
+
+    if (SH_PKGCNT(shipment))
+    begin
+        writes(tt,"")
+        writes(tt,"Packages")
+        for count from 1 thru SH_PKGCNT(shipment)
+        begin
+            writes(tt,%atrim(PK_DATA(shipment,count,pk_trackno)))
+            for count1 from 1 thru PK_ACTCNT(shipment,count)
+            begin
+                writes(tt,"    "+
+&                   %FormatDate(AC_DATA(shipment,count,count1,ac_date))+
+&                   " "+
+&                   %FormatTime(AC_DATA(shipment,count,count1,ac_time))+
+&                   " "+
+&                   %atrim(AC_DATA(shipment,count,count1,ac_stdesc(1:43))))
+            end
+        end
+    end
+
+    ;Release dynamic memory allocated by UpsTrack
+    xcall UpsTrackRelease(shipment)
+
+    return
+
+.end
+
+;=============================================================================
+;
+; Title:        UpsTrack
+;
+; Description:  Function to call the UPS consignment tracking XML web service
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.function UpsTrack, ^val
+
+    ;Arguments
+    a_userid            ,a
+    a_password          ,a
+    a_accesscode        ,a
+    a_url               ,a
+    a_tracking_number   ,a
+    a_shipment          ,i
+    a_ups_error         ,i
+    a_errtxt            ,a
+    ;End of arguments
+;
+.include "DBLDIR:synxml.def"
+.define UPSTRACK_INCLUDE
+.define UPSTRACK_INTERNAL
+.include "INC:UpsTrack.dbl"
+
+.align
+    stack record ivars
+
+        retval          ,i4                     ;Return value
+        err             ,i4                     ;Error number
+
+        doc             ,XML_DOC_TYPE           ;An XML document
+        xmlstr          ,XML_STRING_TYPE        ;An XML string
+        parser          ,XML_PARSER_TYPE        ;An XML parser
+
+        root            ,XML_ELEM_TYPE          ;Root element
+        rootcount       ,i4                     ;Loop counter
+        rootchildren    ,XML_ELEMLIST_TYPE      ;An XML element list
+        rootchildcount  ,i4                     ;Loop counter
+        rootchild       ,XML_ELEM_TYPE          ;An element
+
+        child           ,XML_ELEM_TYPE          ;An element
+        children        ,XML_ELEMLIST_TYPE      ;An XML element list
+        count           ,i4                     ;Loop counter
+
+        child1          ,XML_ELEM_TYPE          ;An element
+        children1       ,XML_ELEMLIST_TYPE      ;An XML element list
+        count1          ,i4                     ;Loop counter
+
+        child2          ,XML_ELEM_TYPE          ;An element
+        children2       ,XML_ELEMLIST_TYPE      ;An XML element list
+        count2          ,i4                     ;Loop counter
+
+        child3          ,XML_ELEM_TYPE          ;An element
+        children3       ,XML_ELEMLIST_TYPE      ;An XML element list
+        count3          ,i4                     ;Loop counter
+
+        child4          ,XML_ELEM_TYPE          ;An element
+        children4       ,XML_ELEMLIST_TYPE      ;An XML element list
+        count4          ,i4                     ;Loop counter
+
+        ah              ,D_HANDLE               ;Handle for authorization XML
+        th              ,D_HANDLE               ;Handle foe track request XML
+        sh              ,D_HANDLE               ;Handle for request to send
+        sl              ,i4                     ;Length of send data
+
+        rh              ,D_HANDLE               ;Handle for received data
+        rl              ,i4                     ;Length of received data
+
+        package         ,i4                     ;Current package number
+        activity        ,i4                     ;Current activity number
+
+    stack record avars
+        hdr             ,[2]a60
+        errtxt          ,a60                    ;Error text
+        char            ,a1                     ;A character
+        elem_name       ,a256
+        elem_text       ,a1024
+        ups_status      ,d1
+        ups_status_text ,a15
+        ups_error_text  ,a50
+
+.proc
+
+    ;Initialize data to a known state
+    clear ^i(ivars), avars, a_ups_error, a_errtxt
+
+    ;Make sure the calling routine has not already allocated memory to
+    ;the shipment and associated handles
+    xcall UpsTrackRelease(a_shipment)
+
+    ;Build the access request
+
+    doc = %xml_doc_create
+.ifdef DBLV83
+    xcall xml_option("ENCODE",SYNESCAPE_ESCAPE)
+.endc
+
+    ;Name the root element and add attributes
+    root = %xml_doc_getroot(doc)
+    xcall xml_elem_setname(root,"AccessRequest")
+    xcall xml_elem_setattribute(root,"xml:lang","en-US")
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child,"AccessLicenseNumber")
+    xcall xml_elem_settext(child,%atrim(a_accesscode))
+    xcall xml_elem_addchild(root,child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child,"UserId")
+    xcall xml_elem_settext(child,%atrim(a_userid))
+    xcall xml_elem_addchild(root,child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child,"Password")
+    xcall xml_elem_settext(child,%atrim(a_password))
+    xcall xml_elem_addchild(root,child)
+
+    ;Get the XML for the auth request into a handle
+    xmlstr = %xml_doc_tostring(doc,1)
+    xcall xml_doc_delete(doc)
+    ah = %mem_proc(DM_ALLOC+DM_BLANK,%xml_string_getsize(xmlstr))
+    ^m(ah) = ^m(%xml_string_gethandle(xmlstr))
+    xcall xml_string_delete(xmlstr)
+
+    ;Build the tracking request handle
+
+    doc = %xml_doc_create
+    root = %xml_doc_getroot(doc)
+
+    ;Set root element name and arrtibutes
+    xcall xml_elem_setname(root,"TrackRequest")
+    xcall xml_elem_setattribute(root,"xml:lang","en-US")
+
+    ;Create child "Request" element
+    child = %xml_elem_create
+    xcall xml_elem_setname(child,"Request")
+    xcall xml_elem_addchild(root,child)
+
+    ;Now add things under "Request"
+    root = child
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child,"TransactionReference")
+    xcall xml_elem_addchild(root,child)
+
+    child2 = %xml_elem_create
+    xcall xml_elem_setname(child2,"CustomerContext")
+    xcall xml_elem_settext(child2,%datetime)
+    xcall xml_elem_addchild(child,child2)
+
+    child2 = %xml_elem_create
+    xcall xml_elem_setname(child2,"XpciVersion")
+    xcall xml_elem_settext(child2,"1.0001")
+    xcall xml_elem_addchild(child,child2)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child,"RequestAction")
+    xcall xml_elem_settext(child,"Track")
+    xcall xml_elem_addchild(root,child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child,"RequestOption")
+    xcall xml_elem_settext(child,"none")
+    xcall xml_elem_addchild(root,child)
+
+    ;Go back to adding things under the main root
+    root = %xml_doc_getroot(doc)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child,"TrackingNumber")
+    ;xcall xml_elem_setname(child,"ShipmentIdentificationNumber")
+    xcall xml_elem_settext(child,a_tracking_number)
+    xcall xml_elem_addchild(root,child)
+
+    ;Get the XML for the tracking request into a handle
+    xmlstr = %xml_doc_tostring(doc,1)
+    xcall xml_doc_delete(doc)
+    th = %mem_proc(DM_ALLOC+DM_BLANK,%xml_string_getsize(xmlstr))
+    ^m(th) = ^m(%xml_string_gethandle(xmlstr))
+    xcall xml_string_delete(xmlstr)
+
+    ;Consolidate the two xml documents into one
+    sl = %mem_proc(DM_GETSIZE,ah)+%mem_proc(DM_GETSIZE,th)
+    sh=%mem_proc(DM_ALLOC,sl)
+    ^m(sh) = ^m(ah) + ^m(th)
+
+    ah = %mem_proc(DM_FREE,ah)
+    th = %mem_proc(DM_FREE,th)
+
+    ;Set HTTP headers
+    hdr[1]="Content-Type: application/x-www-form-urlencoded"
+    hdr[2]="Content-Length: " + %string(sl)
+
+    ;Delete the last log file
+    xcall delet(D_HTTPS_LOG_FILE)
+
+    ;Call the web service
+    err = %http_client_post(a_url,D_HTTPS_TIMEOUT,sh,sl,rh,rl,errtxt,hdr,
+&       D_HTTPS_LOG_FILE,,,,D_HTTPS_CA_FILE,HTTP_RELURI)
+
+    ;Did it work?
+    if (err) then
+    begin
+        ;No
+        retval=-3
+        a_errtxt = "HTTP post failed: " + errtxt
+    end
+    else
+    begin
+        ;Yes, did we get any data back?
+        if (rh && rl)
+            call parse_results
+    end
+
+    ;Clean up
+    sh = %mem_proc(DM_FREE,sh)
+    if (rh)
+        rh = %mem_proc(DM_FREE,rh)
+
+    freturn retval
+
+;-----------------------------------------------------------------------------
+;
+parse_results,
+
+.ifdef DBLV83
+    xcall xml_option("ENCODE",SYNESCAPE_UNESCAPE)
+.endc
+
+    xmlstr = %xml_string_create
+    xcall xml_string_appendhandle(xmlstr,rh,rl)
+
+    parser = %xml_parser_create
+
+    doc = %xml_parser_parsestring(parser,xmlstr)
+
+    xcall xml_string_delete(xmlstr)
+
+    if (!doc)
+    begin
+        retval=-4
+        xcall xml_parser_error(parser,errtxt)
+        a_errtxt = "Failed to parse response XML: " + errtxt
+    end
+
+    xcall xml_parser_delete(parser)
+
+    if (!retval)
+    begin
+        ;Parse <TrackResponse>
+
+        root = %xml_doc_getroot(doc)
+        xcall xml_elem_getname(root,elem_name)
+        if (elem_name!="TrackResponse")
+        begin
+            retval=-5
+            a_errtxt = "Unexpected response root element: " + elem_name
+        end
+    end
+
+    if (!retval)
+    begin
+        rootchildren = %xml_elem_children(root)
+        rootchildcount = %xml_elemlist_count(rootchildren)
+        for rootcount from 1 thru rootchildcount
+        begin
+            rootchild = %xml_elemlist_item(rootchildren,rootcount)
+            xcall xml_elem_getname(rootchild,elem_name)
+            using elem_name select
+            ("Response"),   ;TrackResponse/Response
+            begin
+                call parse_response
+                if (!ups_status)
+                begin
+                    retval=-1
+                    a_errtxt = ups_error_text
+                    exitloop
+                end
+            end
+            ("Shipment"),   ;TrackResponse/Shipment
+                call parse_shipment
+            endusing
+
+        end
+    end
+
+    if (doc)
+        xcall xml_doc_delete(doc)
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Response
+;
+parse_response,
+
+    children = %xml_elem_children(rootchild)
+    for count from 1 thru %xml_elemlist_count(children)
+    begin
+        child = %xml_elemlist_item(children,count)
+        xcall xml_elem_getname(child,elem_name)
+        xcall xml_elem_gettext(child,elem_text)
+        using elem_name select
+        ("ResponseStatusCode"),
+            ups_status = elem_text
+        ("ResponseStatusDescription"),
+            ups_status_text = elem_text
+        ("Error"),
+            call parse_ups_error
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Response/Error
+;
+parse_ups_error,
+
+    children1 = %xml_elem_children(child)
+    for count1 from 1 thru %xml_elemlist_count(children1)
+    begin
+        child1 = %xml_elemlist_item(children1,count1)
+        xcall xml_elem_getname(child1,elem_name)
+        xcall xml_elem_gettext(child1,elem_text)
+        using elem_name select
+        ("ErrorSeverity"),
+            nop
+        ("ErrorCode"),
+            a_ups_error = %integer(%atrim(elem_text))
+        ("ErrorDescription"),
+            ups_error_text = elem_text
+        endusing
+    end
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment
+;
+parse_shipment,
+
+    ;We have a shipment element, allocate memory for the returned shipment data
+    a_shipment=%mem_proc(DM_ALLOC|DM_BLANK|DM_STATIC,^size(ups_shipment))
+    clear ^i(SH_DATA(a_shipment,sh_ivars))
+
+    children = %xml_elem_children(rootchild)
+    for count from 1 thru %xml_elemlist_count(children)
+    begin
+        child = %xml_elemlist_item(children,count)
+        xcall xml_elem_getname(child,elem_name)
+        xcall xml_elem_gettext(child,elem_text)
+        using elem_name select
+        ("Shipper"),
+            call parse_shipper
+        ("ShipTo"),
+            call parse_shipto
+        ("Service"),
+            call parse_service
+        ("ReferenceNumber"),
+            call parse_referenceNumber
+        ("ShipmentIdentificationNumber"),
+            SH_DATA(a_shipment,sh_shipmentid) = elem_text
+        ("PickupDate"),
+            SH_DATA(a_shipment,sh_pickupdate) = %atrim(elem_text)
+        ("ScheduledDeliveryDate"),
+            SH_DATA(a_shipment,sh_sched_deldate) = %atrim(elem_text)
+        ("ScheduledDeliveryTime"),
+            SH_DATA(a_shipment,sh_sched_deltime) = %atrim(elem_text)
+        ("RescheduledDeliveryDate"),
+            SH_DATA(a_shipment,sh_resched_deldate) = %atrim(elem_text)
+        ("RescheduledDeliveryTime"),
+            SH_DATA(a_shipment,sh_resched_deltime) = %atrim(elem_text)
+        ("Package"),
+            call parse_package
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Shipper
+;
+parse_shipper,
+
+    children1 = %xml_elem_children(child)
+    for count1 from 1 thru %xml_elemlist_count(children1)
+    begin
+        child1 = %xml_elemlist_item(children1,count1)
+        xcall xml_elem_getname(child1,elem_name)
+        using elem_name select
+        ("ShipperNumber"),
+        begin
+            xcall xml_elem_gettext(child1,elem_text)
+            SH_DATA(a_shipment,sh_shipper) = elem_text
+        end
+        ("Address"),
+            call parse_shipper_address
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Shipper/Address
+;
+parse_shipper_address,
+
+    children2 = %xml_elem_children(child1)
+    for count2 from 1 thru %xml_elemlist_count(children2)
+    begin
+        child2 = %xml_elemlist_item(children2,count2)
+        xcall xml_elem_getname(child2,elem_name)
+        xcall xml_elem_gettext(child2,elem_text)
+        using elem_name select
+        ("AddressLine1"),
+            SH_DATA(a_shipment,sh_from_add1) = elem_text
+        ("AddressLine2"),
+            SH_DATA(a_shipment,sh_from_add2) = elem_text
+        ("AddressLine3"),
+            SH_DATA(a_shipment,sh_from_add3) = elem_text
+        ("City"),
+            SH_DATA(a_shipment,sh_from_city) = elem_text
+        ("StateProvince"),
+            SH_DATA(a_shipment,sh_from_state) = elem_text
+        ("PostalCode"),
+            SH_DATA(a_shipment,sh_from_zip) = elem_text
+        ("CountryCode"),
+            SH_DATA(a_shipment,sh_from_cntry) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/ShipTo
+;
+parse_shipto,
+
+    children1 = %xml_elem_children(child)
+    for count1 from 1 thru %xml_elemlist_count(children1)
+    begin
+        child1 = %xml_elemlist_item(children1,count1)
+        xcall xml_elem_getname(child1,elem_name)
+        using elem_name select
+        ("Address"),
+            call parse_shipto_address
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/ShipTo/Address
+;
+parse_shipto_address,
+
+    children2 = %xml_elem_children(child1)
+    for count2 from 1 thru %xml_elemlist_count(children2)
+    begin
+        child2 = %xml_elemlist_item(children2,count2)
+        xcall xml_elem_getname(child2,elem_name)
+        xcall xml_elem_gettext(child2,elem_text)
+        using elem_name select
+        ("AddressLine1"),
+            SH_DATA(a_shipment,sh_to_add1) = elem_text
+        ("AddressLine2"),
+            SH_DATA(a_shipment,sh_to_add2) = elem_text
+        ("AddressLine3"),
+            SH_DATA(a_shipment,sh_to_add3) = elem_text
+        ("City"),
+            SH_DATA(a_shipment,sh_to_city) = elem_text
+        ("StateProvince"),
+            SH_DATA(a_shipment,sh_to_state) = elem_text
+        ("PostalCode"),
+            SH_DATA(a_shipment,sh_to_zip) = elem_text
+        ("CountryCode"),
+            SH_DATA(a_shipment,sh_to_cntry) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Service
+;
+parse_service,
+
+    children1 = %xml_elem_children(child)
+    for count1 from 1 thru %xml_elemlist_count(children1)
+    begin
+        child1 = %xml_elemlist_item(children1,count1)
+        xcall xml_elem_getname(child1,elem_name)
+        xcall xml_elem_gettext(child1,elem_text)
+        using elem_name select
+        ("Code"),
+            SH_DATA(a_shipment,sh_service_code) = elem_text
+        ("Description"),
+            SH_DATA(a_shipment,sh_service_desc) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/ReferenceNumber
+;
+parse_referencenumber,
+
+    children1 = %xml_elem_children(child)
+    for count1 from 1 thru %xml_elemlist_count(children1)
+    begin
+        child1 = %xml_elemlist_item(children1,count1)
+        xcall xml_elem_getname(child1,elem_name)
+        xcall xml_elem_gettext(child1,elem_text)
+        using elem_name select
+        ("Code"),
+            SH_DATA(a_shipment,sh_refcode) = elem_text
+        ("Value"),
+            SH_DATA(a_shipment,sh_refval) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package
+;
+parse_package,
+
+    ;We have a <Package> element, increment the shipments package count and
+    ;allocate memory for the package
+
+    package = (SH_PKGCNT(a_shipment) += 1)
+
+    if (package==1) then
+        SH_PKGS(a_shipment) = %mem_proc(DM_ALLOC|DM_BLANK|DM_STATIC,
+&           ^size(ups_package))
+    else
+        SH_PKGS(a_shipment) = %mem_proc(DM_RESIZ|DM_BLANK,
+&           ^size(ups_package)*package,SH_PKGS(a_shipment))
+
+    ;Initialize the integer data in the new package
+    clear ^i(PK_DATA(a_shipment,package,pk_ivars))
+
+    ;Parse the element
+    children1 = %xml_elem_children(child)
+    for count1 from 1 thru %xml_elemlist_count(children1)
+    begin
+        child1 = %xml_elemlist_item(children1,count1)
+        xcall xml_elem_getname(child1,elem_name)
+        using elem_name select
+        ("TrackingNumber"),
+        begin
+            xcall xml_elem_gettext(child1,elem_text)
+            PK_DATA(a_shipment,package,pk_trackno) = elem_text
+        end
+        ("PackageWeight"),
+            call parse_package_weight
+        ("ReferenceNumber"),
+            call parse_package_reference
+        ("Activity"),
+            call parse_activity
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package/PackageWeight
+;
+parse_package_weight,
+
+    children2 = %xml_elem_children(child1)
+    for count2 from 1 thru %xml_elemlist_count(children2)
+    begin
+        child2 = %xml_elemlist_item(children2,count2)
+        xcall xml_elem_getname(child2,elem_name)
+        xcall xml_elem_gettext(child2,elem_text)
+        using elem_name select
+        ("UnitOfMeasurement"),
+            call parse_package_uom
+        ("Weight"),
+            PK_DATA(a_shipment,package,pk_weight) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package/PackageWeight/UnitOfMeasurement
+;
+parse_package_uom,
+
+    children3 = %xml_elem_children(child2)
+    for count3 from 1 thru %xml_elemlist_count(children3)
+    begin
+        child3 = %xml_elemlist_item(children3,count3)
+        xcall xml_elem_getname(child3,elem_name)
+        xcall xml_elem_gettext(child3,elem_text)
+        using elem_name select
+        ("Code"),
+            PK_DATA(a_shipment,package,pk_weight_uom) = elem_text
+        ("Description"),
+            PK_DATA(a_shipment,package,pk_weight_uom_desc) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package/ReferenceNumber
+;
+parse_package_reference,
+
+    children2 = %xml_elem_children(child1)
+    for count2 from 1 thru %xml_elemlist_count(children2)
+    begin
+        child2 = %xml_elemlist_item(children2,count2)
+        xcall xml_elem_getname(child2,elem_name)
+        xcall xml_elem_gettext(child2,elem_text)
+        using elem_name select
+        ("Code"),
+            PK_DATA(a_shipment,package,pk_refcode) = elem_text
+        ("Value"),
+            PK_DATA(a_shipment,package,pk_refvalue) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package/Activity
+;
+parse_activity,
+
+    ;We have an <Activity> element, increment the packages activity count and
+    ;allocate memory for the activity
+    activity = (PK_ACTCNT(a_shipment,package) +=1)
+    if (activity==1) then
+        PK_ACTS(a_shipment,package) = %mem_proc(DM_ALLOC|DM_BLANK|DM_STATIC,
+&           ^size(ups_activity))
+    else
+        PK_ACTS(a_shipment,package) = %mem_proc(DM_RESIZ|DM_BLANK,
+&           ^size(ups_activity)*activity,PK_ACTS(a_shipment,package))
+
+    children2 = %xml_elem_children(child1)
+    for count2 from 1 thru %xml_elemlist_count(children2)
+    begin
+        child2 = %xml_elemlist_item(children2,count2)
+        xcall xml_elem_getname(child2,elem_name)
+        xcall xml_elem_gettext(child2,elem_text)
+        using elem_name select
+        ("ActivityLocation"),
+            call parse_activity_location
+        ("Status"),
+            call parse_activity_status
+        ("Date"),
+            AC_DATA(a_shipment,package,activity,ac_date) = %atrim(elem_text)
+        ("Time"),
+            AC_DATA(a_shipment,package,activity,ac_time) = %atrim(elem_text)
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package/Activity/ActivityLocation
+;
+parse_activity_location,
+
+    children3 = %xml_elem_children(child2)
+    for count3 from 1 thru %xml_elemlist_count(children3)
+    begin
+        child3 = %xml_elemlist_item(children3,count3)
+        xcall xml_elem_getname(child3,elem_name)
+        xcall xml_elem_gettext(child3,elem_text)
+        using elem_name select
+        ("Address"),
+            call parse_activity_address
+        ("Code"),
+            AC_DATA(a_shipment,package,activity,ac_lcode) = elem_text
+        ("Description"),
+            AC_DATA(a_shipment,package,activity,ac_ldesc) = elem_text
+        ("SignedForByName"),
+            AC_DATA(a_shipment,package,activity,ac_lsigned) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package/Activity/ActivityLocation/Address
+;
+parse_activity_address,
+
+    children4 = %xml_elem_children(child3)
+    for count4 from 1 thru %xml_elemlist_count(children4)
+    begin
+        child4 = %xml_elemlist_item(children4,count4)
+        xcall xml_elem_getname(child4,elem_name)
+        xcall xml_elem_gettext(child4,elem_text)
+        using elem_name select
+        ("AddressLine1"),
+            AC_DATA(a_shipment,package,activity,ac_add1) = elem_text
+        ("AddressLine2"),
+            AC_DATA(a_shipment,package,activity,ac_add2) = elem_text
+        ("AddressLine3"),
+            AC_DATA(a_shipment,package,activity,ac_add3) = elem_text
+        ("City"),
+            AC_DATA(a_shipment,package,activity,ac_city) = elem_text
+        ("StateProvinceCode"),
+            AC_DATA(a_shipment,package,activity,ac_state) = elem_text
+        ("PostalCode"),
+            AC_DATA(a_shipment,package,activity,ac_zip) = elem_text
+        ("CountryCode"),
+            AC_DATA(a_shipment,package,activity,ac_country) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package/Activity/Status
+;
+parse_activity_status,
+
+    children3 = %xml_elem_children(child2)
+    for count3 from 1 thru %xml_elemlist_count(children3)
+    begin
+        child3 = %xml_elemlist_item(children3,count3)
+        xcall xml_elem_getname(child3,elem_name)
+        xcall xml_elem_gettext(child3,elem_text)
+        using elem_name select
+        ("StatusType"),
+            call parse_activity_status_type
+        ("StatusCode"),
+            call parse_activity_status_type
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package/Activity/Status/StatusType
+;
+parse_activity_status_type,
+
+    children4 = %xml_elem_children(child3)
+    for count4 from 1 thru %xml_elemlist_count(children4)
+    begin
+        child4 = %xml_elemlist_item(children4,count4)
+        xcall xml_elem_getname(child4,elem_name)
+        xcall xml_elem_gettext(child4,elem_text)
+        using elem_name select
+        ("Code"),
+            AC_DATA(a_shipment,package,activity,ac_status) = elem_text
+        ("Description"),
+            AC_DATA(a_shipment,package,activity,ac_stdesc) = elem_text
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+;TrackResponse/Shipment/Package/Activity/Status/StatusCode
+;
+parse_activity_status_code,
+
+    children4 = %xml_elem_children(child3)
+    for count4 from 1 thru %xml_elemlist_count(children4)
+    begin
+        child4 = %xml_elemlist_item(children4,count4)
+        xcall xml_elem_getname(child4,elem_name)
+        xcall xml_elem_gettext(child4,elem_text)
+        using elem_name select
+        ("Code"),
+            AC_DATA(a_shipment,package,activity,ac_stcode) = elem_text
+        endusing
+    end
+
+    return
+
+.end
+
+;=============================================================================
+;
+; Title:        UpsTrackRelease
+;
+; Description:  Release dynamic memory allocated by UpsTrack
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.subroutine UpsTrackRelease
+
+    a_shipment      ,i          ;Shipment data handle
+
+.define UPSTRACK_INCLUDE
+.include "INC:UpsTrack.dbl"
+
+    stack record
+        count           ,i4
+
+.proc
+
+    ;Is there shipment memory allocated?
+    if (a_shipment)
+    begin
+        ;Any packages in the shipment?
+        if (SH_PKGCNT(a_shipment))
+        begin
+            ;For each package
+            for count from 1 thru SH_PKGCNT(a_shipment)
+            begin
+                ;Does the package have activities?
+                if (PK_ACTCNT(a_shipment,count))
+                begin
+                    ;Deallocate package activities memory
+                    PK_ACTS(a_shipment,count) = %mem_proc(DM_FREE,
+&                       PK_ACTS(a_shipment,count))
+                end
+            end
+            ;Deallocate packages memory
+            SH_PKGS(a_shipment) = %mem_proc(DM_FREE,SH_PKGS(a_shipment))
+        end
+        ;Deallocate shipment memory
+        a_shipment = %mem_proc(DM_FREE,a_shipment)
+    end
+
+    xreturn
+
+.end
+
+;=============================================================================
+;
+; Title:        FormatDate
+;
+; Description:  Formats a D8 YYYYMMDD date as MM/DD/YYYY
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.function FormatDate ;,a
+
+    a_date      ,n      ;YYYYMMDD
+
+    stack record
+        retval      ,a10
+
+.proc
+
+    if (!a_date) then
+        clear retval
+    else
+        retval = ^a(a_date(5:2)) + "/" + ^a(a_date(7:2)) + "/" + ^a(a_date(1:4))
+
+    freturn retval
+
+.end
+
+;=============================================================================
+;
+; Title:        FormatTime
+;
+; Description:  Formats a D6 time as HH:MM:SS
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.function FormatTime ;,a
+
+    a_time      ,n      ;HHMMSS
+
+    stack record
+        retval      ,a5
+
+.proc
+
+    if (!a_time) then
+        clear retval
+    else
+        retval = a_time(1:4), "XX:XX"
+
+    freturn retval
+
+.end
+
+;=============================================================================
+;
+; Title:        IsoToCountry
+;
+; Description:  Converts a 2-digit ISO country code to a country name
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.function IsoToCountry  ;,a
+
+    a_iso_code  ,a
+
+    stack record
+        retval      ,a40
+
+
+.proc
+
+    clear retval
+
+    using a_iso_code select
+    ("AL"), retval = "Albania"
+    ("DZ"), retval = "Algeria"
+    ("AS"), retval = "American Samoa"
+    ("AD"), retval = "Andorra"
+    ("AO"), retval = "Angola"
+    ("AI"), retval = "Anguilla"
+    ("AG"), retval = "Antigua and Barbuda"
+    ("AR"), retval = "Argentina"
+    ("AM"), retval = "Armenia"
+    ("AW"), retval = "Aruba"
+    ("AU"), retval = "Australia"
+    ("AT"), retval = "Austria"
+    ("AZ"), retval = "Azerbaijan"
+    ("AP"), retval = "Azores"
+    ("BS"), retval = "Bahamas"
+    ("BH"), retval = "Bahrain"
+    ("BD"), retval = "Bangladesh"
+    ("BB"), retval = "Barbados"
+    ("BY"), retval = "Belarus"
+    ("BE"), retval = "Belgium"
+    ("BZ"), retval = "Belize"
+    ("BJ"), retval = "Benin"
+    ("BM"), retval = "Bermuda"
+    ("BT"), retval = "Bhutan"
+    ("BO"), retval = "Bolivia"
+    ("BL"), retval = "Bonaire"
+    ("BA"), retval = "Bosnia and Herzegovina"
+    ("BW"), retval = "Botswana"
+    ("BV"), retval = "Bouvet Island"
+    ("BR"), retval = "Brazil"
+    ("IO"), retval = "British Indian Ocean Territory"
+    ("BN"), retval = "Brunei Darussalam"
+    ("BG"), retval = "Bulgaria"
+    ("BF"), retval = "Burkina Faso"
+    ("BI"), retval = "Burundi"
+    ("KH"), retval = "Cambodia"
+    ("CM"), retval = "Cameroon"
+    ("CA"), retval = "Canada"
+    ("IC"), retval = "Canary Islands"
+    ("CV"), retval = "Cape Verde"
+    ("KY"), retval = "Cayman Islands"
+    ("CF"), retval = "Central African Republic"
+    ("TD"), retval = "Chad"
+    ("CD"), retval = "Channel Islands"
+    ("CL"), retval = "Chile"
+    ("CN"), retval = "China"
+    ("CX"), retval = "Christmas Island"
+    ("CC"), retval = "Cocos (Keeling) Islands"
+    ("CO"), retval = "Colombia"
+    ("KM"), retval = "Comoros"
+    ("ZP"), retval = "Congo (Democratic Republic of)"
+    ("CK"), retval = "Cook Islands"
+    ("CR"), retval = "Costa Rica"
+    ("CI"), retval = "Cote D' Ivoire (Ivory Coast)"
+    ("HR"), retval = "Croatia (Hrvatska)"
+    ("CB"), retval = "Curacao"
+    ("CY"), retval = "Cyprus"
+    ("CZ"), retval = "Czech Republic"
+    ("DK"), retval = "Denmark"
+    ("DJ"), retval = "Djibouti"
+    ("DM"), retval = "Dominica"
+    ("DO"), retval = "Dominican Republic"
+    ("TP"), retval = "East Timor"
+    ("EC"), retval = "Ecuador"
+    ("EG"), retval = "Egypt"
+    ("SV"), retval = "El Salvador"
+    ("EN"), retval = "England"
+    ("GQ"), retval = "Equatorial Guinea"
+    ("ER"), retval = "Eritrea"
+    ("EE"), retval = "Estonia"
+    ("ET"), retval = "Ethiopia"
+    ("FO"), retval = "Faeroe Islands"
+    ("FK"), retval = "Falkland Islands (Malvinas)"
+    ("FJ"), retval = "Fiji"
+    ("FI"), retval = "Finland"
+    ("FR"), retval = "France"
+    ("GF"), retval = "French Guiana"
+    ("PF"), retval = "French Polynesia"
+    ("TF"), retval = "French Southern Territories"
+    ("GA"), retval = "Gabon"
+    ("GM"), retval = "Gambia"
+    ("GE"), retval = "Georgia"
+    ("DE"), retval = "Germany"
+    ("GH"), retval = "Ghana"
+    ("GI"), retval = "Gibraltar"
+    ("GB"), retval = "Great Britain (UK)"
+    ("GR"), retval = "Greece"
+    ("GL"), retval = "Greenland"
+    ("GD"), retval = "Grenada"
+    ("GP"), retval = "Guadeloupe"
+    ("GU"), retval = "Guam"
+    ("GT"), retval = "Guatemala"
+    ("GN"), retval = "Guinea"
+    ("GW"), retval = "Guinea-Bissau"
+    ("GY"), retval = "Guyana"
+    ("HT"), retval = "Haiti"
+    ("HM"), retval = "Heard Island and McDonald Islands"
+    ("HN"), retval = "Honduras"
+    ("HK"), retval = "Hong Kong"
+    ("HU"), retval = "Hungary"
+    ("IS"), retval = "Iceland"
+    ("IN"), retval = "India"
+    ("ID"), retval = "Indonesia"
+    ("IE"), retval = "Ireland"
+    ("IL"), retval = "Israel"
+    ("IT"), retval = "Italy"
+    ("JM"), retval = "Jamaica"
+    ("JP"), retval = "Japan"
+    ("JO"), retval = "Jordan"
+    ("KZ"), retval = "Kazakhstan"
+    ("KE"), retval = "Kenya"
+    ("KI"), retval = "Kiribati"
+    ("KO"), retval = "Kosrae"
+    ("KW"), retval = "Kuwait"
+    ("KG"), retval = "Kyrgyzstan"
+    ("LA"), retval = "Laos"
+    ("LV"), retval = "Latvia"
+    ("LB"), retval = "Lebanon"
+    ("LS"), retval = "Lesotho"
+    ("LR"), retval = "Liberia"
+    ("LY"), retval = "Libya"
+    ("LI"), retval = "Liechtenstein"
+    ("LT"), retval = "Lithuania"
+    ("LU"), retval = "Luxembourg"
+    ("MO"), retval = "Macau"
+    ("MK"), retval = "Macedonia"
+    ("MG"), retval = "Madagascar"
+    ("ME"), retval = "Madeira"
+    ("MW"), retval = "Malawi"
+    ("MY"), retval = "Malaysia"
+    ("MV"), retval = "Maldives"
+    ("ML"), retval = "Mali"
+    ("MT"), retval = "Malta"
+    ("MH"), retval = "Marshall Islands"
+    ("MQ"), retval = "Martinique"
+    ("MR"), retval = "Mauritania"
+    ("MU"), retval = "Mauritius"
+    ("YT"), retval = "Mayotte"
+    ("MX"), retval = "Mexico"
+    ("FM"), retval = "Micronesia"
+    ("MD"), retval = "Moldova"
+    ("MC"), retval = "Monaco"
+    ("MN"), retval = "Mongolia"
+    ("MS"), retval = "Montserrat"
+    ("MA"), retval = "Morocco"
+    ("MZ"), retval = "Mozambique"
+    ("MM"), retval = "Myanmar"
+    ("NA"), retval = "Namibia"
+    ("NR"), retval = "Nauru"
+    ("NP"), retval = "Nepal"
+    ("NL"), retval = "Netherlands"
+    ("AN"), retval = "Netherlands Antilles"
+    ("NT"), retval = "Neutral Zone"
+    ("NC"), retval = "New Caledonia"
+    ("NZ"), retval = "New Zealand (Aotearoa)"
+    ("NI"), retval = "Nicaragua"
+    ("NE"), retval = "Niger"
+    ("NG"), retval = "Nigeria"
+    ("NU"), retval = "Niue"
+    ("NF"), retval = "Norfolk Island"
+    ("KP"), retval = "North Korea"
+    ("NB"), retval = "Northern Ireland"
+    ("MP"), retval = "Northern Mariana Islands"
+    ("NO"), retval = "Norway"
+    ("OM"), retval = "Oman"
+    ("PK"), retval = "Pakistan"
+    ("PW"), retval = "Palau"
+    ("PA"), retval = "Panama"
+    ("PG"), retval = "Papua New Guinea"
+    ("PY"), retval = "Paraguay"
+    ("PE"), retval = "Peru"
+    ("PH"), retval = "Philippines"
+    ("PN"), retval = "Pitcairn"
+    ("PL"), retval = "Poland"
+    ("PO"), retval = "Ponape"
+    ("PT"), retval = "Portugal"
+    ("PR"), retval = "Puerto Rico"
+    ("QA"), retval = "Qatar"
+    ("RE"), retval = "Reunion"
+    ("RO"), retval = "Romania"
+    ("RT"), retval = "Rota"
+    ("RU"), retval = "Russian Federation"
+    ("RW"), retval = "Rwanda"
+    ("SS"), retval = "Saba"
+    ("KN"), retval = "Saint Kitts and Nevis"
+    ("LC"), retval = "Saint Lucia"
+    ("VC"), retval = "Saint Vincent and the Grenadines"
+    ("SP"), retval = "Saipan"
+    ("WS"), retval = "Samoa"
+    ("SM"), retval = "San Marino"
+    ("ST"), retval = "Sao Tome and Principe"
+    ("SA"), retval = "Saudi Arabia"
+    ("SF"), retval = "Scotland"
+    ("SN"), retval = "Senegal"
+    ("CS"), retval = "Serbia and Montenegro"
+    ("SC"), retval = "Seychelles"
+    ("SL"), retval = "Sierra Leone"
+    ("SG"), retval = "Singapore"
+    ("SK"), retval = "Slovak Republic"
+    ("SI"), retval = "Slovenia"
+    ("SB"), retval = "Solomon Islands"
+    ("SO"), retval = "Somalia"
+    ("ZA"), retval = "South Africa"
+    ("GS"), retval = "South Georgia and South Sandwich Islands."
+    ("KR"), retval = "South Korea"
+    ("ES"), retval = "Spain"
+    ("LK"), retval = "Sri Lanka"
+    ("NT"), retval = "St. Barthelemy"
+    ("SW"), retval = "St. Christopher"
+    ("VI"), retval = "St. Croix"
+    ("EU"), retval = "St. Eustatius"
+    ("SH"), retval = "St. Helena"
+    ("UV"), retval = "St. John"
+    ("KN"), retval = "St. Kitts and Nevis"
+    ("LC"), retval = "St. Lucia"
+    ("MB"), retval = "St. Maarten"
+    ("TB"), retval = "St. Martin"
+    ("PM"), retval = "St. Pierre and Miquelon"
+    ("VL"), retval = "St. Thomas"
+    ("VC"), retval = "St. Vincent/Grenadine"
+    ("SD"), retval = "Sudan"
+    ("SR"), retval = "Suriname"
+    ("SJ"), retval = "Svalbard and Jan Mayen Islands"
+    ("SZ"), retval = "Swaziland"
+    ("SE"), retval = "Sweden"
+    ("CH"), retval = "Switzerland"
+    ("SY"), retval = "Syria"
+    ("TA"), retval = "Tahiti"
+    ("TW"), retval = "Taiwan"
+    ("TJ"), retval = "Tajikistan"
+    ("TZ"), retval = "Tanzania"
+    ("TH"), retval = "Thailand"
+    ("TI"), retval = "Tinian"
+    ("TG"), retval = "Togo"
+    ("TK"), retval = "Tokelau"
+    ("TO"), retval = "Tonga"
+    ("TL"), retval = "Tortola"
+    ("TT"), retval = "Trinidad and Tobago"
+    ("TU"), retval = "Truk"
+    ("TN"), retval = "Tunisia"
+    ("TR"), retval = "Turkey"
+    ("TM"), retval = "Turkmenistan"
+    ("TC"), retval = "Turks and Caicos Islands"
+    ("TV"), retval = "Tuvalu"
+    ("UG"), retval = "Uganda"
+    ("UA"), retval = "Ukraine"
+    ("UI"), retval = "Union Island"
+    ("AE"), retval = "United Arab Emirates"
+    ("US"), retval = "United States"
+    ("UY"), retval = "Uruguay"
+    ("UM"), retval = "US Minor Outlying Islands"
+    ("SU"), retval = "USSR (former)"
+    ("UZ"), retval = "Uzbekistan"
+    ("VU"), retval = "Vanuatu"
+    ("VA"), retval = "Vatican City State (Holy See)"
+    ("VE"), retval = "Venezuela"
+    ("VN"), retval = "Vietnam"
+    ("VR"), retval = "Virgin Gorda"
+    ("VG"), retval = "Virgin Islands (British)"
+    ("VI"), retval = "Virgin Islands (U.S.)"
+    ("WL"), retval = "Wales"
+    ("WF"), retval = "Wallis and Futuna Islands"
+    ("WS"), retval = "Western Samoa"
+    ("YA"), retval = "Yap"
+    ("YE"), retval = "Yemen"
+    ("ZR"), retval = "Zaire"
+    ("ZM"), retval = "Zambia"
+    ("ZW"), retval = "Zimbabwe"
+    endusing
+
+    freturn %atrim(retval)
+
+.end
+
+;=============================================================================
+;
+; Title:        UsState
+;
+; Description:  Converts a 2-digit US state code to a state name
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.function UsState ;,a
+
+    a_state_code    ,a
+
+    stack record
+        retval          ,a20
+
+.proc
+
+    clear retval
+
+    using a_state_code select
+    ("AL"), retval = "Alabama"
+    ("AK"), retval = "Alaska"
+    ("AZ"), retval = "Arizona"
+    ("AR"), retval = "Arkansas"
+    ("CA"), retval = "California"
+    ("CO"), retval = "Colorado"
+    ("CT"), retval = "Connecticut"
+    ("DE"), retval = "Delaware"
+    ("DC"), retval = "District of Columbia"
+    ("FL"), retval = "Florida"
+    ("GA"), retval = "Georgia"
+    ("HI"), retval = "Hawaii"
+    ("ID"), retval = "Idaho"
+    ("IL"), retval = "Illinois"
+    ("IN"), retval = "Indiana"
+    ("IA"), retval = "Iowa"
+    ("KS"), retval = "Kansas"
+    ("KY"), retval = "Kentucky"
+    ("LA"), retval = "Louisiana"
+    ("ME"), retval = "Maine"
+    ("MD"), retval = "Maryland"
+    ("MA"), retval = "Massachusetts"
+    ("MI"), retval = "Michigan"
+    ("MN"), retval = "Minnesota"
+    ("MS"), retval = "Mississippi"
+    ("MO"), retval = "Missouri"
+    ("MT"), retval = "Montana"
+    ("NE"), retval = "Nebraska"
+    ("NV"), retval = "Nevada"
+    ("NH"), retval = "New Hampshire"
+    ("NJ"), retval = "New Jersey"
+    ("NM"), retval = "New Mexico"
+    ("NY"), retval = "New York"
+    ("NC"), retval = "North Carolina"
+    ("ND"), retval = "North Dakota"
+    ("OH"), retval = "Ohio"
+    ("OK"), retval = "Oklahoma"
+    ("OR"), retval = "Oregon"
+    ("PA"), retval = "Pennsylvania"
+    ("RI"), retval = "Rhode Island"
+    ("SC"), retval = "South Carolina"
+    ("SD"), retval = "South Dakota"
+    ("TN"), retval = "Tennessee"
+    ("TX"), retval = "Texas"
+    ("UT"), retval = "Utah"
+    ("VT"), retval = "Vermont"
+    ("VA"), retval = "Virginia"
+    ("WA"), retval = "Washington"
+    ("WV"), retval = "West Virginia"
+    ("WI"), retval = "Wisconsin"
+    ("WY"), retval = "Wyoming"
+    endusing
+
+    freturn %atrim(retval)
+
+.end
+
+;=============================================================================
+;
+; Title:        CanadianProvince
+;
+; Description:  Converts a 2-digit Canadian province code to a province name
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.function CanadianProvince ;,a
+
+    a_province_code ,a
+
+    stack record
+        retval          ,a21
+
+.proc
+
+    clear retval
+
+    using a_province_code select
+    ("AB"), retval = "Alberta"
+    ("BC"), retval = "British Columbia"
+    ("MB"), retval = "Manitoba"
+    ("NB"), retval = "New Brunswick"
+    ("NF"), retval = "Newfoundland"
+    ("NT"), retval = "Northwest Territories"
+    ("NS"), retval = "Nova Scotia"
+    ("NU"), retval = "Nunavut"
+    ("ON"), retval = "Ontario"
+    ("PE"), retval = "Prince Edward Island"
+    ("QC"), retval = "Quebec"
+    ("SK"), retval = "Saskatchewan"
+    ("YT"), retval = "Yukon"
+    endusing
+
+    freturn %atrim(retval)
+
+.end
+
+;=============================================================================
+;
+; Title:        UpsPickupType
+;
+; Description:  Converts a 2-digit pickup type code to a pickup type description
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.function UpsPickupType ;,a
+
+    a_pickup_type   ,a
+
+    stack record
+        retval          ,a35
+
+.proc
+
+    clear retval
+
+    using a_pickup_type select
+    ("01"), retval = "Daily Pickup"
+    ("03"), retval = "Customer Counter"
+    ("06"), retval = "One Time Pickup"
+    ("07"), retval = "On Call Air Pickup®"
+    ("11"), retval = "Suggested Retail Rates (UPS Store)"
+    ("19"), retval = "Letter Center"
+    ("20"), retval = "Air Service Center"
+    endusing
+
+    freturn %atrim(retval)
+
+.end
+
+;=============================================================================
+;
+; Title:        UpsPackageType
+;
+; Description:  Converts a 2-digit package type code to a description
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         28th September 2005
+;
+;=============================================================================
+;
+.function UpsPackageType ;,a
+
+    a_package_type  ,a
+
+    stack record
+        retval          ,a35
+
+.proc
+
+    clear retval
+
+    using a_package_type select
+    ("01"), retval = "UPS Letter/UPS Express Envelope"
+    ("02"), retval = "Package"
+    ("03"), retval = "UPS Tube"
+    ("04"), retval = "UPS Pak"
+    ("21"), retval = "UPS Express Box"
+    ("24"), retval = "UPS 25KG Box®"
+    ("24"), retval = "UPS 10KG Box®"
+    endusing
+
+    freturn %atrim(retval)
+
+.end
+
+;*****************************************************************************
+.endc ;UPSTRACK_INCLUDE - END OF PROGRAM CODE
+;*****************************************************************************
+

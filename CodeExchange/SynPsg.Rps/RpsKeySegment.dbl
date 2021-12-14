@@ -1,0 +1,178 @@
+;******************************************************************************
+;
+; Class:		SynPsg.Rps.RpsKeySegment
+;
+; Description:	Represents a single key segment for a Repository structures key
+;
+; Author:		Steve Ives, Synergex Professional Services Group
+;
+; Date: 		19th October 2007
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+;******************************************************************************
+;
+import SynPsg.Rps
+
+namespace SynPsg.Rps
+
+	class RpsKeySegment
+		
+		;Key segment attribute data
+		protected p_SegmentType		,a1		;Segment type (see .defines above)
+		protected p_Position		,d5		;Segment field position
+		protected p_Length			,d3		;Segment field/literal length
+		protected p_Field			,a30	;Segment field name
+		protected p_Structure		,a30	;Segment structure name
+		protected p_LiteralValue	,a30	;Segment literal value (length in ki_seglen)
+		protected p_DataType		,d1		;Optional, segment data type
+		protected p_Order			,d1		;Optional, segment order
+		
+		; Constructor
+		public method RpsKeySegment
+			required in a_SegmentType	,a
+			required in a_Position		,d
+			required in a_Length		,d
+			required in a_Field			,a
+			required in a_Structure		,a
+			required in a_LiteralValue	,a
+			required in a_DataType		,d
+			required in a_Order			,d
+			endparams
+		proc
+			p_SegmentType   = a_SegmentType   
+			p_Position 		= a_Position 
+			p_Length        = a_Length        
+			p_Field		    = a_Field
+			p_Structure		= a_Structure
+			p_LiteralValue  = a_LiteralValue  
+			p_DataType      = a_DataType      
+			p_Order         = a_Order
+			;Segment orders are optional in Repository, but default to
+			;ascending in ISAM.  If we don't have a segment order, default to
+			;ascending
+			if (!p_Order)
+				p_Order = 1
+			;Segment data types are optional in Repository, but default to
+			;alpha in ISAM.  If we don't have a segment data type, default to
+			;alpha
+			if (!p_DataType)
+				p_DataType = 1
+		endmethod
+
+		; Segment type (enum RpsKeySegmentType)
+		;	Field, 1
+		;	Literal, 2
+		;	External, 3
+		;	RecordNumber, 4
+		public property SegmentType, RpsKeySegmentType
+			method get
+				record 
+					retval, RpsKeySegmentType
+				endrecord
+			proc
+				using p_SegmentType select
+				("F"),	retval = RpsKeySegmentType.Field
+				("L"),	retval = RpsKeySegmentType.Literal
+				("E"),	retval = RpsKeySegmentType.External
+				("R"),	retval = RpsKeySegmentType.RecordNumber
+				endusing
+				mreturn retval
+			endmethod
+		endproperty
+
+		; Segment field position (d5)
+		public property Position, int
+			method get
+			proc
+				mreturn p_Position
+			endmethod
+		endproperty
+
+		; Segment field/literal length (d3)
+		public property Length, int
+			method get
+			proc
+				mreturn p_Length
+			endmethod
+		endproperty
+
+		; Segment field name (a30)
+		public property Field, a
+			method get
+			proc
+				mreturn %atrim(p_Field)
+			endmethod
+		endproperty
+
+		; Segment structure name (a30)
+		public property Structure, a
+			method get
+			proc
+				mreturn %atrim(p_Structure)
+			endmethod
+		endproperty
+
+		; Segment literal value (a30, length in p_Length)
+		public property LiteralValue, a
+			method get
+			proc
+				mreturn p_LiteralValue(1:p_Length)
+			endmethod
+		endproperty
+
+		; Optional, segment data type (enum RpsKeySegmentDataType)
+		;	Alpha, 1
+		;	NoCaseAlpha, 2
+		;	Decimal, 3
+		;	SignedInteger, 4
+		;	UnsignedInteger, 5
+		public property DataType, RpsKeySegmentDataType
+			method get
+			proc
+				mreturn (RpsKeySegmentDataType)integer(p_DataType)
+			endmethod
+		endproperty
+
+		public property DataTypeName, a
+			method get
+			proc
+				using integer(p_DataType) select
+				(RpsKeySegmentDataType.Alpha),
+					mreturn "ALPHA"
+				(RpsKeySegmentDataType.NoCaseAlpha),
+					mreturn "NOCASE"
+				(RpsKeySegmentDataType.Decimal),
+					mreturn "DECIMAL"
+				(RpsKeySegmentDataType.SignedInteger),
+					mreturn "INTEGER"
+				(RpsKeySegmentDataType.UnsignedInteger),
+					mreturn "UNSIGNED"
+				endusing
+			endmethod
+		endproperty
+
+		; Optional, segment order (enum RpsKeySegmentOrder)
+		;	Ascending, 1
+		;	Descending, 2
+		public property Order, RpsKeySegmentOrder
+			method get
+			proc
+				mreturn (RpsKeySegmentOrder)integer(p_Order)
+			endmethod
+		endproperty
+
+	endclass
+	
+endnamespace
+

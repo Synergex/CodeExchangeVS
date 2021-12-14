@@ -1,0 +1,281 @@
+;; SelectExample - example of using the SynergyDE Select class
+;;
+;; Using -qcheck may cause the event class to give a "NOOVR" compilation error
+
+import Synergex.SynergyDE.Select
+
+.define OUTCHAN     1           ;TT:
+;.define OUTCHAN     2           ;log file
+
+.define MY_APP_TITLE   "SelectExample v1.0"
+
+;; ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+namespace SynPSG.CodeExchange.SelectExample
+
+class MyEvent extends Synergex.SynergyDE.Select.Event
+
+    public override method onLock ,boolean
+        inout lock  ,n
+        inout wait  ,n
+        in    rec   ,a
+        in    rfa   ,a
+        endparams
+    proc
+        writes(OUTCHAN, "Record locked "+rec(1:%trim(rec)))
+        sleep 2
+        mreturn false
+    endmethod
+
+endclass
+
+endnamespace
+
+;; ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+main SelectExample
+
+record syntxt
+    group Key0
+        Facility    ,a3         ;facility code
+        ErrorNum    ,d5         ;error number
+    endgroup
+    Mnemonic        ,a10        ;error mnemonic
+    Type            ,a1         ;error type
+    Text            ,a199       ;error text
+endrecord
+
+record
+    iChan           ,i4         ;channel number
+    recCnt          ,i4         ;records selected count
+    totCnt          ,i4         ;total records read count
+    curCnt          ,i4         ;current count
+    pos             ,i4         ;position in string
+    testCode        ,string     ;test code / number
+    testDesc        ,string     ;test description
+
+    eObj            ,@SynPSG.CodeExchange.SelectExample.MyEvent
+    sObj            ,@Synergex.SynergyDE.Select.Select
+    fObj            ,@Synergex.SynergyDE.Select.From
+    wObj            ,@Synergex.SynergyDE.Select.Where
+    aEnum           ,@Synergex.SynergyDE.Select.AlphaEnumerator
+    rEnum           ,@Synergex.SynergyDE.Select.RestrictedAlphaEnumerator
+.ifdef DBLv95
+    oObj            ,@Synergex.SynergyDE.Select.OrderBy
+.endc ;DBLv95
+
+proc
+
+    flags(7004020,1)
+
+    if(OUTCHAN == 1) then
+        open(OUTCHAN, O, 'TT:')
+    else
+        open(OUTCHAN, O, 'SelectExample.log')
+
+    writes(OUTCHAN, MY_APP_TITLE)
+
+    writes(OUTCHAN, "Copying DBLDIR:syntxt.ism/is1 to local directory")
+    copy('DBLDIR:syntxt.ism', 'syntxt.ism')
+    copy('DBLDIR:syntxt.is1', 'syntxt.is1')
+
+.ifdef DBLv95
+
+    ;; ----------------------------------------------------------------------
+    ;; Select various facility codes, and order them by Mnemonic
+    ;; Uses FROM(filename...)
+    ;; only provide selected fields (i.e. no Text field)
+    ;; manually process enumerator (instead of using FOREACH)
+    testCode = "i"
+    testDesc = "Selecting CMP|LBR|LNK|RNT"
+    writes(OUTCHAN, "")
+    writes(OUTCHAN, testCode+" "+testDesc)
+
+    wObj = Where.In(Facility, 'CMP', 'LBR', 'LNK', 'RNT')
+    fObj = new From('syntxt.ism', Syntxt)
+    oObj = (OrderBy)OrderBy.Ascending(Mnemonic)
+    sObj = new Select(fObj, wObj, oObj)
+    sObj.SparseRecord(Facility, ErrorNum, Mnemonic, Type)
+
+    aEnum = sObj.GetEnumerator()
+    aEnum.Reset() ;need to reset enumerator because we are using OrderBy
+    recCnt = aEnum.Count
+    totCnt = aEnum.TotalReadCount
+
+    ;; note: the Text field should be blank, as it's not part of the sparse record
+    while(aEnum.MoveNext())
+    begin
+        Syntxt = aEnum.Current
+        writes(OUTCHAN, testCode+" "+Facility+" "+^a(errorNum)+" "+Mnemonic+" "+%atrim(Text))
+    end
+
+    writes(OUTCHAN, testCode+" "+testDesc+"  "+%string(recCnt)+" of "+ %string(totCnt)+" records returned")
+    if(OUTCHAN == 1) anyKey(OUTCHAN)
+
+    ;; ----------------------------------------------------------------------
+    ;; Delete all records with a facility of LBR
+    ;; Registers an event processing class (to process locked records)
+    testCode = "ii"
+    testDesc = "Deleting LBR"
+    writes(OUTCHAN, "")
+    writes(OUTCHAN, testCode+" "+testDesc)
+
+    wObj = (Where)(Facility == 'LBR')
+    fObj = new From('syntxt.ism', Q_AUTO_LOCK, 1, Syntxt, 'IO=U:I')
+    sObj = new Select(fObj, wObj)
+    eObj = new MyEvent()
+    sObj.RegisterEvent(eObj)
+
+    ;; delete all the selected records in one go
+    recCnt = sObj.Delete()
+
+    writes(OUTCHAN, testCode+" "+testDesc+"  "+%string(recCnt)+" records deleted")
+    if(OUTCHAN == 1) anyKey(OUTCHAN)
+
+    ;; ----------------------------------------------------------------------
+    ;; Now delete all records with a facility of LNK
+    ;; Uses enumerator, so additional deletion logic can be processed (e.g. auditing)
+    ;; Registers an event processing class (to process locked records)
+    testCode = "iii"
+    testDesc = "Deleting LNK"
+    writes(OUTCHAN, "")
+    writes(OUTCHAN, testCode+" "+testDesc)
+
+    wObj = (Where)(Facility == 'LNK')
+    sObj = new Select(fObj, wObj)
+    sObj.RegisterEvent(eObj)
+
+    ;; delete all the selected records, by iterating through the AlphaEnumerator
+    aEnum = sObj.GetEnumerator()
+    recCnt = 0
+    while(aEnum.MoveNext())
+    begin
+        Syntxt = aEnum.Current
+        writes(OUTCHAN, testCode+" "+Facility+" "+^a(errorNum)+" "+Mnemonic+" "+%atrim(Text))
+
+        ;; delete current record
+        aEnum.DeleteCurrent()
+        recCnt += 1
+    end
+
+    writes(OUTCHAN, testCode+" "+testDesc+"  "+%string(recCnt)+" records deleted")
+    if(OUTCHAN == 1) anyKey(OUTCHAN)
+
+    ;; ----------------------------------------------------------------------
+    ;; Select all records with a facility of LNK (makes sure delete worked)
+    testCode = "iv"
+    testDesc = "Selecting LNK"
+    writes(OUTCHAN, "")
+    writes(OUTCHAN, testCode+" "+testDesc)
+
+    wObj = (Where)(Facility == 'LNK')
+    fObj = new From('syntxt.ism', Syntxt)
+    sObj = new Select(fObj, wObj)
+
+    aEnum = sObj.GetEnumerator()
+    recCnt = aEnum.Count
+
+    if(recCnt)
+    begin
+        ;; should not get here, as the records should have been deleted
+        foreach Syntxt in sObj
+        begin
+            writes(OUTCHAN, testCode+" "+Facility+" "+^a(errorNum)+" "+Mnemonic+" "+%atrim(Text))
+        end
+    end
+
+    writes(OUTCHAN, testCode+" "+testDesc+"  "+%string(recCnt)+" records returned")
+    if(OUTCHAN == 1) anyKey(OUTCHAN)
+
+    ;; ----------------------------------------------------------------------
+    ;; Select various facility codes that have %s in the text field,
+    ;; and replace %s with a String.Replace code e.g. {0}
+    ;; Uses SparseUpdate()
+    testCode = "v"
+    testDesc = "Changing TEXT %s to {x}"
+    writes(OUTCHAN, "")
+    writes(OUTCHAN, testCode+" "+testDesc)
+
+    wObj = Where.In(Facility, 'CMP', 'LBR', 'LNK', 'RNT') && Where.Contains(Text, '%s')
+    fObj = new From('syntxt.ism', Q_AUTO_LOCK, 1, Syntxt, 'IO=U:I')
+    sObj = new Select(fObj, wObj)
+    eObj = new MyEvent()
+    sObj.RegisterEvent(eObj)
+
+    aEnum = sObj.GetEnumerator()
+    recCnt = aEnum.Count
+    totCnt = aEnum.TotalReadCount
+
+    while(aEnum.MoveNext())
+    begin
+        Syntxt = aEnum.Current
+
+        ;; adjust text field
+        curCnt = 0
+        while(pos=%instr(1, Text, '%s'))
+        begin
+            using pos select
+            (1),
+                Text = '{' + %string(curCnt) + '}' + Text(3, ^size(Text))
+            (^size(Text)-1),
+                Text = Text(1,pos-1) + '{' + %string(curCnt) + '}'
+            (),
+                Text = Text(1,pos-1) + '{' + %string(curCnt) + '}' + Text(pos+2, ^size(Text))
+            endusing
+            curCnt += 1
+        end
+
+        ;; update current record
+        aEnum.SparseUpdate(Text)
+        writes(OUTCHAN, testCode+" "+Facility+" "+^a(errorNum)+" "+Mnemonic+" "+%atrim(Text))
+    end
+
+    writes(OUTCHAN, testCode+" "+testDesc+"  "+%string(recCnt)+" of "+%string(totCnt)+" records updated")
+    if(OUTCHAN == 1) anyKey(OUTCHAN)
+
+.endc ;DBLv95
+
+    ;; ----------------------------------------------------------------------
+    ;; Select various facility codes
+    ;; Uses FROM(channel ...)
+    ;; Uses RestrictedAlphaEnumerator to find out the "record number" of the current item
+    testCode = "vi"
+    testDesc = "Selecting CMP|LBR|LNK|RNT"
+    writes(OUTCHAN, "")
+    writes(OUTCHAN, testCode+" "+testDesc)
+
+    open(iChan=%syn_freechn(), I:I, 'syntxt.ism')
+    fObj = new From(iChan, Syntxt)
+    wObj = (Where)(Facility == 'CMP' || Facility == 'LBR' || Facility == 'LNK' || Facility == 'RNT')
+    curCnt = 0
+    foreach Syntxt in new Select(fObj, wObj)
+    begin
+        ;; example of getting the GRFA
+        ;data tmpGRFA ,D_GRFA_TYPE
+        ;Select.GetEnum().CurrentRFA(tmpGRFA)
+
+        rEnum = Select.GetEnum()
+        curCnt = rEnum.TotalReadCount
+
+        writes(OUTCHAN, testCode+" "+%string(curCnt)+" "+Facility+" "+^a(errorNum)+" "+Mnemonic+" "+%atrim(Text))
+
+        curCnt += 1
+    end
+    close iChan
+
+    writes(OUTCHAN, testCode+" "+testDesc+"  "+%string(curCnt)+" records selected")
+    if(OUTCHAN == 1) anyKey(OUTCHAN)
+
+    ;; ----------------------------------------------------------------------
+
+    close OUTCHAN
+
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    stop D_EXIT_SUCCESS
+
+endmain
+
+;; ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

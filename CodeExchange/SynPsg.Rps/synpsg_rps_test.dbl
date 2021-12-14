@@ -1,0 +1,18 @@
+import SynPSG.rps
+
+main
+
+record
+        myRps   ,@Repository
+proc
+
+        myRps = new Repository()
+
+        open(1, O, 'TT:')
+        writes(1, "Repostory version "+myRps.Version)
+
+        clear myRPS
+
+        close 1
+        stop D_EXIT_SUCCESS
+endmain

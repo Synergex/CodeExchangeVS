@@ -1,0 +1,13 @@
+;synckodbc.def
+common cmn_i
+        colid           ,5i4            ;menu columns
+        close_msid      ,i4             ;close method set id
+        activex_list    ,i4             ;activex lists in use
+        envrn           ,i4             ;environment 6=OpenVMS, 8=Unix,10+=Windows
+
+common cmn
+        connectfile     ,a255           ;connectfile filename
+        list_options    ,a10            ;list options
+
+
+

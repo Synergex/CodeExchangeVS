@@ -1,0 +1,277 @@
+;******************************************************************************
+;
+; Class:		SynPsg.Rps.RpsKey
+;
+; Description:	Represents a single key for a Repository structure
+;
+; Author:		Steve Ives, Synergex Professional Services Group
+;
+; Date: 		19th October 2007
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+;
+; $Revision: 1 $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+;******************************************************************************
+;
+.define DDINFO_DEFINES_ONLY
+.include "RPSLIB:ddinfo.def"
+.undefine DDINFO_DEFINES_ONLY
+
+import SynPsg.Rps
+
+namespace SynPsg.Rps
+
+	class RpsKey
+		
+		;Key attribute data
+		protected p_k_info		,k_info
+		protected p_Description	,a40
+		protected p_NullValue	,a255
+		protected p_Segments	,@RpsKeySegmentCollection
+		
+		; Constructor
+		public method RpsKey
+			required in StructureName, a
+			required in KeyName, a
+			endparams
+		proc
+			Repository.CheckIsOpen()
+			LoadKey(StructureName,KeyName)
+		endmethod
+		
+		; Destructor
+		method ~RpsKey
+		proc
+			clear p_Segments
+		endmethod
+		
+		;Load key
+		private method LoadKey, void
+			required in StructureName, a
+			required in KeyName, a
+			endparams
+		proc
+			begin
+				data p_s_info, s_info
+				;Set the current structure?
+				dd_struct(Repository.RpsControl,DDS_INFO,StructureName,p_s_info)
+				if (Repository.RpsControl.error)
+				begin
+					data errtxt, a120
+					s_bld(errtxt,,"Failed to set current repository structure to %a.",StructureName)
+					throw new RpsKeyException(%atrim(errtxt))
+				end
+				;Get key information record
+				dd_key(Repository.RpsControl,DDK_INFO,KeyName,p_k_info)
+				if (Repository.RpsControl.error)
+				begin
+					data msg, a128
+					s_bld(msg,,"Failed to get key information for repository key %a.%a.",StructureName,KeyName)
+					throw new RpsKeyException(atrim(msg))
+				end
+
+				;Get key description
+				if (p_k_info.ki_desc)
+				begin
+					dd_key(Repository.RpsControl,DDK_TEXT,p_k_info.ki_desc,p_Description)
+					if (Repository.RpsControl.error)
+					begin
+						data msg, a128
+						s_bld(msg,,"Failed to get description repository key %a.%a.",StructureName,KeyName)
+						throw new RpsKeyException(atrim(msg))
+					end
+				end
+
+				;Get null value string
+				if (p_k_info.ki_nullval)
+				begin
+					dd_key(Repository.RpsControl,DDK_TEXT,p_k_info.ki_nullval,p_NullValue)
+					if (Repository.RpsControl.error)
+					begin
+						data msg, a128
+						s_bld(msg,,"Failed to get null key string for repository key %a.%a.",StructureName,KeyName)
+						throw new RpsKeyException(atrim(msg))
+					end
+				end
+
+				;Load the key segments collection
+				p_Segments = new RpsKeySegmentCollection(p_k_info)
+				
+				;If no key density is specified then default to 50%
+				if (!p_k_info.ki_density)
+					p_k_info.ki_density = 50
+			end
+		endmethod
+		
+		;----------------------------------------------------------------------
+		;Public properties to expose the keys attributes to the outside world
+		
+		; Sequence number (d3)
+		public property SequenceNumber, int
+			method get
+			proc
+				mreturn p_k_info.ki_seqnm
+			endmethod
+		endproperty
+
+		; Key name (a30, for use with dd_filespec)
+		public property Name, a
+			method get
+			proc
+				mreturn RpsUtils.UpperCase(p_k_info.ki_name)
+			endmethod
+		endproperty
+
+		; Key type (enum RpsKeyType)
+		;	Foreign, 0
+		;	Access, 1
+		public property KeyType, RpsKeyType
+			method get
+			proc
+				mreturn (RpsKeyType)integer(p_k_info.ki_ktype)
+			endmethod
+		endproperty
+
+		; Total size of all key segments (d3)
+		public property Size, int
+			method get
+			proc
+				mreturn p_k_info.ki_size
+			endmethod
+		endproperty
+
+		; Short description (a40)
+		public property Description, a
+			method get
+			proc
+				mreturn %atrim(p_Description)
+			endmethod
+		endproperty
+
+		; Sort order (enum RpsKeyOrder)
+		;	Ascending, 0
+		;	Descending, 1
+		public property SortOrder, RpsKeyOrder
+			method get
+			proc
+				mreturn (RpsKeyOrder)integer(p_k_info.ki_order)
+			endmethod
+		endproperty
+
+		; Are dups allowed? (enum RpsKeyDuplicates)
+		;	NoDuplicates, 0
+		;	Duplicates, 1
+		public property Duplicates, RpsKeyDuplicates
+			method get
+			proc
+				mreturn (RpsKeyDuplicates)integer(p_k_info.ki_dups)
+			endmethod
+		endproperty
+
+		; If dups, insert at front or end (enum RpsKeyInsertDups)
+		;	AtFront, 0
+		;	AtEnd, 1
+		public property InsertDuplicates, RpsKeyInsertDups
+			method get
+			proc
+				mreturn (RpsKeyInsertDups)integer(p_k_info.ki_insert)
+			endmethod
+		endproperty
+
+		; Modifiable? (boolean)
+		public property Modifiable, boolean
+			method get
+			proc
+				mreturn p_k_info.ki_mod
+			endmethod
+		endproperty
+
+		; Null key? (enum enum RpsKeyNullType)
+		;	None, 0
+		;	Replicating, 1
+		;	NonReplicating, 2
+		;	Short, 3
+		public property NullKey, RpsKeyNullType
+			method get
+			proc
+				mreturn (RpsKeyNullType)integer(p_k_info.ki_null)
+			endmethod
+		endproperty
+
+		; Null value string (a255)
+		public property NullKeyValue, a
+			method get
+			proc
+				mreturn %atrim(p_NullValue)
+			endmethod
+		endproperty
+
+		; Optional explicit key of reference (d3)
+		public property KeyOfReference, int
+			method get
+			proc
+				mreturn p_k_info.ki_krf
+			endmethod
+		endproperty
+
+		; Key density (d3)
+		public property Density, int
+			method get
+			proc
+				mreturn p_k_info.ki_density
+			endmethod
+		endproperty
+
+		; Compress index? (boolean)
+		public property CompressIndex, boolean
+			method get
+			proc
+				mreturn p_k_info.ki_cmpidx
+			endmethod
+		endproperty
+
+		; Compress record? (boolean)
+		public property CompressData, boolean
+			method get
+			proc
+				mreturn p_k_info.ki_cmprec
+			endmethod
+		endproperty
+
+		; Compress key? (boolean)
+		public property CompressKey, boolean
+			method get
+			proc
+				mreturn p_k_info.ki_cmpkey
+			endmethod
+		endproperty
+
+		; Is key accessible to ODBC? (boolean)
+		public property OdbcAccessible, boolean
+			method get
+			proc
+				mreturn p_k_info.ki_odbcvw
+			endmethod
+		endproperty
+
+		; Key segments collection
+		public property Segments, @RpsKeySegmentCollection
+			method get
+			proc
+				mreturn p_Segments
+			endmethod
+		endproperty
+
+	endclass
+	
+endnamespace
+
