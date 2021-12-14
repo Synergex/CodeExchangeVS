@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{BBD0F5D1-1CC4-42FD-BA4C-A96779C64378}") = "ll_accept", "ll_accept.synproj", "{09F4BE3F-CD19-40CF-A2EC-491940C7B62E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{09F4BE3F-CD19-40CF-A2EC-491940C7B62E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{09F4BE3F-CD19-40CF-A2EC-491940C7B62E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{09F4BE3F-CD19-40CF-A2EC-491940C7B62E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{09F4BE3F-CD19-40CF-A2EC-491940C7B62E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
