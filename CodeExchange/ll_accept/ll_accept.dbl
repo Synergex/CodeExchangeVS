@@ -1,0 +1,397 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+; Author :              William Hawkins   Synergex
+;
+; Minimum Version :     Synergy 5.1  (any platform)
+;
+; Revision History :
+;
+; 16th April 1999       Initial version submitted to code exchange
+; 24th March 2003       Converted to emit TTFLGS(4000) codes
+;
+; Description :
+;
+; This function will accept characters from the keyboard and return the
+; value of the key entered, or if a function key was pressed, the value
+; of the function key.
+;
+; This routine supports VTxxx terminals, ANSI console's and PC's
+;
+; Function key values are stored in KEYDEF.DEF
+;
+; Compile command :     DBL ll_accept
+; Link command :        none (link into elb)
+;
+.define TEST_EXE
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Returns a single character.
+; Function key values are defined in KEYDEF.DEF
+
+function ll_accept ,i
+
+    a_wndid             ,n                      ;Window id
+
+.include 'WND:windows.def'
+.include 'INC:keydef.def'
+
+.define TT_UNK          ,-1                     ;unknown
+.define TT_VT           ,1                      ;VT???
+.define TT_ANSI         ,2                      ;ANSI Console
+.define TT_PC           ,3                      ;PC
+
+    external function
+        ll_input        ,i                      ;get one character
+
+.align
+    static record
+        tt_type         ,d1                     ;terminal type
+
+.align
+    record
+        inp_char        ,i4                     ;input character
+        char            ,i4                     ;return character
+        len             ,i4                     ;length of TERM
+        term            ,a20                    ;DTKTERM / TERM setting
+
+proc
+
+    ;because tt_type is in a STATIC RECORD, it will only be zero the first time
+    if(.not.tt_type)
+        call set_tt_type                    ;find out the type of terminal
+
+    char = %ll_input(a_wndid)               ;get first character
+
+    using tt_type select
+    (TT_VT),
+    begin                               ;vt??? escape sequence
+        if(char .eq. KEY_ESC .or. char .eq. KEY_SS3 .or. char .eq. KEY_CSI)
+            call vt
+    end
+    (TT_PC),
+    begin                               ;pc null sequence
+        if(char .eq. KEY_NUL)
+            call pc
+    end
+    (TT_ANSI),
+    begin                               ;ansi console escape sequence
+        if(char .eq. KEY_ESC)
+            call ansi
+    end
+    endusing
+
+    if(char .eq. KEY_CR)
+    begin
+        inp_char = %ll_input(a_wndid)       ;get line feed and throw away
+    end
+
+    freturn char                            ;exit to calling program
+
+;       ---------------------------------------------------------------------
+
+vt,
+    if(char .eq. KEY_ESC) then
+        inp_char = %ll_input(a_wndid)       ;get next character
+    else
+        inp_char -= 64                      ;convert 8-bit char to 7-bit
+
+    using inp_char select
+    (91, 79),
+    begin                               ;csi/ss3 entered
+        inp_char = %ll_input(a_wndid)       ;get next character
+
+        using inp_char select
+        (49),   char = KEY_FIND
+        (50),   char = KEY_INS
+        (51),   char = KEY_REM
+        (52),   char = KEY_SEL
+        (53),   char = KEY_PREV
+        (54),   char = KEY_NEXT
+        (65),   char = KEY_UP
+        (66),   char = KEY_DOWN
+        (67),   char = KEY_RIGHT
+        (68),   char = KEY_LEFT
+        (80),   char = KEY_PF1
+        (81),   char = KEY_PF2
+        (82),   char = KEY_PF3
+        (83),   char = KEY_PF4
+        (112),  char = KEY_KP0
+        (113),  char = KEY_KP1
+        (114),  char = KEY_KP2
+        (115),  char = KEY_KP3
+        (116),  char = KEY_KP4
+        (117),  char = KEY_KP5
+        (118),  char = KEY_KP6
+        (119),  char = KEY_KP7
+        (120),  char = KEY_KP8
+        (121),  char = KEY_KP9
+        (108),  char = KEY_KPCOMMA
+        (109),  char = KEY_KPMINUS
+        (110),  char = KEY_KPSTOP
+        (77),   char = KEY_KPENTER
+        (),     char = KEY_UNKNOWN          ;invalid key sequence
+        endusing
+
+        using inp_char select
+        (49 thru 54),
+        begin
+            inp_char = %ll_input(a_wndid)   ;get next character
+
+            ;if inp_char is not 126, then one of the following keys must
+            ; have been pressed; FIND, INSERT, REMOVE, SELECT, PREV, NEXT
+
+            if(inp_char .ne. 126)
+            begin                       ;function key pressed
+                using char select
+                (KEY_FIND),
+                begin
+                    using inp_char select
+                    (49),   char = KEY_F1
+                    (50),   char = KEY_F2
+                    (51),   char = KEY_F3
+                    (53),   char = KEY_F4
+                    (54),   char = KEY_F5
+                    (55),   char = KEY_F6
+                    (56),   char = KEY_F7
+                    (57),   char = KEY_F8
+                    (58),   char = KEY_F9
+                    (),     char = KEY_UNKNOWN
+                    endusing
+                end
+                (KEY_INS),
+                begin
+                    using inp_char select
+                    (49),   char = KEY_F10
+                    (51),   char = KEY_F11
+                    (52),   char = KEY_F12
+                    (53),   char = KEY_F13
+                    (54),   char = KEY_F14
+                    (56),   char = KEY_F15
+                    (57),   char = KEY_F16
+                    (),     char = KEY_UNKNOWN
+                    endusing
+                end
+                (KEY_REM),
+                begin
+                    using inp_char select
+                    (49),   char = KEY_F17
+                    (50),   char = KEY_F18
+                    (51),   char = KEY_F19
+                    (52),   char = KEY_F20
+                    (),     char = KEY_UNKNOWN
+                    endusing
+                end
+                (),
+                    char = KEY_UNKNOWN
+                endusing
+
+                ;get last character
+                if(char .ne. KEY_UNKNOWN .and. %ll_input(a_wndid) .ne. 126)
+                    char = KEY_UNKNOWN      ;invalid key sequence
+            end
+        end
+        endusing
+    end
+    (),
+        char = KEY_UNKNOWN
+    endusing
+
+    return
+
+;       ---------------------------------------------------------------------
+
+pc,
+    using %ll_input(a_wndid) select
+    (59),   char = KEY_F1                   ;f1          -> f1
+    (60),   char = KEY_F2                   ;f2          -> f2
+    (61),   char = KEY_F3                   ;f3          -> f3
+    (62),   char = KEY_F4                   ;f4          -> f4
+    (63),   char = KEY_F5                   ;f5          -> f5
+    (64),   char = KEY_F6                   ;f6          -> f6
+    (65),   char = KEY_F7                   ;f7          -> f7
+    (66),   char = KEY_F8                   ;f8          -> f8
+    (67),   char = KEY_F9                   ;f9          -> f9
+    (68),   char = KEY_F10                  ;f10         -> f10
+    (133),  char = KEY_F11                  ;f11         -> f11
+    (134),  char = KEY_F12                  ;f12         -> f12
+
+    (71),   char = KEY_FIND                 ;home        -> find
+    (72),   char = KEY_UP                   ;up arrow    -> up
+    (73),   char = KEY_PREV                 ;page up     -> prev
+    (75),   char = KEY_LEFT                 ;left arrow  -> left
+    (77),   char = KEY_RIGHT                ;right arrow -> right
+    (79),   char = KEY_SEL                  ;end         -> select
+    (80),   char = KEY_DOWN                 ;down arrow  -> down
+    (81),   char = KEY_NEXT                 ;page down   -> next
+    (82),   char = KEY_INS                  ;insert      -> insert
+    (83),   char = KEY_REM                  ;delete      -> remove
+
+    (84),   char = KEY_F11                  ;shift f1    -> f11
+    (85),   char = KEY_F12                  ;shift f2    -> f12
+    (86),   char = KEY_F13                  ;shift f3    -> f13
+    (87),   char = KEY_F14                  ;shift f4    -> f14
+    (88),   char = KEY_F15                  ;shift f5    -> f15
+    (89),   char = KEY_F16                  ;shift f6    -> f16
+    (90),   char = KEY_F17                  ;shift f7    -> f17
+    (91),   char = KEY_F18                  ;shift f8    -> f18
+    (92),   char = KEY_F19                  ;shift f9    -> f19
+    (93),   char = KEY_F20                  ;shift f10   -> f20
+;   (135),  nop                             ;shift f11
+;   (136),  nop                             ;shift f12
+
+;   (94),   nop                             ;ctrl f1
+;   (95),   nop                             ;ctrl f2
+;   (96),   nop                             ;ctrl f3
+;   (97),   nop                             ;ctrl f4
+;   (98),   nop                             ;ctrl f5
+;   (99),   nop                             ;ctrl f6
+;   (100),  nop                             ;ctrl f7
+;   (101),  nop                             ;ctrl f8
+;   (102),  nop                             ;ctrl f9
+;   (103),  nop                             ;ctrl f10
+;   (137),  nop                             ;ctrl f11
+;   (138),  nop                             ;ctrl f12
+
+;   (46),   nop                             ;shift delete
+;   (48),   nop                             ;shift insert
+;   (49),   nop                             ;shift end
+;   (50),   nop                             ;shift down arrow
+;   (51),   nop                             ;shift page down
+;   (52),   nop                             ;shift left arrow
+;   (54),   nop                             ;shift right arrow
+;   (55),   nop                             ;shift home
+;   (56),   nop                             ;shift up arrow
+;   (57),   nop                             ;shift page up
+
+;   (146),  nop                             ;ctrl insert
+;   (147),  nop                             ;ctrl delete
+;   (132),  nop                             ;ctrl page up
+;   (141),  nop                             ;ctrl up arrow
+;   (145),  nop                             ;ctrl down arrow
+;   (115),  nop                             ;ctrl left arrow
+;   (116),  nop                             ;ctrl right arrow
+;   (117),  nop                             ;ctrl end
+;   (118),  nop                             ;ctrl page down
+;   (119),  nop                             ;ctrl home
+
+    (),     char = KEY_UNKNOWN              ;invalid key sequence
+    endusing
+
+    return
+
+;       ---------------------------------------------------------------------
+
+ansi,
+    inp_char = %ll_input(a_wndid)           ;escape qualifier
+    if(inp_char .eq. 91)
+        inp_char = %ll_input(a_wndid)       ;csi entered - get next character
+
+    using inp_char select
+    (65),   char = KEY_UP                   ;up arrow    -> up
+    (66),   char = KEY_DOWN                 ;down arrow  -> down
+    (67),   char = KEY_RIGHT                ;right arrow -> right
+    (68),   char = KEY_LEFT                 ;left arrow  -> left
+
+    (77),   char = KEY_F1                   ;f1          -> f1
+    (78),   char = KEY_F2                   ;f2          -> f2
+    (79),   char = KEY_F3                   ;f3          -> f3
+    (80),   char = KEY_F4                   ;f4          -> f4
+    (81),   char = KEY_F5                   ;f5          -> f5
+    (82),   char = KEY_F6                   ;f6          -> f6
+    (83),   char = KEY_F7                   ;f7          -> f7
+    (84),   char = KEY_F8                   ;f8          -> f8
+    (85),   char = KEY_F9                   ;f9          -> f9
+    (86),   char = KEY_F10                  ;f10         -> f10
+    (87),   char = KEY_F11                  ;f11         -> f11
+    (88),   char = KEY_F12                  ;f12         -> f12
+
+    (70),   char = KEY_DO                   ;end         -> do
+    (71),   char = KEY_NEXT                 ;pagedown    -> next
+    (72),   char = KEY_FIND                 ;home        -> find
+    (73),   char = KEY_PREV                 ;pageup      -> prev
+    (76),   char = KEY_INS                  ;insert      -> insert
+;   (??),   char = KEY_REM                  ;delete      -> remove
+
+    (),     char = KEY_UNKNOWN              ;invalid key sequence
+    endusing
+
+    return
+
+;       ---------------------------------------------------------------------
+
+set_tt_type,
+
+    clear term
+    xcall getlog('DTKTERM', term, len)
+
+    if(.not.term .or. .not.len)
+        xcall getlog('TERM', term, len)
+
+    using term select
+    ('VT'),
+        tt_type = TT_VT
+    ('ANSI '),
+        tt_type = TT_ANSI
+    ('MSWINDOWS '),
+        tt_type = TT_PC
+    (),
+    begin
+        tt_type = TT_UNK
+        xcall envrn(len)
+        using len select
+        (6), ;OpenVMS
+            tt_type = TT_VT
+        (8), ;Unix
+        begin
+            using %tnmbr select
+            (0),
+                tt_type = TT_ANSI
+            endusing
+        end
+        (.gt. 10), ;Windows
+            tt_type = TT_PC
+        endusing
+    end
+    endusing
+
+.ifdef TEST_EXE
+    using tt_type select
+    (TT_VT),
+        xcall w_brdr(a_wndid, WB_TITLE, "Terminal Type : VTxxx")
+    (TT_PC),
+        xcall w_brdr(a_wndid, WB_TITLE, "Terminal Type : PC")
+    (TT_ANSI),
+        xcall w_brdr(a_wndid, WB_TITLE, "Terminal Type : ANSI")
+    (),
+        xcall w_brdr(a_wndid, WB_TITLE, "Terminal Type : unknown")
+    endusing
+.endc ;TEST_EXE
+
+    return
+
+end
+
+;       ---------------------------------------------------------------------
+; Returns the numeric value of the next character in the keyboard buffer
+
+function ll_input ,i
+
+    a_wndid,        n                               ;window id
+
+.align
+    record
+        inp_char,       i4                              ;character entered
+
+proc
+    xcall w_disp(a_wndid, WD_ACCEPT, inp_char)
+    ;get input from keyboard
+.ifdef TEST_EXE
+    ;local echo for testing
+    xcall w_disp(a_wndid, %string(inp_char, 'ZZZX'), WD_CLR, WDC_EOL)
+.endc ;TEST_EXE
+
+    freturn inp_char
+end
+
+;       ---------------------------------------------------------------------
+

@@ -1,0 +1,44 @@
+main
+
+.include 'DBLDIR:windows.def'
+
+    external function
+        ll_accept       ,i
+
+.align
+    record
+        ttch            ,i4
+        wndid           ,i4
+        char            ,i4
+        chara           ,a1
+        lastChar        ,i4
+
+proc
+
+    ttch = 1
+    open(ttch, o, 'TT:')
+
+    xcall w_init(char, ttch, 1)
+
+    xcall w_proc(WP_CREATE, wndid, 'TEST', 6, 70)
+    xcall w_proc(WP_PLACE, wndid, 1, 1)
+
+    lastChar = 0
+    repeat
+    begin
+        xcall w_disp(wndid, WD_POS, 2, 2, "Key   : ")
+        char = %ll_accept(wndid)
+        xcall w_disp(wndid, WD_POS, 4, 2, "Value : ", %string(char))
+        if(char .ge. 32 .and. char .le. 126) then
+            xcall ascii(char, chara)
+        else
+            chara = '.'
+        xcall w_disp(wndid, WD_POS, 5, 2, "Char  : ", chara)
+        if(lastCHar == 27 && char = 27)
+            exitloop
+        lastChar = char
+    end
+
+    stop D_EXIT_SUCCESS
+end
+

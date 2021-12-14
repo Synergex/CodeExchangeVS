@@ -1,0 +1,266 @@
+;;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifdef MEM_PROC
+.undefine MEM_PROC
+.define MY_MEM_PROC_DEFINE
+.endc ;MEM_PROC
+
+;;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Call %mem_proc and log mem_proc operations
+
+.ifdef DBLv9
+function my_mem_proc    ,i ,varargs
+req in  a_function      ,n              ;; mem_proc operation
+endparams
+.else ;DBLv9
+function my_mem_proc    ,^val
+        a_function      ,n              ;; mem_proc operation
+.endc ;DBLv9
+
+record
+        func_mode       ,i4             ;; memory operation
+        result          ,i4             ;; routine return value
+        hdl             ,D_HANDLE       ;; memory handle
+        size            ,i4             ;; memory size
+
+proc
+
+        func_mode = (a_function .band. ^x(FF))
+
+        using func_mode select
+        (DM_ALLOC),
+        begin
+            size = ^argn(2)
+            hdl = %mem_proc((a_function .bor. DM_STATIC), size)
+            xcall log_memory(a_function, hdl)
+            result = hdl
+        end
+        (DM_FREE),
+        begin
+            hdl = ^argn(2)
+            result = %mem_proc(a_function, hdl)
+            xcall log_memory(a_function, hdl)
+        end
+        (DM_RESIZ),
+        begin
+            size = ^argn(2)
+            hdl = ^argn(3)
+            result = %mem_proc(a_function, size, hdl)
+        end
+        (DM_REG),
+        begin
+            size = ^argn(2)
+            hdl = ^argn(3)
+            result = %mem_proc(a_function, size, hdl)
+        end
+.ifdef DM_GETSIZE
+        (DM_GETSIZE),
+        begin
+            hdl = ^argn(2)
+            result = %mem_proc(a_function, hdl)
+        end
+.endc ;DM_GETSIZE
+.ifdef DM_TRIMSIZE
+        (DM_TRIMSIZE),
+        begin
+            hdl = ^argn(2)
+            result = %mem_proc(a_function, hdl)
+        end
+.endc ;DM_TRIMSIZE
+        endusing
+        freturn result
+end
+
+;;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Log memory alloc/free operations
+
+subroutine log_memory
+.ifdef DBLv9
+req in      a_function  ,n              ;; mem_proc operation
+req in      a_hdl       ,i              ;; memory handle
+endparams
+.else
+            a_function  ,n              ;; mem_proc operation
+            a_hdl       ,i              ;; memory handle
+.endc ;DBLv9
+
+.include 'INC:memProc.def'
+
+record
+        chan            ,i4             ;; mem_proc isam file
+        chan2           ,i4             ;; mem_proc duplicates file
+        func_mode       ,i4             ;; mem_proc function
+        save_mpLog      ,a ^size(mpLog) ;; copy of mpLog record
+.ifndef DBLv9
+        line            ,d5             ;; line number
+        routine         ,a30            ;; routine name
+.endc ;DBLv9
+
+proc
+
+        chan = %syn_freechn()
+        open(chan, U:I, D_MP_FILE) [ERR=OpenError]
+
+        func_mode = (a_function .band. ^x(FF))
+
+        using func_mode select
+        (DM_ALLOC),
+        begin
+            clear mpLog
+            mpLog.pid = %jbno
+            mpLog.hdl = a_hdl
+            call setup_alloc_data
+            save_mpLog = mpLog
+            store(chan, mpLog) [ERR=alloc_store_err]
+            exit
+
+alloc_store_err,
+            read(chan, mpLog, mpLog.key0) [ERR=alloc_read_err]
+
+            xcall log_memory_error(mpLog.key0.pid, mpLog.key0.hdl,
+            &   "DM_ALLOC - Handle not free'd", mpLog.alloc_data)
+
+            call log_duplicate
+
+            mpLog = save_mpLog
+            write(chan, mpLog) [ERR=alloc_write_err]
+            exit
+
+alloc_read_err,
+            mpLog = save_mpLog
+            xcall log_memory_error(mpLog.key0.pid, mpLog.key0.hdl,
+            &   "DM_ALLOC read error "+%string(%error), mpLog.alloc_data)
+            exit
+
+alloc_write_err,
+            xcall log_memory_error(mpLog.key0.pid, mpLog.key0.hdl,
+            &   "DM_ALLOC write error "+%string(%error), mpLog.alloc_data)
+        end
+        (DM_FREE),
+        begin
+            clear mpLog
+            mpLog.pid = %jbno
+            mpLog.hdl = a_hdl
+            save_mpLog = mpLog
+            read(chan, mpLog, mpLog.key0) [ERR=free_err]
+            delete(chan)
+            exit
+
+free_err,
+            mpLog = save_mpLog
+            xcall log_memory_error(mpLog.key0.pid, mpLog.key0.hdl,
+            &   "DM_FREE - Cannot mpLog handle as free'd")
+        end
+        endusing
+
+        close chan
+OpenError,
+
+        xreturn
+
+;;---------------------------------------------------------------------------
+
+setup_alloc_data,
+
+        mpLog.date_time = %datetime
+        clear mpLog.alloc_data
+
+        begin
+.ifdef DBLv9
+            data line   ,d5             ;; line number
+            data routine,a30            ;; routine name
+.endc ;DBLv9
+
+            xcall modname(2, routine, line)
+            mpLog.alloc_data[1] = ^a(line) + " " + routine
+
+            xcall modname(3, routine, line)
+            if(.not.routine)
+                exit
+            mpLog.alloc_data[2] = ^a(line) + " " + routine
+
+            xcall modname(4, routine, line)
+            if(.not.routine)
+                exit
+            mpLog.alloc_data[3] = ^a(line) + " " + routine
+
+            xcall modname(5, routine, line)
+            if(.not.routine)
+                exit
+            mpLog.alloc_data[4] = ^a(line) + " " + routine
+        end
+
+        return
+
+;;---------------------------------------------------------------------------
+;; log the original memory allocation details, when a duplicate handle occurs
+
+log_duplicate,
+
+        chan2 = %syn_freechn()
+        open(chan2, A, D_MP_DUPSFILE) [ERR=TmpOpenError]
+
+        writes(chan2, mpLog) [ERR=TmpWriteError]
+
+TmpWriteError,
+        close chan2
+
+TmpOpenError,
+
+        return
+
+end
+
+;;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; log memory errors
+
+subroutine log_memory_error
+.ifdef DBLv9
+req in  aPid        ,d                  ;; PID
+req in  aHdl        ,d                  ;; memory handle
+req in  aTitle      ,a                  ;; title
+opt in  aAllocData  ,[*]a               ;; data collected by DM_ALLOC
+endparams
+.else ;DBLv9
+        aPid        ,d                  ;; PID
+        aHdl        ,d                  ;; memory handle
+        aTitle      ,a                  ;; title
+        aAllocData  ,[*]a               ;; data collected by DM_ALLOC
+.endc ;DBLv9
+
+.define D_DEFINES_ONLY
+.include 'WND:tools.def'
+.undefine D_DEFINES_ONLY
+
+record
+    msg                 ,string         ;; message string
+
+proc
+
+    msg = "PID=" + %string(aPid) + "\n" + "HDL=" + %string(aHdl,'ZZZZZZZZZX-')
+
+    if(^passed(aAllocData))
+    begin
+        msg = msg + "\n"
+        &         + aAllocData[1] + "\n"
+        &         + aAllocData[2] + "\n"
+        &         + aAllocData[3] + "\n"
+        &         + aAllocData[4]
+    end
+
+    if(%u_msgbox(msg, D_MOK+D_MCENTER, aTitle))
+        nop
+
+    xreturn
+end
+
+;;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; redefine MEM_PROC (if it was defined before)
+
+.ifdef MY_MEM_PROC_DEFINE
+.undefine MY_MEM_PROC_DEFINE
+.include 'INC:myApp.def'
+.endc ;MY_MEM_PROC_DEFINE
+
+;;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

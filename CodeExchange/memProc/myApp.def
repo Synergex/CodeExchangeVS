@@ -1,0 +1,3 @@
+;; myApp.def (SYNUSERDEF)
+
+.define MEM_PROC MY_MEM_PROC

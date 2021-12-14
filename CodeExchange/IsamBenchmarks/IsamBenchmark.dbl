@@ -1,0 +1,492 @@
+;------------------------------------------------------------------------------
+;
+; Module:       IsamBenchmark.dbl
+;
+; Facility:     PERFORMANCE TESTS
+;
+; Description:  Creates an ISAM file, opens it, and records how long it
+;               takes to store and read a specified number of random records.
+;
+; Date:         Apr 29, 1997 (Updated Oct 1, 2010)
+;
+;------------------------------------------------------------------------------
+
+main
+
+.define MAX_ARGS 25
+
+external function
+        elapsed_time    ,a
+
+record ibuff
+        group segs ,[8]a
+            key     ,d5                 ; key
+            dat     ,a10                ; filler space
+        endgroup
+        filler      ,a8                 ; filler to 128
+
+literal
+        ibFile      ,a*     ,'DAT:ismbench.ism' ; ISAM benchmark file
+        lcFile      ,a*     ,'DAT:lock.ddf'     ; LOCK file
+
+record clr_i                            ; general work variables
+        ctr         ,i4                 ; loop counter
+        pos         ,i4                 ; loop counter
+        num_args    ,i4                 ; number of command line arguments
+        arg_pos     ,[MAX_ARGS]i4       ; cmdln argument position
+        arg_len     ,[MAX_ARGS]i4       ; cmdln argument length
+        outCtr      ,i4                 ; output counter
+        outChan     ,i4                 ; output channel
+        ttChan      ,i4                 ; TT channel
+        ismChan     ,i4                 ; isam file channel
+        lockChan    ,i4                 ; lock file channel
+
+record clr
+        keys        ,[8]a32             ; key definitions for benchmark file
+        sav1        ,a5                 ; seeds to generate random keys:
+        sav2        ,a5                 ; default values are 12345 and 67890
+        s1          ,d5                 ; randm seed key 0
+        s2          ,d5                 ; randm seed key 0
+        s3          ,d5                 ; randm seed key 1+
+        s4          ,d5                 ; randm seed key 1+
+        dt          ,a25                ; formatted datetime
+        lockRec     ,a25                ; lock.ddf record
+        cmdlin      ,a1024              ; command line
+        anyKey      ,a2                 ; any key to continue input
+        sdt         ,a20                ; start datetime
+        edt         ,a20                ; end datatime
+
+record parameters
+        logFile     ,a40                ; output file
+        logHdr      ,a80                ; header for output file
+        numRecs     ,i4                 ; number of records to process
+        numKeys     ,i4                 ; number of keys in isam file
+        shareMode   ,i4                 ; open isam file in this mode
+        forceNew    ,i4                 ; force creation of new Benchmark file
+        pauseCtl    ,i4                 ; pause for launch of ismopen.dbr
+        outInterval ,i4                 ; output reporting interval
+
+proc
+        clear clr, ^i(clr_i)
+
+        xcall flags(7000000, 1)         ; no STOP message
+        xcall dflag(300, 1)             ; wait forever on record lock
+
+        ttChan = %syn_freechn()
+        open(ttChan, o, 'tt:')
+
+        sav1 = '12345'
+        sav2 = '67890'
+
+        logFile = ''
+        logHdr = ''
+        xcall getlog('DAT', logHdr, pos)
+        if(pos .gt. 0)
+            logHdr = 'DAT:=' + logHdr(1:pos)
+        numRecs = 20000
+        numKeys = 8
+        shareMode = 2
+        forceNew = 0
+        pauseCtl = 0
+        outInterval = 0
+
+        call decodeCommandLine
+
+        if(forceNew)
+        begin
+            onerror deleteError
+            delet(ibFile)
+            offerror
+            exit
+deleteError,
+            offerror
+            writes(ttChan, 'Cannot create '+%atrim(ibFile))
+            writes(ttChan, 'Error:'+%string(%error)+' attempting to delete '+%atrim(ibFile))
+            goto exit_fail
+        end
+
+        repeat
+        begin
+            ismChan = %syn_freechn()
+            open(ismChan, u:i, ibFile, SHARE:shareMode) [$ERR_FNF=create, ERR=openerr]
+            exitloop
+create,
+            for ctr from 1 thru 8
+            begin
+                pos = ((ctr-1)*^size(segs[ctr]))+1
+                keys[ctr] = 's='+%string(pos)+',l='+%string(^size(segs[ctr].key))+',dups'
+            end
+            onerror openerr
+            xcall isamc(ibFile, ^size(ibuff), numKeys, keys)
+            offerror
+            writes(ttChan, 'Created '+%atrim(ibFile))
+            nextloop
+openerr,
+            writes(ttChan, 'Error:'+%string(%error)+' opening '+%atrim(ibFile))
+            goto exit_fail
+        end
+
+        if (pauseCtl)
+        begin
+            display(ttChan, 13, 10, 'run "IBcontrol -b", then press RETURN')
+            accept(ttChan, anyKey)
+            while(%ttsts)
+                accept(ttChan, anyKey)
+            display(ttChan,13,10)
+        end
+
+        call check_lock
+
+        dt = %datetime
+        dt = dt(1:4)+'-'+dt(5:2)+'-'+dt(7:2)+' '+dt(9:2)+':'+dt(11:2)+':'+dt(13:2)+'.'+dt(15:6)
+
+        display(ttChan,13,10)
+
+        writes(ttChan, 'File benchmarking: Keys='+%string(numKeys)+'  OpenMode='+%string(shareMode))
+        writes(ttChan, '')
+        writes(ttChan, %atrim(logHdr))
+        writes(ttChan, %versn)
+        writes(ttChan, dt)
+        writes(ttChan, '')
+
+        ; create output file
+        if(logFile)
+        begin
+            open(outChan, o, logFile) [ERR=logFileError]
+            if(false)
+            begin
+logFileError,
+                writes(ttChan, 'Error '+%string(%error)+' opening log file '+logFile(1:%trim(logFile)))
+                clear outChan
+            end
+        end
+        if(outChan)
+        begin
+            writes(outChan, 'File benchmarking: Keys='+%string(numKeys)+'  OpenMode='+%string(shareMode))
+            writes(outChan, '')
+            writes(outChan, %atrim(logHdr))
+            writes(outChan, %versn)
+            writes(outChan, dt)
+            writes(outChan, '')
+        end
+
+        display(ttChan, 9, 'Storing ', %string(numRecs), ' random ISAM records')
+        if(outChan)
+            display(outChan, 9, 'Storing ', %string(numRecs), ' random ISAM records')
+
+        s1 = sav1
+        s2 = sav2
+        s3 = s1 + 256
+        s4 = s2 + 256
+        sdt = %datetime
+        outCtr = 0
+        for ctr from 1 thru numRecs             ; store random records
+        begin
+            clear ibuff
+            xcall randm(segs[1].key, s1, s2)    ; generate random keys
+            for pos from 2 thru numKeys
+                xcall randm(segs[pos].key, s3, s4)
+            store(ismChan, ibuff)
+            outCtr += 1
+            if(outInterval > 0 && outCtr >= outInterval)
+            begin
+                if(outChan)
+                    writes(outChan, %string(ctr))
+                outCtr = 0
+            end
+        end
+        edt = %datetime
+        close ismChan
+
+        display(ttChan, ' in ', %elapsed_time(sdt,edt), ' seconds.', 13, 10)
+        if(outChan)
+            display(outChan, ' in ', %elapsed_time(sdt,edt), ' seconds.', 13, 10)
+
+        sleep 1.0
+
+        call check_lock
+
+        display(ttChan, 9, 'Reading ', %string(numRecs), ' random ISAM records')
+        if(outChan)
+            display(outChan, 9, 'Reading ', %string(numRecs), ' random ISAM records')
+
+        ismChan = %syn_freechn()
+        open(ismChan, u:i, ibFile)
+        s1 = sav1
+        s2 = sav2
+        sdt = %datetime
+        outCtr = 0
+        for ctr from 1 thru numRecs               ; read random records (key 0)
+        begin
+            xcall randm(segs[1].key, s1, s2)
+            read(ismChan, ibuff, segs[1].key)
+            outCtr += 1
+            if(outInterval > 0 && outCtr >= outInterval)
+            begin
+                if(outChan)
+                    writes(outChan, %string(ctr))
+                outCtr = 0
+            end
+        end
+        edt = %datetime
+        close ismChan
+
+        display(ttChan, ' in ', %elapsed_time(sdt,edt), ' seconds.', 13, 10)
+        if(outChan)
+            display(outChan, ' in ', %elapsed_time(sdt,edt), ' seconds.', 13, 10)
+
+        if(outChan)
+            close outChan
+        clear outChan
+
+        display(ttChan, 13, 10)
+        display(ttChan, 'Output filename = ', %atrim(logFile), 13, 10)
+        display(ttChan, 13, 10)
+
+        onerror delete_error
+        xcall delet(ibFile)
+        writes(ttChan, 'Deleted '+%atrim(ibFile))
+        if(%false)
+        begin
+delete_error,
+            using %error select
+            (38),
+                writes(ttChan, 'Did not delete '+%atrim(ibFile)+' - file in use')
+            (),
+                write(ttChan, 'Error '+%string(%error)+' deleting '+%atrim(ibFile))
+            endusing
+        end
+        offerror
+
+exit_prog,
+.ifdef D_GUI
+        sleep 2 ;wait a bit, so you can see the final results
+.endc
+        close ttChan
+        stop D_EXIT_SUCCESS
+
+exit_fail,
+.ifdef D_GUI
+        sleep 2 ;wait a bit, so you can see the final results
+.endc
+        close ttChan
+        stop D_EXIT_FAILURE
+
+check_lock,
+
+        lockChan = %syn_freechn()
+        open(lockChan, u, lcFile) [ERR=ignore_lock]
+        writes(ttChan, 'Checking for sync locks')
+        reads(lockChan, lockRec, eof)
+eof,
+        close lockChan
+ignore_lock,
+        return
+
+decodeCommandLine,
+
+        xcall cmdln(cmdlin, num_args, arg_pos, arg_len)
+
+        ; check for help option first (to pick up correct defaults)
+        clear pos
+        while(pos < num_args)
+        begin
+            pos += 1
+            using cmdlin(arg_pos[pos]:arg_len[pos]) select
+            ('-h ', '-? '),
+            begin
+                writes(ttChan, 'dbr IsamBenchmark  [-c] [-i <info>] [-k <n>] [-o <file>] [-r <n>] [-s <n>] [-v <n>] [-w]')
+                writes(ttChan, '')
+                writes(ttChan, ' -c        : Create new benchmark file')
+                writes(ttChan, ' -i <info> : Information text to add to output file')
+                writes(ttChan, '             Default='+%atrim(logHdr))
+                writes(ttChan, '             (used to differentiate test runs)')
+                writes(ttChan, ' -k <n>    : Number of keys to create in benchmark file(1-8)')
+                writes(ttChan, '             Default='+%string(numKeys))
+                writes(ttChan, ' -o <file> : Output file name')
+                writes(ttChan, '             Default='+%atrim(logFile))
+                writes(ttChan, ' -r <n>    : Number of records to create in benchmark file')
+                writes(ttChan, '             Default='+%string(numRecs))
+                writes(ttChan, ' -s <n>    : Benchmark file open (SHARE:) mode')
+                writes(ttChan, '              0 = Exclusive read/write mode')
+                writes(ttChan, '              1 = Exclusive write mode')
+                writes(ttChan, '              2 = Nonexclusive mode')
+                writes(ttChan, '             Default='+%string(shareMode))
+                writes(ttChan, ' -v <n>    : Output count every n records')
+                writes(ttChan, '             Default='+%string(outInterval))
+                writes(ttChan, ' -w        : Wait for "IBcontrol -b" to be executed')
+                writes(ttChan, '             (IBcontrol -b opens the benchmark file)')
+                writes(ttChan, '')
+                sleep 3
+                stop D_EXIT_SUCCESS
+            end
+            endusing
+        end
+
+        ;now do real checking
+        clear pos
+        while(pos < num_args)
+        begin
+            pos += 1
+            using cmdlin(arg_pos[pos]:arg_len[pos]) select
+            ('-r '),
+            begin
+                pos += 1
+                if(pos .gt. MAX_ARGS .or.
+                &  arg_pos[pos] .lt. 1 .or. arg_len[pos] .lt. 1 .or.
+                &  cmdlin(arg_pos[pos]:1) .eq. '-')
+                begin
+                    writes(ttChan, 'Missing -r parameter')
+                    goto exit_fail
+                end
+                numRecs = ^d(cmdlin(arg_pos[pos]:arg_len[pos]))
+                if(numRecs .lt. 1)
+                begin
+                    writes(ttChan, 'Invalid -r parameter')
+                    goto exit_fail
+                end
+            end
+            ('-k '),
+            begin
+                pos += 1
+                if(pos .gt. MAX_ARGS .or.
+                &  arg_pos[pos] .lt. 1 .or. arg_len[pos] .lt. 1 .or.
+                &  cmdlin(arg_pos[pos]:1) .eq. '-')
+                begin
+                    writes(ttChan, 'Missing -k parameter')
+                    goto exit_fail
+                end
+                numKeys = ^d(cmdlin(arg_pos[pos]:arg_len[pos]))
+                if(numKeys .lt. 1 .or. numKeys .gt. 8)
+                begin
+                    writes(ttChan, 'Invalid -k parameter')
+                    goto exit_fail
+                end
+            end
+            ('-o '),
+            begin
+                pos += 1
+                if(pos .gt. MAX_ARGS .or.
+                &  arg_pos[pos] .lt. 1 .or. arg_len[pos] .lt. 1 .or.
+                &  cmdlin(arg_pos[pos]:1) .eq. '-')
+                begin
+                    writes(ttChan, 'Missing -o parameter')
+                    goto exit_fail
+                end
+                if(arg_len[pos] .gt. ^size(logFile) .or.
+                &  (cmdlin(arg_pos[pos]:1) .eq. '"' .and. arg_len[pos] .eq. 1))
+                begin
+                    writes(ttChan, 'Invalid -o parameter')
+                    goto exit_fail
+                end
+                if(cmdlin(arg_pos[pos]:1) .eq. '"' .and.
+                &  cmdlin(arg_pos[pos]+arg_len[pos]-1:1) .eq. '"') then
+                    logFile = cmdlin(arg_pos[pos]+1:arg_len[pos]-2)
+                else
+                    logFile = cmdlin(arg_pos[pos]:arg_len[pos])
+            end
+            ('-s '),
+            begin
+                pos += 1
+                if(pos .gt. MAX_ARGS .or.
+                &  arg_pos[pos] .lt. 1 .or. arg_len[pos] .lt. 1 .or.
+                &  cmdlin(arg_pos[pos]:1) .eq. '-')
+                begin
+                    writes(ttChan, 'Missing -s parameter')
+                    goto exit_fail
+                end
+                shareMode = ^d(cmdlin(arg_pos[pos]:arg_len[pos]))
+                if(shareMode .lt. 0 .or. shareMode .gt. 2)
+                begin
+                    writes(ttChan, 'Invalid -s parameter')
+                    goto exit_fail
+                end
+            end
+            ('-c '),
+            begin
+                forceNew = 1
+            end
+            ('-i '),
+            begin
+                pos += 1
+                if(pos .gt. MAX_ARGS .or.
+                &  arg_pos[pos] .lt. 1 .or. arg_len[pos] .lt. 1 .or.
+                &  cmdlin(arg_pos[pos]:1) .eq. '-')
+                begin
+                    writes(ttChan, 'Missing -i parameter')
+                    goto exit_fail
+                end
+                if(arg_len[pos] .gt. ^size(logHdr) .or.
+                &  (cmdlin(arg_pos[pos]:1) .eq. '"' .and. arg_len[pos] .eq. 1))
+                begin
+                    writes(ttChan, 'Invalid -i parameter')
+                    goto exit_fail
+                end
+                if(cmdlin(arg_pos[pos]:1) .eq. '"' .and.
+                &  cmdlin(arg_pos[pos]+arg_len[pos]-1:1) .eq. '"') then
+                    logHdr = cmdlin(arg_pos[pos]+1:arg_len[pos]-2)
+                else
+                    logHdr = cmdlin(arg_pos[pos]:arg_len[pos])
+            end
+            ('-v '),
+            begin
+                pos += 1
+                if(pos .gt. MAX_ARGS .or.
+                &  arg_pos[pos] .lt. 1 .or. arg_len[pos] .lt. 1 .or.
+                &  cmdlin(arg_pos[pos]:1) .eq. '-')
+                begin
+                    writes(ttChan, 'Missing -v parameter')
+                    goto exit_fail
+                end
+                outInterval = ^d(cmdlin(arg_pos[pos]:arg_len[pos]))
+                if(outInterval .lt. 0)
+                begin
+                    writes(ttChan, 'Invalid -v parameter')
+                    goto exit_fail
+                end
+            end
+            ('-w '),
+            begin
+                pauseCtl = 1
+            end
+            endusing
+        end
+        return
+end
+
+function elapsed_time ,a
+        aSdt            ,a              ;start datetime
+        aEdt            ,a              ;end datetime
+        ;endparams
+
+record sdt
+        dat     ,d8
+        hrs     ,d2
+        min     ,d2
+        sec     ,d2
+        uuu     ,d3
+        vvv     ,d3
+record edt
+        dat     ,d8
+        hrs     ,d2
+        min     ,d2
+        sec     ,d2
+        uuu     ,d3
+        vvv     ,d3
+record
+        secs    ,d10.3                  ; elapsed time (seconds)
+        ssecs   ,d10.3                  ; start time (seconds)
+        esecs   ,d10.3                  ; end time (seconds)
+
+proc
+        sdt = aSdt
+        edt = aEdt
+
+        ssecs = (((sdt.hrs * 60) + sdt.min) * 60) + sdt.sec
+        ssecs = ((ssecs*1000) + sdt.uuu) / 1000
+        esecs = (((edt.hrs * 60) + edt.min) * 60) + edt.sec
+        esecs = ((esecs*1000) + edt.uuu) / 1000
+        secs = esecs - ssecs
+
+        freturn %string(secs)
+end

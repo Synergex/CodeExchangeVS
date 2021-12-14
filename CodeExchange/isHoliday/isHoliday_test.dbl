@@ -1,0 +1,28 @@
+import SynPSG
+
+main
+
+    record
+        myDate  ,d8
+
+proc
+    open(1, O, 'TT:')
+
+    myDate = 20100101
+
+    if(SynPSG.DateFunctions.IsHoliday(myDate, CountryCode.EnglandAndWales)) then
+        writes(1, %string(myDate)+" is a holiday")
+    else
+        writes(1, %string(myDate)+" is not a holiday")
+
+    ^a(myDate) = %datetime
+
+    if(SynPSG.DateFunctions.IsHoliday(myDate, CountryCode.EnglandAndWales)) then
+        writes(1, %string(myDate)+" is a holiday")
+    else
+        writes(1, %string(myDate)+" is not a holiday")
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    stop D_EXIT_SUCCESS
+endmain

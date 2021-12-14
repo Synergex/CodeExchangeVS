@@ -1,0 +1,2581 @@
+;======================================================================
+;              Copyright 2000 by Synergex, International
+;
+;   Synergex provides this software under a license and may only be
+;     used in accordance with the terms and conditions of such
+;    license and with the inclusion of the above Copyright notice.
+;======================================================================
+; Module:   ICONVERT
+;
+; Facility: Converts a Synergy isam file using two structures in a
+;           Synergy/DE Repository
+;
+; Description:
+;
+; $Revision: 1 $
+;
+.define D_VERSION ,"1.0.7"
+;
+; $Date: 2010-04-13 17:05:31-07:00 $
+;
+; 1.0.1   27-Oct-2000 New routine
+; 1.0.2   22-Mar-2001 Added support for ISAM as output file
+; 1.0.3   15-May-2001 Explicit group support
+; 1.0.4   16-May-2001 Tag support
+; 1.0.5   09-Aug-2001 ISMKEY 1.0.3 support
+; 1.0.6   13-Aug-2001 Implicit group support
+;                     Multi-dimensional array support
+; 1.0.7   09-Nov-2001 Implicit group code correction
+; 1.0.8   27-Oct-2010 DBLNET support
+;
+;
+; Requires Synergy/DE 7.0.1 (or later)
+;
+;
+; Assumptions:
+;
+; Structures are in the same order for both Repository files.
+; Source Repository file may have more structures, but the first n must be
+; the "same" as the destination Repository file list of structures
+;
+; Overlay fields are ignored
+;
+;
+; Best viewed with tab's set to 4
+;
+; Maximum record length that can be converted
+.define MAX_REC_LEN      ,5000
+;
+;
+; Debug Mode
+;;.define DEBUG_MODE       ,1
+;
+; Debug log mode (creates a very large log file)
+;;.define DEBUG_LOG        ,1
+;
+;if CONVERT_FILE is defined, a conversion description file will be created
+;;.define CONVERT_FILE     ,'C:\convert.ddf'
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+main ;iconvert
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.include 'WND:tools.def'
+.include 'DBLDIR:windows.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:iconvert.def'
+
+.include 'INC:ismkey.def'
+
+    external function
+        convert         ,^VAL
+        file_exists     ,^VAL
+        get_rps_file    ,^VAL
+        get_rps_fields  ,^VAL
+        get_rps_tags    ,^VAL
+        ismkey          ,^VAL
+        upcase          ,a
+
+.align
+    record clr_i
+        ctr             ,i4                 ;general purpose counter
+        status          ,i4                 ;command line status
+        bld_id          ,i4                 ;input windows build id
+        wndidp          ,i4                 ;input window id
+        colid           ,3i4                ;menu columns
+        in_chan         ,i4                 ;in channel
+        out_chan        ,i4                 ;out channel
+        out_len         ,i4                 ;out record length
+        ptr             ,i4                 ;general purpose pointer
+        num_keys        ,i4                 ;number of keys
+        reclen          ,i4                 ;record length
+        store_error     ,i4                 ;store_error occurred
+        des_hdl         ,i4                 ;destination structure array handle
+        des_cnt         ,i4                 ;number of structures in destination array
+        src_hdl         ,D_HANDLE           ;source structure array handle
+        src_cnt         ,i4                 ;number of structures in source array
+        num_structs     ,i4                 ;number of structures (associated with source file)
+        sd_hdl          ,D_HANDLE           ;structure details list handle
+        sd_ctr          ,i4                 ;structure details list array counter
+        tag_ctr         ,i4                 ;tag counter
+        fld_ctr         ,i4                 ;field counter
+        t_ptr           ,i4                 ;tag handle
+        tpos            ,i4                 ;tag position
+        tlen            ,i4                 ;tag length
+        max_fields      ,i4                 ;maximum number of fields to convert
+        hdl             ,i4                 ;output log file handle
+        chan            ,i4                 ;temporary channel
+
+.align
+    record clr
+        mbuffer         ,a1024              ;menu column build buffer
+        in_rec          ,a MAX_REC_LEN      ;in record
+        out_rec         ,a MAX_REC_LEN      ;out record
+        new_field       ,a30                ;field name
+        filespec        ,a FIL_SIZ          ;file specification
+        key_spec        ,[ NM_KEYS ] a KEY_SIZ  ;key specifications (MUST BE REAL ARRAY)
+        log_file        ,a255               ;log errors to this file name
+        field_value     ,a30                ;field value
+        tag_value       ,a30                ;tag value
+
+.align
+    record input    ;check with filename_drill
+        dest_rps        ,2a50               ;destination RPS
+        dest_rpsfile    ,a30                ;destination RPS file
+        dest_file       ,a50                ;destination file name
+        dest_isam       ,d1                 ;destination file is isam
+        src_rps         ,2a50               ;source RPS
+        src_rpsfile     ,a30                ;source RPS file
+        src_file        ,a50                ;source isam file
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    xcall u_start
+
+    xcall e_sect("File Converter v"+D_VERSION, D_HEADER, D_LEFT, D_CLEAR)
+    xcall u_update
+
+    clear input
+    xcall getlog('RPSMFIL', dest_rps(1), ctr)
+    xcall getlog('RPSTFIL', dest_rps(2), ctr)
+    src_rps(1) = dest_rps(1)
+    src_rps(2) = dest_rps(2)
+
+    do  begin
+        call get_parameters
+
+        if(.not.status)
+        begin
+            clear store_error, hdl
+
+            ;try opening file as an isam file
+            xcall u_open(in_chan, 'I:I', src_file, 'I:I/ex/sequential',, error)
+            if(error)
+            begin
+                ;try opening file as a flat file
+                xcall u_open(in_chan, 'I', src_file, 'I/ex/sequential',, error)
+            end
+
+            ;opened file ok
+            if(.not.error) then
+            begin
+                ;is destination an isam file
+                if(dest_isam) then
+                begin
+                    xcall dd_init(dcs, dest_rps(1), dest_rps(2))
+                    using error select
+                    (E_OK),
+                    begin
+                        ;get the ISAMC parameters from Repository
+                        status = %ismkey(dcs,, dest_rpsfile, filespec, reclen, num_keys, key_spec, log_file)
+                        using status select
+                        (ERR_NONE),
+                        begin
+                            ;replace Repository filename with one entered
+                            if(ctr=%instr(1, filespec, ',')) then
+                                filespec = %atrim(dest_file) + filespec(ctr,%trim(filespec))
+                            else
+                                filespec = dest_file
+                            ;create a new isam file
+                            xcall isamc(filespec(1:%trim(filespec)), reclen, num_keys, key_spec)
+                            clear status
+                        end
+                        (),
+                        begin
+                            xcall u_message("ISMKEY Error " +%string(status))
+                            status = 1
+                        end
+                        endusing
+                    end
+                    (),
+                    begin
+                        xcall u_message("Error opening Repository")
+                        status = 1
+                    end
+                    endusing
+                    xcall dd_exit(dcs)
+                    if(status)
+                        nextloop
+                    ;open update isam file
+                    xcall u_open(out_chan, 'U:I', dest_file, 'U:I/ex',, error)
+                    if(error)
+                    begin
+                        xcall u_message("Error "+%string(error)+" occurred opening file\n"
+&                           +%atrim(filespec))
+                        nextloop
+                    end
+                end
+                else
+                begin
+                    ;open update flat file
+                    xcall u_open(out_chan, 'O', dest_file)
+                end
+
+                repeat
+                begin
+                    reads(in_chan, in_rec, eof)
+.ifdef DEBUG_MODE
+                    xcall e_sect(in_rec(1:20), D_LEFT, D_CLEAR)
+                    xcall u_update
+.endc ;DEBUG_MODE
+                    ;check for tag
+                    call set_conv_dets
+
+                    ;found a valid tag
+                    if(status)
+                    begin
+                        ;generate output conversion log
+                        call generate_convert_log
+.ifdef DEBUG_LOG
+                        xcall log_error(-1)
+.endc ;DEBUG_LOG
+                        ;convert the data
+                        xcall convert(in_rec, out_rec, sd_hdl, sd_ctr)
+
+                        ;update the output file
+                        if(dest_isam) then
+                        begin
+                            store(out_chan, out_rec(1:out_len)) [ERR=nostore]
+                            if(FALSE)
+                            begin
+nostore,
+                                store_error = 1
+                            end
+                        end
+                        else
+                            writes(out_chan, out_rec(1:out_len))
+                    end
+                end
+eof,
+
+.ifdef DEBUG_MODE
+                xcall e_sect(" ", D_LEFT, D_CLEAR)
+                xcall u_update
+.endc ;DEBUG_MODE
+
+                xcall u_close(in_chan, out_chan)
+
+                if(store_error) then
+                    xcall u_message("File converted - STORE ERRORS OCCURRED")
+                else
+                    xcall u_message("File converted")
+            end
+            else
+                xcall u_message("Cannot open source file")
+        end
+    end
+    until(status)
+
+    xcall u_finish
+
+    freturn D_EXIT_SUCCESS
+
+;--------------------------------------------------------------------
+
+get_parameters,
+
+    if(.not.wndidp)
+    begin
+        xcall ib_input(bld_id, 'CONVERT1', 13, 76)
+
+        ctr = 2
+        xcall ib_field(bld_id, 'destrpsmfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name and location of RPS main file",
+&           D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 25, D_FLD_REQUIRED,
+&           D_FLD_PROMPT, "RPS Main File (new)")
+        ctr += 1
+        xcall ib_field(bld_id, 'destrpstfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name and location of RPS text file",
+&           D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 25, D_FLD_REQUIRED,
+&           D_FLD_PROMPT, "RPS Text File (new)")
+        ctr += 1
+        xcall ib_field(bld_id, 'destrpsfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 30,
+&           D_FLD_UC, D_FLD_INFO, "Enter name of OUTPUT RPS file",
+&           D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 25,
+&           D_FLD_BREAK, D_FLD_DRILL, 'filename_drill',
+&           D_FLD_PROMPT, "Output RPS File")
+        ctr += 1
+        xcall ib_field(bld_id, 'destfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name of destination file",
+&           D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 25,
+&           D_FLD_BREAK,
+&           D_FLD_PROMPT, "Output Filename")
+        ctr += 1
+        xcall ib_field(bld_id, 'destisam', D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, 1,
+&           D_FLD_INFO, "Destination file is ISAM",
+&           D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 25, D_FLD_DISABLED,
+&           D_FLD_CHECKBOX,
+&           D_FLD_PROMPT, "Output File is ISAM")
+        ctr += 2
+
+        xcall ib_field(bld_id, 'srcrpsmfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name and location of RPS main file",
+&           D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 25, D_FLD_REQUIRED,
+&           D_FLD_PROMPT, "RPS Main File (old)")
+        ctr += 1
+        xcall ib_field(bld_id, 'srcrpstfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name and location of RPS text file",
+&           D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 25, D_FLD_REQUIRED,
+&           D_FLD_PROMPT, "RPS Text File (old)")
+        ctr += 1
+        xcall ib_field(bld_id, 'srcrpsfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 30,
+&           D_FLD_UC, D_FLD_INFO, "Enter name of INPUT RPS file",
+&           D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 25, D_FLD_REQUIRED,
+&           D_FLD_BREAK,     D_FLD_DRILL, 'filename_drill',
+&           D_FLD_PROMPT, "Input RPS file")
+        ctr += 1
+        xcall ib_field(bld_id, 'srcfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, 50,
+&           D_FLD_INFO, "Enter name of source file",
+&           D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 25,
+&           D_FLD_BREAK,
+&           D_FLD_PROMPT, "Input Filename")
+
+        xcall ib_button(bld_id, 'O_EXIT', DSB_TEXT, "OK",,, "O")
+        xcall ib_button(bld_id, 'O_QUIT', DSB_TEXT, "Cancel",,, "C")
+
+        xcall ib_end(bld_id, wndidp)
+
+        xcall u_window(D_PLACE, wndidp, 3, 1)
+
+        xcall w_brdr(wndidp, WB_DRAGOFF)
+    end
+
+    clear dest_rpsfile, dest_file, src_rpsfile, src_file
+
+    xcall i_display(wndidp,, input)
+
+    if(.not.colid(2))
+    begin
+        xcall mb_column(mbuffer, 'convert_g', "General  ")
+        xcall mb_entry(mbuffer, 'O_EXIT', "OK")
+        xcall mb_entry(mbuffer, 'O_QUIT', "Cancel")
+        xcall mb_end(mbuffer, colid(3))
+
+        ;Load columns, but do not place
+        xcall mb_column(mbuffer, 'convert_i', "Cursor  ",, D_NOPLC)
+        xcall mb_entry(mbuffer, 'I_FRST', "First field")
+        xcall mb_entry(mbuffer, 'I_LAST', "Last field")
+        xcall mb_entry(mbuffer, 'I_NEXT', "Next field")
+        xcall mb_entry(mbuffer, 'I_PREV', "Prev field")
+        xcall mb_entry(mbuffer, 'E_LEFT', "Left 1 character")
+        xcall mb_entry(mbuffer, 'E_RIGHT', "Right 1 character")
+        xcall mb_entry(mbuffer, 'E_CDEL', "Delete character")
+        xcall mb_end(mbuffer, colid(1))
+
+        xcall mb_column(mbuffer, 'convert_s', "Cursor  ",, D_NOPLC)
+        xcall mb_entry(mbuffer, 'S_DOWN', "Next item")
+        xcall mb_entry(mbuffer, 'S_UP', "Prev item")
+        xcall mb_end(mbuffer, colid(2))
+    end
+
+    xcall i_next(wndidp,, '*FRST*')
+
+    do  begin
+        xcall i_input(wndidp,, input, colid(1), colid(2),, D_NOTERM)
+        ;process window
+        if (g_select) then
+            call mnu_cols               ;menu processing
+        else
+        begin
+            if(g_setsts) then
+                call brk_proc           ;break procssing
+            else
+                call set_proc
+        end
+    end
+    until(g_entnam.eq.'O_EXIT'.or.g_entnam.eq.'O_QUIT')
+
+    xcall u_update
+    return
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call set_proc
+
+        if(status) then
+            clear g_entnam
+        else
+            call match_all_structures
+    end
+    ('O_QUIT'),
+        status = 1
+    endusing
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    using g_fldnam select
+    ('DESTRPSFILE'),
+    begin
+        status = %get_rps_file(dest_rpsfile, dest_rps(1), dest_rps(2),
+&           des_hdl, des_cnt, dest_file, dest_isam)
+        if(.not.status) then
+        begin
+            xcall i_dspfld(wndidp, 'DESTISAM', dest_isam)
+            if(dest_isam) then
+                xcall i_enable(D_FLDS, wndidp, 'DESTISAM')
+            else
+                xcall i_disable(D_FLDS, wndidp, 'DESTISAM')
+            xcall i_dspfld(wndidp, 'DESTFILE', dest_file)
+            xcall i_next(wndidp,, 'DESTFILE')
+        end
+        else
+        begin
+            using status select
+            (1),
+                xcall u_beep
+            (2),
+                xcall u_message("No structures assigned to file "+%atrim(dest_rpsfile))
+            (3),
+                xcall u_message("File "+%atrim(dest_rpsfile)+" has a structure larger than "+%string(MAX_REC_LEN)+" characters")
+            (),
+                xcall u_message("File "+%atrim(dest_rpsfile)+" error:"+%string(status))
+            endusing
+            clear dest_rpsfile, dest_isam, dest_file
+            xcall i_dspfld(wndidp, 'DESTRPSFILE', dest_rpsfile)
+            xcall i_dspfld(wndidp, 'DESTFILE', dest_file)
+            xcall i_dspfld(wndidp, 'DESTISAM', dest_isam)
+            xcall i_disable(D_FLDS, wndidp, 'DESTISAM')
+            xcall i_next(wndidp,, 'DESTRPSFILE')
+        end
+    end
+    ('DESTFILE'),
+    begin
+        if(%file_exists(dest_file, 'I'))
+        begin
+            if(%u_msgbox("File "+%atrim(src_file)+" exists",
+&               D_MYESNO+D_MICONQUESTION+D_MDEFBUTTON2,"Overwrite File").eq.D_MIDNO)
+            begin
+                clear src_file
+                xcall i_dspfld(wndidp, g_fldnam, src_file)
+                xcall i_next(wndidp,, g_fldnam)
+            end
+        end
+    end
+    ('SRCRPSFILE'),
+    begin
+        if(%get_rps_file(src_rpsfile, src_rps(1), src_rps(2),
+&           src_hdl, src_cnt, src_file)) then
+        begin
+            clear src_rpsfile
+            xcall i_dspfld(wndidp, g_fldnam, src_rpsfile)
+            xcall i_next(wndidp,, g_fldnam)
+        end
+        else
+        begin
+            if(.not.%file_exists(src_file, 'I:I'))
+                clear src_file
+            xcall i_dspfld(wndidp, 'SRCFILE', src_file)
+        end
+    end
+    ('SRCFILE'),
+    begin
+        if(.not.%file_exists(src_file, 'I:I'))
+        begin
+            xcall u_message("Cannot find "+%atrim(src_file))
+            clear src_file
+            xcall i_dspfld(wndidp, g_fldnam, src_file)
+            xcall i_next(wndidp,, g_fldnam)
+        end
+    end
+    (),
+        xcall i_next(wndidp,, '*FRST*')
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    if(.not.dest_rps(1))
+    begin
+        xcall u_message("Enter RPS Main File")
+        xcall i_next(wndidp,, 'destrpsmfil')
+        status = 1
+        return
+    end
+
+    if(.not.dest_rps(2))
+    begin
+        xcall u_message("Enter RPS Text File")
+        xcall i_next(wndidp,, 'destrpstfil')
+        status = 1
+        return
+    end
+
+    if(.not.dest_rpsfile)
+    begin
+        xcall u_message("Enter Output Filename")
+        xcall i_next(wndidp,, 'destrpsfile')
+        status = 1
+        return
+    end
+
+    if(.not.dest_file)
+    begin
+        xcall u_message("Enter Output Filename")
+        xcall i_next(wndidp,, 'destfile')
+        status = 1
+        return
+    end
+
+
+    if(.not.src_rps(1))
+    begin
+        xcall u_message("Enter RPS Main File")
+        xcall i_next(wndidp,, 'srcrpsmfil')
+        status = 1
+        return
+    end
+
+    if(.not.src_rps(2))
+    begin
+        xcall u_message("Enter RPS Text File")
+        xcall i_next(wndidp,, 'srcrpstfil')
+        status = 1
+        return
+    end
+
+    if(.not.src_rpsfile)
+    begin
+        xcall u_message("Enter Source Filename")
+        xcall i_next(wndidp,, 'srcrpsfile')
+        status = 1
+        return
+    end
+
+    if(.not.src_file)
+    begin
+        xcall u_message("Enter ISM Filename")
+        xcall i_next(wndidp,, 'srcfile')
+        status = 1
+        return
+    end
+
+
+    if(%upcase(dest_rps(1)).eq.%upcase(src_rps(1)).and.
+&       %upcase(dest_rps(2)).eq.%upcase(src_rps(2)).and.
+&       dest_rpsfile.eq.src_rpsfile)
+    begin
+        xcall u_message("Source and Destination structures are the same")
+        xcall i_next(wndidp,, 'deststruct')
+        status = 1
+        return
+    end
+
+    if(%upcase(dest_file).eq.%upcase(src_file))
+    begin
+        xcall u_message("Source and Destination files are the same")
+        xcall i_next(wndidp,, 'destfile')
+        status = 1
+        return
+    end
+
+    clear status
+    xcall i_next(wndidp,, '*FRST*')
+    return
+
+;----------------------------------------------------------------------------
+; match structures in the new file with structures in the old file
+; using structure name
+
+match_all_structures,
+
+    num_structs = (%mem_proc(DM_GETSIZE, src_hdl) / ^size(struct_names))
+
+    sd_hdl = %mem_proc(DM_ALLOC+DM_STATIC, (2*num_structs*^size(str_dets)))
+    clear sd_ctr
+
+    for sd_ctr from 1 thru num_structs
+    begin
+        call match_fields
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+; match fields in the new structure with fields in the old structure
+; using field name
+
+match_fields,
+
+    ;NEW structure
+    clear ^i(^m(str_dets[sd_ctr+num_structs], sd_hdl))
+    ^m(str_dets[sd_ctr+num_structs].str_name, sd_hdl) = ^m(struct_names[sd_ctr], des_hdl)
+    if(%get_rps_fields(sd_hdl, sd_ctr+num_structs, dest_rps(1), dest_rps(2)))
+    begin
+        status = 99
+        return
+    end
+
+    ;OLD structure
+    clear ^i(^m(str_dets[sd_ctr], sd_hdl))
+    ^m(str_dets[sd_ctr].str_name, sd_hdl) = ^m(struct_names[sd_ctr], src_hdl)
+    if(%get_rps_fields(sd_hdl, sd_ctr, src_rps(1), src_rps(2)))
+    begin
+        status = 99
+        return
+    end
+
+    ^m(str_dets[sd_ctr].c_hdl, sd_hdl) =
+&       %mem_proc(DM_ALLOC+DM_STATIC, ^m(str_dets[sd_ctr].num_fields, sd_hdl) * ^size(conv_fld))
+
+    ;how many fields to convert?
+    if(^m(str_dets[sd_ctr].num_fields, sd_hdl).lt.^m(str_dets[sd_ctr+num_structs].num_fields, sd_hdl)) then
+        max_fields = ^m(str_dets[sd_ctr].num_fields, sd_hdl)
+    else
+        max_fields = ^m(str_dets[sd_ctr+num_structs].num_fields, sd_hdl)
+
+    clear status
+
+    for ctr from 1 thru max_fields
+    begin
+
+        ;new field details
+        fld_rec = ^m(field_dets[ctr].field_rec, ^m(str_dets[sd_ctr+num_structs].fd_hdl, sd_hdl))
+        new_field = fld_name
+
+        clear ^i(^m(conv_fld[ctr],   ^m(str_dets[sd_ctr].c_hdl, sd_hdl)))
+
+        ^m(conv_fld[ctr].meth,       ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_type
+        ^m(conv_fld[ctr].pos(W_NEW), ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_pos
+        ^m(conv_fld[ctr].siz(W_NEW), ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_size
+        ^m(conv_fld[ctr].prc(W_NEW), ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_prec
+        ^m(conv_fld[ctr].dim[W_NEW,1], ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_dim(1)
+        ^m(conv_fld[ctr].dim[W_NEW,2], ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_dim(2)
+        ^m(conv_fld[ctr].dim[W_NEW,3], ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_dim(3)
+        ^m(conv_fld[ctr].dim[W_NEW,4], ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_dim(4)
+
+        ;do we ignore this field
+        if(fld_size.gt.0) then
+        begin
+            clear fld_rec, ptr
+            while(ptr.lt.^m(str_dets[sd_ctr].num_fields, sd_hdl).and.fld_name.ne.new_field)
+            begin
+                ptr += 1
+                fld_rec = ^m(field_dets[ptr].field_rec, ^m(str_dets[sd_ctr].fd_hdl, sd_hdl))
+
+                ;found a match
+                if(fld_name.eq.new_field)
+                begin
+                    ^m(conv_fld[ctr].meth,       ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) =
+&                       %atrim(^m(conv_fld[ctr].meth, ^m(str_dets[sd_ctr].c_hdl, sd_hdl))) + '_TO_' + fld_type
+                    ^m(conv_fld[ctr].pos(W_OLD), ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_pos
+                    ^m(conv_fld[ctr].siz(W_OLD), ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_size
+                    ^m(conv_fld[ctr].prc(W_OLD), ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_prec
+                    ^m(conv_fld[ctr].dim[W_OLD,1], ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_dim(1)
+                    ^m(conv_fld[ctr].dim[W_OLD,2], ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_dim(2)
+                    ^m(conv_fld[ctr].dim[W_OLD,3], ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_dim(3)
+                    ^m(conv_fld[ctr].dim[W_OLD,4], ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = fld_dim(4)
+                end
+            end
+        end
+        else
+        begin
+            ;ignore this field
+            ^m(conv_fld[ctr].meth,       ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = W_SKIP_FIELD + fld_type
+            ^m(conv_fld[ctr].siz(W_NEW), ^m(str_dets[sd_ctr].c_hdl, sd_hdl)) = -fld_size
+        end
+    end
+
+    ;get any tags associated with this structure
+    if(%get_rps_tags(sd_hdl, sd_ctr, src_rps(1), src_rps(2),
+&       ^m(str_dets[sd_ctr].t_typ, sd_hdl),
+&       ^m(str_dets[sd_ctr].t_siz, sd_hdl),
+&       ^m(str_dets[sd_ctr].t_hdl, sd_hdl)))
+    begin
+        status = 99
+        return
+    end
+
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_conv_dets,
+
+    ;which tag should be used?
+    call check_tags
+
+    ;size of output record
+    out_len = ^m(str_dets[sd_ctr+num_structs].str_len, sd_hdl)
+
+    return
+
+;----------------------------------------------------------------------------
+
+check_tags,
+
+    ;are there any tags?
+    if(.not.^m(str_dets[sd_ctr].t_siz, sd_hdl))
+    begin
+        sd_ctr = 1
+        status = 1
+        return
+    end
+
+    for sd_ctr from 1 thru num_structs
+    begin
+        ;Houston - we have a problem - no - we have no tag
+        clear status
+
+        tag_ctr = 1
+        while(tag_ctr.le.^m(str_dets[sd_ctr].t_siz, sd_hdl))
+        begin
+            t_ptr = ^m(str_dets[sd_ctr].t_hdl, sd_hdl)
+
+            tg_info = ^m(conv_tag[tag_ctr].tag_info, t_ptr)
+            using si_tagtyp select
+            (TAGNON),
+            begin
+                status = 1
+            end
+            (TAGFLD),
+            begin
+                clear status
+                tpos = ^m(conv_tag[tag_ctr].tag_pos, t_ptr)
+                tlen = ^m(conv_tag[tag_ctr].tag_len, t_ptr)
+
+                ;find the relevant field
+                fld_ctr = 1
+                while(fld_ctr.lt.^m(str_dets[sd_ctr].num_fields, sd_hdl))
+                begin
+                    fld_rec = ^m(field_dets[ptr].field_rec, ^m(str_dets[sd_ctr].fd_hdl, sd_hdl))
+                    if(tgi_tagfld.eq.fld_name)
+                        exitloop
+                    fld_ctr += 1
+                end
+
+                ;normalize the data, so that an apples to apples comparison can occur
+                xcall convert_value(fld_type, in_rec(tpos:tlen), field_value)
+                xcall convert_value(fld_type, tgi_tagval, tag_value)
+
+                using tgi_tagcmp select
+                (TGI_EQ),
+                begin
+                    status = (field_value.eq.tag_value)
+                end
+                (TGI_NE),
+                begin
+                    status = (field_value.ne.tag_value)
+                end
+                (TGI_LE),
+                begin
+                    status = (field_value.le.tag_value)
+                end
+                (TGI_LT),
+                begin
+                    status = (field_value.lt.tag_value)
+                end
+                (TGI_GE),
+                begin
+                    status = (field_value.ge.tag_value)
+                end
+                (TGI_GT),
+                begin
+                    status = (field_value.gt.tag_value)
+                end
+                (),
+                    clear status
+                endusing
+
+            end
+            (TAGSIZ),
+            begin
+                using tgi_tagcmp select
+                (TGI_EQ),
+                begin
+                    status = ($rdlen.eq.^d(tgi_tagval))
+                end
+                (TGI_NE),
+                begin
+                    status = ($rdlen.ne.^d(tgi_tagval))
+                end
+                (TGI_LE),
+                begin
+                    status = ($rdlen.le.^d(tgi_tagval))
+                end
+                (TGI_LT),
+                begin
+                    status = ($rdlen.lt.^d(tgi_tagval))
+                end
+                (TGI_GE),
+                begin
+                    status = ($rdlen.ge.^d(tgi_tagval))
+                end
+                (TGI_GT),
+                begin
+                    status = ($rdlen.gt.^d(tgi_tagval))
+                end
+                endusing
+            end
+            endusing
+
+            tag_ctr += 1
+
+            using tgi_tagcon select
+            (TGI_AND),
+            begin
+                ;no match
+                if(.not.status)
+                begin
+                    if(tag_ctr.le.^m(str_dets[sd_ctr].t_siz, sd_hdl))
+                    begin
+                        ;try next condition by finding next OR tag
+                        do  begin
+                            tg_info = ^m(conv_tag[tag_ctr].tag_info, t_ptr)
+                            if(tgi_tagcon.ne.TGI_OR)
+                                tag_ctr += 1
+                        end
+                        until(tag_ctr.ge.si_nmtags.or.tgi_tagcon.eq.TGI_OR)
+                    end
+                end
+            end
+            (TGI_OR),
+            begin
+                if(status)
+                    exitloop
+            end
+            (),
+                exitloop
+            endusing
+        end
+    end
+
+    return
+
+;----------------------------------------------------------------------------
+
+generate_convert_log,
+
+.ifdef CONVERT_FILE
+
+    ;only generate the output file first time through for each structure
+    if(.not.hdl)
+    begin
+        hdl = ^m(str_dets[sd_ctr].c_hdl, sd_hdl)
+
+        xcall u_open(chan, 'O', CONVERT_FILE)
+
+        for ctr from 1 thru ^m(str_dets[sd_ctr].num_fields, sd_hdl)
+        begin
+            writes(chan, "field "+%string(ctr)+"   Method:"+%atrim(^m(conv_fld[ctr].meth, hdl)))
+            writes(chan, "  pos:"+%string(^m(conv_fld[ctr].pos(W_OLD), hdl))+" : "+%string(^m(conv_fld[ctr].pos(W_NEW), hdl)))
+            writes(chan, " dim1:"+%string(^m(conv_fld[ctr].dim[W_OLD,1], hdl))+" : "+%string(^m(conv_fld[ctr].dim[W_NEW,1], hdl)))
+            writes(chan, " dim2:"+%string(^m(conv_fld[ctr].dim[W_OLD,2], hdl))+" : "+%string(^m(conv_fld[ctr].dim[W_NEW,2], hdl)))
+            writes(chan, " dim3:"+%string(^m(conv_fld[ctr].dim[W_OLD,3], hdl))+" : "+%string(^m(conv_fld[ctr].dim[W_NEW,3], hdl)))
+            writes(chan, " dim4:"+%string(^m(conv_fld[ctr].dim[W_OLD,4], hdl))+" : "+%string(^m(conv_fld[ctr].dim[W_NEW,4], hdl)))
+            writes(chan, "  siz:"+%string(^m(conv_fld[ctr].siz(W_OLD), hdl))+" : "+%string(^m(conv_fld[ctr].siz(W_NEW), hdl)))
+            writes(chan, "  prc:"+%string(^m(conv_fld[ctr].prc(W_OLD), hdl))+" : "+%string(^m(conv_fld[ctr].prc(W_NEW), hdl)))
+        end
+
+        xcall u_close(chan)
+    end
+
+.endc ;CONVERT_FILE
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function CONVERT, ^VAL
+
+    a_in_rec    ,a                              ;REQUIRED input record
+
+    a_out_rec   ,a                              ;REQUIRED output record
+
+    a_sd_hdl    ,n                              ;REQUIRED conversion details handle
+
+    a_sd_ctr    ,n                              ;REQUIRED conversion details array counter
+
+
+.include 'WND:tools.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:iconvert.def'
+
+.align
+    record clr_i
+        status          ,i4                         ;function return status
+        ctr             ,i4                         ;general purpose counter
+        hdl             ,i4                         ;handle
+        len1            ,i4                         ;length
+        len2            ,i4                         ;length
+        ptr             ,i4
+        dim1            ,[4]i4
+        dim2            ,[4]i4
+
+proc
+
+    clear ^i(clr_i)
+
+    hdl = ^m(str_dets[a_sd_ctr].c_hdl, a_sd_hdl)
+
+    onerror no_conversion
+
+    for ctr from 1 thru ^m(str_dets[a_sd_ctr].num_fields, a_sd_hdl)
+    begin
+
+        using ^m(conv_fld[ctr].meth, hdl) select
+        (W_SKIP_FIELD),
+            nop
+        (' '),
+        begin
+            if(^m(conv_fld[ctr].pos(W_NEW), hdl) .and.
+&               ^m(conv_fld[ctr].pos(W_OLD), hdl) .and.
+&               ^m(conv_fld[ctr].siz(W_NEW), hdl) .and.
+&               ^m(conv_fld[ctr].siz(W_OLD), hdl) )
+            begin
+                len1 = (^m(conv_fld[ctr].siz(W_NEW), hdl) * (
+&                   ^m(conv_fld[ctr].dim[W_NEW,1], hdl) +
+&                   ^m(conv_fld[ctr].dim[W_NEW,2], hdl) +
+&                   ^m(conv_fld[ctr].dim[W_NEW,3], hdl) +
+&                   ^m(conv_fld[ctr].dim[W_NEW,4], hdl)))
+                len2 = (^m(conv_fld[ctr].siz(W_OLD), hdl) * (
+&                   ^m(conv_fld[ctr].dim[W_OLD,1], hdl) +
+&                   ^m(conv_fld[ctr].dim[W_OLD,2], hdl) +
+&                   ^m(conv_fld[ctr].dim[W_OLD,3], hdl) +
+&                   ^m(conv_fld[ctr].dim[W_OLD,4], hdl)))
+                if(len1.and.len2)
+                begin
+                    a_out_rec(^m(conv_fld[ctr].pos(W_NEW), hdl) : len1) =
+&                       a_in_rec(^m(conv_fld[ctr].pos(W_OLD), hdl) : len2)
+                end
+            end
+        end
+        (),
+        begin
+            if(^m(conv_fld[ctr].pos(W_NEW), hdl) .and.
+&               ^m(conv_fld[ctr].pos(W_OLD), hdl) .and.
+&               ^m(conv_fld[ctr].siz(W_NEW), hdl) .and.
+&               ^m(conv_fld[ctr].siz(W_OLD), hdl) .and.
+&               ^m(conv_fld[ctr].dim[W_NEW,1], hdl) .and.
+&               ^m(conv_fld[ctr].dim[W_OLD,1], hdl) )
+            begin
+                for ptr from 1 thru 4
+                begin
+                    dim1[ptr] = ^m(conv_fld[ctr].dim[W_NEW,ptr], hdl)
+                    dim2[ptr] = ^m(conv_fld[ctr].dim[W_OLD,ptr], hdl)
+                end
+
+                xcall xsubr(^m(conv_fld[ctr].meth, hdl)
+&                   , a_out_rec
+&                   , a_in_rec
+&                   , ^m(conv_fld[ctr].pos(W_NEW), hdl)
+&                   , ^m(conv_fld[ctr].pos(W_OLD), hdl)
+&                   , ^m(conv_fld[ctr].siz(W_NEW), hdl)
+&                   , ^m(conv_fld[ctr].siz(W_OLD), hdl)
+&                   , dim1
+&                   , dim2
+&                   , ^m(conv_fld[ctr].prc(W_NEW), hdl)
+&                   , ^m(conv_fld[ctr].prc(W_OLD), hdl)
+&                   )
+            end
+        end
+        endusing
+continue,
+    end
+
+    offerror
+
+    freturn status
+
+;got error during conversion
+no_conversion,
+
+    status = 1
+
+    goto continue
+
+end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; general purpose method to move alpha field to alpha field
+
+subroutine A_TO_A
+
+    a_rec2          ,a                  ;REQUIRED destination record
+    a_rec1          ,a                  ;REQUIRED source record
+    a_pos2          ,n                  ;REQUIRED position in destination record
+    a_pos1          ,n                  ;REQUIRED position in source record
+    a_size2         ,n                  ;REQUIRED size of destination field
+    a_size1         ,n                  ;REQUIRED size of source field
+    a_dim2          ,[4]n               ;REQUIRED dimension of destination field
+    a_dim1          ,[4]n               ;REQUIRED dimension of source field
+    a_prec2         ,n                  ;OPTIONAL precision of destination field
+    a_prec1         ,n                  ;OPTIONAL precision of source field
+
+.align
+    record clr_i
+        pos1            ,i4
+        pos2            ,i4
+        off1            ,i4
+        off2            ,i4
+        ctr             ,i4
+        dim_max         ,[4]i4
+        ctr1            ,i4
+        ctr2            ,i4
+        ctr3            ,i4
+        ctr4            ,i4
+
+proc
+
+    clear ^i(clr_i)
+
+    ;multi-dimensional array?
+    if(a_dim2[2]) then
+    begin
+        for ctr from 1 thru 4
+        begin
+            if(a_dim2[ctr].lt.a_dim1[ctr]) then
+                dim_max[ctr] = a_dim2[ctr]
+            else
+                dim_max[ctr] = a_dim1[ctr]
+            if(.not.dim_max[ctr])
+                dim_max[ctr] = 1
+        end
+
+        clear ctr
+        for ctr1 from 1 thru dim_max[1]
+        begin
+            for ctr2 from 1 thru dim_max[2]
+            begin
+                for ctr3 from 1 thru dim_max[3]
+                begin
+                    pos1 = a_pos1 + off1
+                    pos2 = a_pos2 + off2
+                    for ctr4 from 1 thru dim_max[4]
+                    begin
+                        call convert
+.ifdef DEBUG_LOG
+                        ctr += 1
+                        xcall log_error(ctr, "AA ["+a_rec1(pos1:a_size1)+"]"
+&                           +" "+%string(ctr1)+" "+%string(ctr2)
+&                           +" "+%string(ctr3)+" "+%string(ctr4)
+&                           +" pos2="+%string(pos2,'ZZZX')+" pos1="+%string(pos1,'ZZZX')
+&                           )
+.endc ;DEBUG_LOG
+                        pos1 += a_size1
+                        pos2 += a_size2
+                    end
+                    if(a_dim1[4]) then
+                        off1 += (a_dim1[4] * a_size1)
+                    else
+                        off1 += a_size1
+                    if(a_dim2[4]) then
+                        off2 += (a_dim2[4] * a_size2)
+                    else
+                        off2 += a_size2
+                end
+            end
+        end
+    end
+    else
+    begin
+        if(a_dim2[1].lt.a_dim1[1]) then
+            dim_max[1] = a_dim2[1]
+        else
+            dim_max[1] = a_dim1[1]
+
+        pos1 = a_pos1
+        pos2 = a_pos2
+
+        for ctr from 1 thru dim_max[1]
+        begin
+            call convert
+
+            pos1 += a_size1
+            pos2 += a_size2
+        end
+
+    end
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+convert,
+
+    a_rec2(pos2:a_size2) = a_rec1(pos1:a_size1)
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; general purpose method to move decimal field to decimal field
+
+subroutine D_TO_D
+
+    a_rec2          ,a                  ;REQUIRED destination record
+    a_rec1          ,a                  ;REQUIRED source record
+    a_pos2          ,n                  ;REQUIRED position in destination record
+    a_pos1          ,n                  ;REQUIRED position in source record
+    a_size2         ,n                  ;REQUIRED size of destination field
+    a_size1         ,n                  ;REQUIRED size of source field
+    a_dim2          ,[4]n               ;REQUIRED dimension of destination field
+    a_dim1          ,[4]n               ;REQUIRED dimension of source field
+    a_prec2         ,n                  ;REQUIRED precision of destination field
+    a_prec1         ,n                  ;REQUIRED precision of source field
+
+.align
+    record clr_i
+        pos1            ,i4
+        pos2            ,i4
+        off1            ,i4
+        off2            ,i4
+        ctr             ,i4
+        dim_max         ,[4]i4
+        ctr1            ,i4
+        ctr2            ,i4
+        ctr3            ,i4
+        ctr4            ,i4
+
+.align
+    record clr
+        number          ,a28                ;number
+
+proc
+
+    clear ^i(clr_i)
+
+    ;multi-dimensional array?
+    if(a_dim2[2]) then
+    begin
+        for ctr from 1 thru 4
+        begin
+            if(a_dim2[ctr].lt.a_dim1[ctr]) then
+                dim_max[ctr] = a_dim2[ctr]
+            else
+                dim_max[ctr] = a_dim1[ctr]
+            if(.not.dim_max[ctr])
+                dim_max[ctr] = 1
+        end
+
+        clear ctr
+        for ctr1 from 1 thru dim_max[1]
+        begin
+            for ctr2 from 1 thru dim_max[2]
+            begin
+                for ctr3 from 1 thru dim_max[3]
+                begin
+                    pos1 = a_pos1 + off1
+                    pos2 = a_pos2 + off2
+                    for ctr4 from 1 thru dim_max[4]
+                    begin
+                        call convert
+.ifdef DEBUG_LOG
+                        ctr += 1
+                        xcall log_error(ctr, "DD ["+a_rec1(pos1:a_size1)+"]"
+&                           +" "+%string(ctr1)+" "+%string(ctr2)
+&                           +" "+%string(ctr3)+" "+%string(ctr4)
+&                           +" pos2="+%string(pos2,'ZZZX')+" pos1="+%string(pos1,'ZZZX')
+&                           )
+.endc ;DEBUG_LOG
+                        pos1 += a_size1
+                        pos2 += a_size2
+                    end
+                    if(a_dim1[4]) then
+                        off1 += (a_dim1[4] * a_size1)
+                    else
+                        off1 += a_size1
+                    if(a_dim2[4]) then
+                        off2 += (a_dim2[4] * a_size2)
+                    else
+                        off2 += a_size2
+                end
+            end
+        end
+    end
+    else
+    begin
+        if(a_dim2[1].lt.a_dim1[1]) then
+            dim_max[1] = a_dim2[1]
+        else
+            dim_max[1] = a_dim1[1]
+
+        pos1 = a_pos1
+        pos2 = a_pos2
+
+        for ctr from 1 thru dim_max[1]
+        begin
+            call convert
+
+            pos1 += a_size1
+            pos2 += a_size2
+        end
+
+    end
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+convert,
+
+    xcall to_d2810(a_rec1(pos1:a_size1), number, a_prec1, a_size1)
+
+    a_rec2(pos2:a_size2) = number((19+a_prec2)-a_size2:a_size2)
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; general purpose method to move alpha field to decimal field
+
+subroutine A_TO_D
+
+    a_rec2          ,a                  ;REQUIRED destination record
+    a_rec1          ,a                  ;REQUIRED source record
+    a_pos2          ,n                  ;REQUIRED position in destination record
+    a_pos1          ,n                  ;REQUIRED position in source record
+    a_size2         ,n                  ;REQUIRED size of destination field
+    a_size1         ,n                  ;REQUIRED size of source field
+    a_dim2          ,[4]n               ;REQUIRED dimension of destination field
+    a_dim1          ,[4]n               ;REQUIRED dimension of source field
+    a_prec2         ,n                  ;REQUIRED precision of destination field
+    a_prec1         ,n                  ;REQUIRED precision of source field
+
+.align
+    record clr_i
+        pos1            ,i4
+        pos2            ,i4
+        off1            ,i4
+        off2            ,i4
+        ctr             ,i4
+        dim_max         ,[4]i4
+        ctr1            ,i4
+        ctr2            ,i4
+        ctr3            ,i4
+        ctr4            ,i4
+
+.align
+    record clr
+        number          ,a28                ;number
+
+proc
+
+    ;multi-dimensional array?
+    if(a_dim2[2]) then
+    begin
+        for ctr from 1 thru 4
+        begin
+            if(a_dim2[ctr].lt.a_dim1[ctr]) then
+                dim_max[ctr] = a_dim2[ctr]
+            else
+                dim_max[ctr] = a_dim1[ctr]
+            if(.not.dim_max[ctr])
+                dim_max[ctr] = 1
+        end
+
+        clear ctr
+        for ctr1 from 1 thru dim_max[1]
+        begin
+            for ctr2 from 1 thru dim_max[2]
+            begin
+                for ctr3 from 1 thru dim_max[3]
+                begin
+                    pos1 = a_pos1 + off1
+                    pos2 = a_pos2 + off2
+                    for ctr4 from 1 thru dim_max[4]
+                    begin
+                        call convert
+.ifdef DEBUG_LOG
+                        ctr += 1
+                        xcall log_error(ctr, "AD ["+a_rec1(pos1:a_size1)+"]"
+&                           +" "+%string(ctr1)+" "+%string(ctr2)
+&                           +" "+%string(ctr3)+" "+%string(ctr4)
+&                           +" pos2="+%string(pos2,'ZZZX')+" pos1="+%string(pos1,'ZZZX')
+&                           )
+.endc ;DEBUG_LOG
+                        pos1 += a_size1
+                        pos2 += a_size2
+                    end
+                    if(a_dim1[4]) then
+                        off1 += (a_dim1[4] * a_size1)
+                    else
+                        off1 += a_size1
+                    if(a_dim2[4]) then
+                        off2 += (a_dim2[4] * a_size2)
+                    else
+                        off2 += a_size2
+                end
+            end
+        end
+    end
+    else
+    begin
+        if(a_dim2[1].lt.a_dim1[1]) then
+            dim_max[1] = a_dim2[1]
+        else
+            dim_max[1] = a_dim1[1]
+
+        pos1 = a_pos1
+        pos2 = a_pos2
+
+        for ctr from 1 thru dim_max[1]
+        begin
+            call convert
+
+            pos1 += a_size1
+            pos2 += a_size2
+        end
+
+    end
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+convert,
+
+    onerror not_number
+
+    xcall to_d2810(a_rec1(pos1:a_size1), number, a_prec1, a_size1)
+
+    a_rec2(pos2:a_size2) = number((19+a_prec2)-a_size2:a_size2)
+
+    if(FALSE)
+    begin
+not_number,
+        a_rec2(pos2:a_size2) = a_rec1(pos1:a_size1)
+    end
+
+    offerror
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; general purpose method to move decimal field to alpha field
+
+subroutine D_TO_A
+
+    a_rec2          ,a                  ;REQUIRED destination record
+    a_rec1          ,a                  ;REQUIRED source record
+    a_pos2          ,n                  ;REQUIRED position in destination record
+    a_pos1          ,n                  ;REQUIRED position in source record
+    a_size2         ,n                  ;REQUIRED size of destination field
+    a_size1         ,n                  ;REQUIRED size of source field
+    a_dim2          ,[4]n               ;REQUIRED dimension of destination field
+    a_dim1          ,[4]n               ;REQUIRED dimension of source field
+    a_prec2         ,n                  ;REQUIRED precision of destination field
+    a_prec1         ,n                  ;REQUIRED precision of source field
+
+.align
+    record clr_i
+        pos1            ,i4
+        pos2            ,i4
+        off1            ,i4
+        off2            ,i4
+        ctr             ,i4
+        dim_max         ,[4]i4
+        ctr1            ,i4
+        ctr2            ,i4
+        ctr3            ,i4
+        ctr4            ,i4
+
+.align
+    record clr
+        number          ,a28                ;number
+
+proc
+
+    ;multi-dimensional array?
+    if(a_dim2[2]) then
+    begin
+        for ctr from 1 thru 4
+        begin
+            if(a_dim2[ctr].lt.a_dim1[ctr]) then
+                dim_max[ctr] = a_dim2[ctr]
+            else
+                dim_max[ctr] = a_dim1[ctr]
+            if(.not.dim_max[ctr])
+                dim_max[ctr] = 1
+        end
+
+        clear ctr
+        for ctr1 from 1 thru dim_max[1]
+        begin
+            for ctr2 from 1 thru dim_max[2]
+            begin
+                for ctr3 from 1 thru dim_max[3]
+                begin
+                    pos1 = a_pos1 + off1
+                    pos2 = a_pos2 + off2
+                    for ctr4 from 1 thru dim_max[4]
+                    begin
+                        call convert
+.ifdef DEBUG_LOG
+                        ctr += 1
+                        xcall log_error(ctr, "DA ["+a_rec1(pos1:a_size1)+"]"
+&                           +" "+%string(ctr1)+" "+%string(ctr2)
+&                           +" "+%string(ctr3)+" "+%string(ctr4)
+&                           +" pos2="+%string(pos2,'ZZZX')+" pos1="+%string(pos1,'ZZZX')
+&                           )
+.endc ;DEBUG_LOG
+                        pos1 += a_size1
+                        pos2 += a_size2
+                    end
+                    if(a_dim1[4]) then
+                        off1 += (a_dim1[4] * a_size1)
+                    else
+                        off1 += a_size1
+                    if(a_dim2[4]) then
+                        off2 += (a_dim2[4] * a_size2)
+                    else
+                        off2 += a_size2
+                end
+            end
+        end
+    end
+    else
+    begin
+        if(a_dim2[1].lt.a_dim1[1]) then
+            dim_max[1] = a_dim2[1]
+        else
+            dim_max[1] = a_dim1[1]
+
+        pos1 = a_pos1
+        pos2 = a_pos2
+
+        for ctr from 1 thru dim_max[1]
+        begin
+            call convert
+
+            pos1 += a_size1
+            pos2 += a_size2
+        end
+
+    end
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+convert,
+
+    onerror not_number
+
+    xcall to_d2810(a_rec1(pos1:a_size1), number, a_prec1, a_size1)
+
+    a_rec2(pos2:a_size2) = number((19+a_prec2)-a_size2:a_size2)
+
+    if(FALSE)
+    begin
+not_number,
+        a_rec2(pos2:a_size2) = a_rec1(pos1:a_size1)
+    end
+
+    offerror
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; general purpose method to clear a decimal field
+
+subroutine D
+
+    a_rec2          ,a                  ;REQUIRED destination record
+    a_rec1          ,a                  ;OPTIONAL source record
+    a_pos2          ,n                  ;REQUIRED position in destination record
+    a_pos1          ,n                  ;OPTIONAL position in source record
+    a_size2         ,n                  ;REQUIRED size of destination field
+    a_size1         ,n                  ;OPTIONAL size of source field
+    a_dim2          ,[4]n               ;REQUIRED dimension of destination field
+    a_dim1          ,[4]n               ;OPTIONAL dimension of source field
+    a_prec2         ,n                  ;OPTIONAL precision of destination field
+    a_prec1         ,n                  ;OPTIONAL precision of source field
+
+.align
+    record
+        len             ,i4
+
+proc
+
+    len     = a_size2 * (a_dim2[1]+a_dim2[2]+a_dim2[3]+a_dim2[4])
+    clear ^d(a_rec2(a_pos2:len))
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; general purpose method to clear an alpha field
+
+subroutine A
+
+    a_rec2          ,a                  ;REQUIRED destination record
+    a_rec1          ,a                  ;OPTIONAL source record
+    a_pos2          ,n                  ;REQUIRED position in destination record
+    a_pos1          ,n                  ;OPTIONAL position in source record
+    a_size2         ,n                  ;REQUIRED size of destination field
+    a_size1         ,n                  ;OPTIONAL size of source field
+    a_dim2          ,[4]n               ;REQUIRED dimension of destination field
+    a_dim1          ,[4]n               ;OPTIONAL dimension of source field
+    a_prec2         ,n                  ;OPTIONAL precision of destination field
+    a_prec1         ,n                  ;OPTIONAL precision of source field
+
+.align
+    record
+        len             ,i4
+
+proc
+
+    len     = a_size2 * (a_dim2[1]+a_dim2[2]+a_dim2[3]+a_dim2[4])
+    clear a_rec2(a_pos2:len)
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; general purpose method to move decimal field to decimal field
+
+subroutine TO_D2810
+    a_from          ,a                      ;REQUIRED from number
+    a_to            ,a                      ;REQUIRED to number (must be a28)
+    a_prec1         ,n                      ;REQUIRED precision of source field
+    a_size1         ,n                      ;REQUIRED size of source field
+
+.align
+    record
+        ctr             ,i4
+        number          ,a28
+        number_a        ,a28
+        number_0        ,a18 @number_a
+        number_1        ,a19 @number_a
+        number_2        ,a20 @number_a
+        number_3        ,a21 @number_a
+        number_4        ,a22 @number_a
+        number_5        ,a23 @number_a
+        number_6        ,a24 @number_a
+        number_7        ,a25 @number_a
+        number_8        ,a26 @number_a
+        number_9        ,a27 @number_a
+        number_10       ,a28 @number_a
+
+proc
+
+    number = a_from
+
+    ;make sure that all spaces are really zeroes
+    for ctr from 1 thru ^size(number)
+    begin
+        if(number(ctr:1).eq.' ')
+            number(ctr:1) = '0'
+    end
+
+    onerror not_number
+
+    clear ^d(number_a)
+
+    ;move the source field into the appropriate destination field
+    using a_prec1 select
+    (1),
+        number_1 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    (2),
+        number_2 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    (3),
+        number_3 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    (4),
+        number_4 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    (5),
+        number_5 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    (6),
+        number_6 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    (7),
+        number_7 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    (8),
+        number_8 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    (9),
+        number_9 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    (10),
+        number_10 = ^d(number(1:a_size1))  ,'XXXXXXXXXXXXXXXXXX'
+    (),
+        number_0 = ^d(number(1:a_size1))   ,'XXXXXXXXXXXXXXXXXX'
+    endusing
+
+    offerror
+
+    a_to = number_a
+
+    xreturn
+
+;--------------------------------------------------------------------
+
+not_number,
+
+    offerror
+
+    clear ^d(number_a)
+    number_a((19+a_prec1)-a_size1:a_size1) = number(1:a_size1)
+
+    a_to = number_a
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function GET_RPS_FILE ,^VAL
+
+    a_file_rps              ,a                      ;REQUIRED RPS file
+    a_rpsmfil               ,a                      ;REQUIRED RPSMFIL
+    a_rpstfil               ,a                      ;REQUIRED RPSTFIL
+    a_str_hdl               ,i                      ;REQUIRED RETURNED handle for array of structure names
+    a_str_count             ,n                      ;REQUIRED RETURNED number of structures in array
+    a_file_name             ,a                      ;OPTIONAL RETURNED Physical filename
+    a_file_isam             ,n                      ;OPTIONAL RETURNED filename is ISAM
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:iconvert.def'
+
+.align
+    record clr_i
+        status          ,i4                     ;status
+        file_isam       ,i4                     ;file is isam
+        hdl             ,D_HANDLE               ;handle
+        ctr             ,i4                     ;counter
+
+.proc
+
+    clear ^i(clr_i)
+
+    xcall dd_init(dcs, a_rpsmfil, a_rpstfil)
+    using error select
+    (E_OK),
+    begin
+        call validate_file
+        xcall dd_exit(dcs)
+    end
+    (E_NOFIND),
+    begin
+        xcall u_message("RPS Record not found")
+        status = 1
+    end
+    (E_OPNERR),
+    begin
+        xcall u_message("RPS Open error")
+        status = 1
+    end
+    (E_INVFNC),
+    begin
+        xcall u_message("RPS Invalid Function")
+        status = 1
+    end
+    (E_OPNERRM),
+    begin
+        xcall u_message("RPS Cannot open main file")
+        status = 1
+    end
+    (E_OPNERRT),
+    begin
+        xcall u_message("RPS Cannot open text file")
+        status = 1
+    end
+    (E_BADVERS),
+    begin
+        xcall u_message("RPS Incompatible version")
+        status = 1
+    end
+    (),
+    begin
+        xcall u_message("DD_INIT error "+%string(error))
+        status = 1
+    end
+    endusing
+
+    if(.not.status)
+    begin
+        a_str_hdl = hdl
+        a_str_count = fli_nmstructs
+
+        if(^passed(a_file_name))
+            a_file_name = fli_fname
+
+        if(^passed(a_file_isam))
+            a_file_isam = file_isam
+    end
+
+    freturn status
+
+;--------------------------------------------------------------------
+
+validate_file,
+
+    xcall dd_file(dcs, DDL_INFO, a_file_rps, fl_info)
+    if(error) then
+        status = 1
+    else
+    begin
+        file_isam = (fli_filtyp.eq.'DBL ISAM')
+
+        hdl = %mem_proc(DM_ALLOC+DM_STATIC, (fli_nmstructs*^size(struct_names)))
+
+        xcall dd_file(dcs, DDL_STRS, fli_nmstructs, ^m(struct_names, hdl))
+        if(error) then
+            status = 1
+        else
+        begin
+            if(fli_nmstructs) then
+            begin
+                clear status
+                for ctr from 1 thru fli_nmstructs
+                begin
+                    xcall dd_struct(dcs, DDS_INFO, ^m(struct_names[ctr].struct, hdl), s_info)
+                    if(error) then
+                        status = 1
+                    else
+                    begin
+                        if(si_recsz.gt.MAX_REC_LEN)
+                            ;structure too large
+                            status = 3
+                    end
+                end
+            end
+            else
+                ;no structures
+                status = 2
+        end
+    end
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function GET_RPS_FIELDS ,^VAL
+
+    a_str_hdl           ,i                      ;REQUIRED structure handle
+    a_ctr               ,n                      ;REQUIRED structure array pointer
+    a_rpsmfil           ,a                      ;REQUIRED RPSMFIL
+    a_rpstfil           ,a                      ;REQUIRED RPSTFIL
+    a_s_info            ,a                      ;OPTIONAL RETURNED s_info
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:iconvert.def'
+
+.align
+    record clr_i
+        status          ,i4                     ;status
+        field_num       ,i4                     ;current field number
+
+.proc
+
+    clear ^i(clr_i), s_info
+
+    xcall dd_init(dcs, a_rpsmfil, a_rpstfil)
+    using error select
+    (E_OK),
+    begin
+        call dcs_ok
+        xcall dd_exit(dcs)
+    end
+    (E_NOFIND),
+    begin
+        xcall u_message("RPS Record not found")
+        status = 1
+    end
+    (E_OPNERR),
+    begin
+        xcall u_message("RPS Open error")
+        status = 1
+    end
+    (E_INVFNC),
+    begin
+        xcall u_message("RPS Invalid Function")
+        status = 1
+    end
+    (E_OPNERRM),
+    begin
+        xcall u_message("RPS Cannot open main file")
+        status = 1
+    end
+    (E_OPNERRT),
+    begin
+        xcall u_message("RPS Cannot open text file")
+        status = 1
+    end
+    (E_BADVERS),
+    begin
+        xcall u_message("RPS Incompatible version")
+        status = 1
+    end
+    (),
+    begin
+        xcall u_message("DD_INIT error "+%string(error))
+        status = 1
+    end
+    endusing
+
+    if(^passed(a_s_info))
+        a_s_info = s_info
+    freturn status
+
+;--------------------------------------------------------------------
+
+dcs_ok,
+
+    xcall dd_struct(dcs, DDS_INFO, ^m(str_dets[a_ctr].str_name, a_str_hdl), s_info)
+    if(error) then
+    begin
+        xcall u_message("Cannot find structure '"+%atrim(^m(str_dets[a_ctr].str_name, a_str_hdl))+"' in Repository")
+        clear ^m(str_dets[a_ctr].num_fields, a_str_hdl), s_info
+        status = 1
+    end
+    else
+    begin
+        ^m(str_dets[a_ctr].num_fields, a_str_hdl) = si_nmflds
+        ^m(str_dets[a_ctr].str_len, a_str_hdl) = si_recsz
+
+        if(^m(str_dets[a_ctr].num_fields, a_str_hdl)) then
+        begin
+            ;allocate memory
+            ^m(str_dets[a_ctr].fd_hdl, a_str_hdl) =
+&               %mem_proc(DM_ALLOC+DM_STATIC, (^m(str_dets[a_ctr].num_fields, a_str_hdl)*^size(field_dets)))
+
+            clear field_num
+            xcall get_all_fields(dcs, ^m(str_dets[a_ctr].fd_hdl, a_str_hdl), field_num)
+
+            clear status
+        end
+        else
+        begin
+            xcall u_message("No fields in Repository")
+            status = 1
+            clear s_info
+        end
+    end
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine GET_ALL_FIELDS, reentrant, stack
+
+    a_dcs           ,a                      ;RETURNED
+    a_hdl           ,i                      ;REQUIRED structure handle
+    a_field_no      ,n                      ;RETURNED field number
+    a_fld_group     ,n                      ;OPTIONAL group number
+    a_grp_overlay   ,n                      ;OPTIONAL in a group overlay
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:iconvert.def'
+
+    structure fld_names_list
+        fld_names       ,a ^size(fname)
+
+.align
+    record clr_i
+        hdl             ,D_HANDLE               ;memory handle
+        num_flds        ,i4                     ;number of fields in list
+        fld_ctr         ,i4                     ;field counter
+        in_grp_overlay  ,i4                     ;in a group overlay
+
+.align
+    record clr
+        old_dcs         ,a ^size(dcs)
+        strname         ,a30
+
+proc
+
+    dcs = a_dcs
+
+    clear ^i(clr_i)
+
+    ;find out how many fields in the current structure
+    xcall dd_struct(dcs, DDS_INFO, sname, s_info)
+
+    ;allocate menory array
+    hdl = %mem_proc(DM_ALLOC, (si_nmflds*^size(fld_names)))
+
+    ;get a list of fields in the current structure
+    xcall dd_field(dcs, DDF_SLIST, si_nmflds, ^m(fld_names_list, hdl),, num_flds)
+    if (error)
+        xreturn
+
+    for fld_ctr from 1 thru num_flds
+    begin
+
+        a_field_no += 1
+
+        clear fld_rec
+        fld_name = ^m(fld_names_list[fld_ctr].fld_names, hdl)
+
+        ;get the information about the current field
+        xcall dd_field(dcs, DDF_INFO, fld_name, f_info)
+        if (error)
+            nextloop
+
+        ;populate the fld_rec record
+        xcall pop_fld_rec(f_info, fld_rec, a_fld_group)
+
+        ;change the field size to -ve, for any fields we want to ignore
+
+        ;ignore overlay fields
+        if(fi_ovrfld)
+        begin
+            fld_size = -fld_size
+        end
+
+        ;ignore group overlays
+        if(^passed(a_grp_overlay).and.a_grp_overlay)
+        begin
+            if(fld_size.gt.0)
+                fld_size = -fld_size
+        end
+
+
+        ;save details
+        ^m(field_dets[a_field_no].field_rec, a_hdl) = fld_rec
+        ^m(field_dets[a_field_no].field_info, a_hdl) = f_info
+
+        ;what sort of field is this
+        using fi_group select
+        (F_GROUPOVRFLD),
+        begin
+            ;group overlay field
+            in_grp_overlay = 1
+            call process_group
+            in_grp_overlay = a_grp_overlay
+            if(error)
+                goto abort
+        end
+        (F_GROUPFLD),
+        begin
+            ;group field
+            in_grp_overlay = a_grp_overlay
+            call process_group
+            if(error)
+                goto abort
+        end
+        (),
+        begin
+            ;normal field
+            nop
+        end
+        endusing
+
+    end
+
+abort,
+    a_dcs = dcs
+    xreturn
+
+;----------------------------------------------------------------------------
+
+process_group,
+
+    ;is this an implicit group
+    if(fi_struct) then
+    begin
+        ;start of implicit group
+        old_dcs = dcs
+        ;get structure name
+        xcall dd_field(dcs, DDF_TEXT, fi_struct, strname)
+        if(.not.error)
+        begin
+            ;reset to new structure
+            xcall dd_struct(dcs, DDS_INFO, strname, s_info)
+            if(error)
+            begin
+                goto abort_group
+            end
+        end
+    end
+    else
+    begin
+        ;start of explicit group
+        clear old_dcs
+        ;start explicit group
+        xcall dd_field(dcs, DDF_GROUP, fld_group)
+    end
+
+    if(.not.error)
+        xcall get_all_fields(dcs, a_hdl, a_field_no, fld_group, in_grp_overlay)
+
+    if(old_dcs) then
+    begin
+        dcs = old_dcs
+    end
+    else
+    begin
+        ;end explicit group
+        xcall dd_field(dcs, DDF_ENDGROUP)
+    end
+
+    clear error
+
+abort_group,
+    return
+
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine POP_FLD_REC
+
+    a_f_info        ,a                      ;REQUIRED f_info
+    a_fld_rec       ,a                      ;REQURIED RETURNED fld_rec
+    a_fld_group     ,n                      ;OPTIONAL position in group
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:iconvert.def'
+
+.align
+    stack record
+        f_pos       ,i4                         ;actual position in record
+
+proc
+
+    f_info = a_f_info
+    fld_rec = a_fld_rec
+
+    if(^passed(a_fld_group).and.a_fld_group.gt.0) then
+        f_pos = a_fld_group
+    else
+        clear f_pos
+
+    ;calcuate the start position
+    if (f_pos) then
+        fld_pos = fi_pos + f_pos - 1
+    else
+        fld_pos = fi_pos
+
+    ;make sure there's at least 1 dimension
+    if (fi_dim(1).lt.1)
+        fi_dim(1) = 1
+
+    ;total field dimension(s)
+    fld_dim(1) = fi_dim(1)
+    fld_dim(2) = fi_dim(2)
+    fld_dim(3) = fi_dim(3)
+    fld_dim(4) = fi_dim(4)
+
+    ;logical end of fields data (taken arrays into account)
+    fld_end = fi_pos-1 + (fi_size*(fld_dim(1)+fld_dim(2)+fld_dim(3)+fld_dim(4)))
+
+    ;field size
+    fld_size = fi_size
+
+    ;get field type
+    using fi_type select
+    (T_ALP),
+    begin
+        fld_type = 'A'
+        clear fld_prec
+    end
+    (T_DEC),
+    begin
+        fld_type = 'D'
+        fld_prec = fi_prec              ;field precision (decimal fields)
+    end
+    (T_INT),
+    begin
+        fld_type = 'A'                  ;treat integer as alpha
+        clear fld_prec
+    end
+    (T_USR),
+    begin
+        fld_type = 'A'
+        clear fld_prec
+    end
+    (),
+    begin
+        fld_type = 'A'                  ;unknown data type
+        clear fld_prec
+    end
+    endusing
+
+    ;set group position
+    using fi_group select
+    (F_GROUPFLD, F_GROUPOVRFLD),
+        fld_group = fi_pos
+    endusing
+
+
+    a_fld_rec = fld_rec
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function GET_RPS_TAGS ,^VAL
+
+    a_str_hdl       ,i                      ;REQUIRED structure handle
+    a_ctr           ,n                      ;REQUIRED structure array pointer
+    a_rpsmfil       ,a                      ;REQUIRED RPSMFIL
+    a_rpstfil       ,a                      ;REQUIRED RPSTFIL
+    a_tag_type      ,n                      ;REQUIRED RETURNED
+    a_num_tags      ,n                      ;REQUIRED RETURNED
+    a_tag_hdl       ,n                      ;REQUIRED RETURNED
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:iconvert.def'
+
+    structure tag_names
+        tg_name         ,a30
+
+.align
+    record clr_i
+        status          ,i4                     ;status
+        tag_hdl         ,D_HANDLE               ;tag names handle
+        ctr             ,i4                     ;counter
+        fld_ctr         ,i4                     ;field counter
+
+proc
+
+    clear ^i(clr_i), a_num_tags, a_tag_hdl
+    a_tag_type = TAGNON
+
+    xcall dd_init(dcs, a_rpsmfil, a_rpstfil)
+    using error select
+    (E_OK),
+    begin
+        call dcs_ok
+        xcall dd_exit(dcs)
+    end
+    (E_NOFIND),
+    begin
+        xcall u_message("RPS Record not found")
+        status = 1
+    end
+    (E_OPNERR),
+    begin
+        xcall u_message("RPS Open error")
+        status = 1
+    end
+    (E_INVFNC),
+    begin
+        xcall u_message("RPS Invalid Function")
+        status = 1
+    end
+    (E_OPNERRM),
+    begin
+        xcall u_message("RPS Cannot open main file")
+        status = 1
+    end
+    (E_OPNERRT),
+    begin
+        xcall u_message("RPS Cannot open text file")
+        status = 1
+    end
+    (E_BADVERS),
+    begin
+        xcall u_message("RPS Incompatible version")
+        status = 1
+    end
+    (),
+    begin
+        xcall u_message("DD_INIT error "+%string(error))
+        status = 1
+    end
+    endusing
+
+    freturn status
+
+;--------------------------------------------------------------------
+
+dcs_ok,
+
+    xcall dd_struct(dcs, DDS_INFO, ^m(str_dets[a_ctr].str_name, a_str_hdl), s_info)
+    if(error) then
+    begin
+        xcall u_message("Cannot find structure '"+%atrim(^m(str_dets[a_ctr].str_name, a_str_hdl))+"' in Repository")
+        status = 1
+    end
+    else
+    begin
+        if(si_nmtags)
+        begin
+            tag_hdl = %mem_proc(DM_ALLOC, a_num_tags*^size(tag_names))
+
+            xcall dd_tag(dcs, DDTG_LIST, a_num_tags, ^m(tag_names, tag_hdl))
+            if(error) then
+            begin
+                status = 1
+            end
+            else
+            begin
+                clear status
+
+                a_tag_type = si_tagtyp
+                a_num_tags = si_nmtags
+
+                if(a_num_tags) then
+                begin
+                    ;allocate memory
+                    a_tag_hdl = %mem_proc(DM_ALLOC+DM_STATIC, a_num_tags*^size(conv_tag))
+
+                    for ctr from 1 thru a_num_tags
+                    begin
+                        xcall dd_tag(dcs, DDTG_INFO, ^m(tag_names[ctr].tg_name, tag_hdl), tg_info)
+                        if(error) then
+                        begin
+                            status = 1
+                            clear a_num_tags
+                        end
+                        else
+                        begin
+                            ^m(conv_tag[ctr].tag_info, a_tag_hdl) = tg_info
+                            clear ^m(conv_tag[ctr].tag_pos, a_tag_hdl), ^m(conv_tag[ctr].tag_len, a_tag_hdl)
+                        end
+                    end
+                end
+                else
+                    clear a_tag_hdl
+            end
+
+            tag_hdl = %mem_proc(DM_FREE, tag_hdl)
+
+            ;are we determining tag type by field
+            if(a_num_tags.and.a_tag_type.eq.TAGFLD)
+            begin
+                for ctr from 1 thru a_num_tags
+                begin
+                    tg_info = ^m(conv_tag[ctr].tag_info, a_tag_hdl)
+                    fld_ctr = 1
+                    while(fld_ctr.le.si_nmflds)
+                    begin
+                        fld_rec = ^m(field_dets[fld_ctr].field_rec, ^m(str_dets[a_ctr].fd_hdl, a_str_hdl))
+                        if(fld_name.eq.tgi_tagfld)
+                        begin
+                            ;found the matching field - save tag positions
+                            ^m(conv_tag[ctr].tag_pos, a_tag_hdl) = fld_pos
+                            ^m(conv_tag[ctr].tag_len, a_tag_hdl) = (fld_end - fld_pos) + 1
+                            exitloop
+                        end
+                        fld_ctr += 1
+                    end
+                end
+            end
+        end
+    end
+
+    return
+
+end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Uppercase a string
+
+function UPCASE
+
+    a_string        ,a                  ;REQUIRED string to upper case
+
+    structure s
+        string          ,a1
+
+.align
+    record
+        len                 ,i4             ;length of string
+        hdl                 ,D_HANDLE       ;handle
+
+proc
+
+    len = ^size(a_string)
+    hdl = %mem_proc(DM_ALLOC, len)
+    ^m(string(1:len), hdl) = a_string
+    upcase ^m(string(1:len), hdl)
+    freturn ^m(string(1:len), hdl)
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Check is a file exists.  Uses mode to confirm it's the correct file type
+
+function FILE_EXISTS ,^VAL
+
+    a_file          ,a                  ;REQUIRED filename
+    a_mode          ,a                  ;REQUIRED open mode
+
+.align
+    record
+        chan            ,i4                 ;channel
+        error           ,i4                 ;error
+
+proc
+
+    xcall u_open(chan, a_mode, a_file,,, error)
+    if(.not.error) xcall u_close(chan)
+
+    freturn (error.eq.0)
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine FILENAME_DRILL ,reentrant
+.include "WND:inpinf.def"       ; Group argument of input info
+    group a_inprec      ,a          ; The data_area argument passed to the
+        ;  calling input routine.
+
+        dest_rps        ,2a50       ;destination RPS
+        dest_rpsfile    ,a30        ;destination RPS file
+        dest_file       ,a50        ;destination file name
+        dest_isam       ,d1         ;destination file is isam
+        src_rps         ,2a50       ;source RPS
+        src_rpsfile     ,a30        ;source RPS file
+        src_file        ,a50        ;source isam file
+    endgroup
+    ; a_method_data     ,a          ; Optional method data argument
+
+.include 'WND:tools.def'
+.include 'RPSLIB:ddinfo.def'
+
+    structure fil_array
+        file_array          ,a30
+
+.align
+    record clr
+        count               ,d4
+        file_name           ,a ^size(fil_array)
+
+.align
+    record clr_i
+        ctr                 ,i4
+        f_ptr               ,D_HANDLE
+        bld_id              ,i4
+        wnd_id              ,i4
+        lst_id              ,i4
+        req                 ,i4
+
+proc
+
+    clear ^i(clr_i), clr
+
+    using %i_getstring(inp_wndid, inp_fldnam) select
+    ("DESTRPSFILE"),
+    begin
+        if(dest_rps(1).and.dest_rps(2)) then
+            xcall dd_init(dcs, dest_rps(1), dest_rps(2))
+        else
+            xcall dd_init(dcs)
+    end
+    ("SRCRPSFILE"),
+    begin
+        if(src_rps(1).and.src_rps(2)) then
+            xcall dd_init(dcs, src_rps(1), src_rps(2))
+        else
+            xcall dd_init(dcs)
+    end
+    (),
+        xcall dd_init(dcs)
+    endusing
+
+    using error select
+    (E_OK), begin
+        xcall dd_name(dcs, DDN_COUNT, DDN_FILE, count)
+        if (error)
+        begin
+            clear count
+        end
+
+        if (count.gt.0) then
+            call build_list
+        else
+            xcall u_message("No Files in Repository")
+
+        xcall dd_exit(dcs)
+    end
+    (E_NOFIND),
+        xcall u_message("Record not found")
+    (E_OPNERR),
+        xcall u_message("Cannot open RPS")
+    (E_INVFNC),
+        xcall u_message("Invalid Function")
+    (E_OPNERRM),
+        xcall u_message("Cannot open RPS main file")
+    (E_OPNERRT),
+        xcall u_message("Cannot open RPS text file")
+    (E_BADVERS),
+        xcall u_message("Incompatible Repository version")
+    (),
+        xcall u_message("DD_INIT error "+%string(error))
+    endusing
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+build_list,
+
+    xcall e_enter
+
+    f_ptr = %mem_proc(DM_ALLOC+DM_STATIC, count*^size(fil_array))
+
+    xcall dd_name(dcs, DDN_LIST, DDN_FILE, count, ^m(fil_array, f_ptr))
+
+    xcall ib_input(bld_id, 'LIST_RPS', 1, ^size(fil_array))
+
+    xcall ib_field(bld_id, 'rpsfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(fil_array))
+
+    xcall ib_end(bld_id, wnd_id)
+
+    xcall l_class(bld_id, 'LC_FILENAME', 2, 2,,,,,,,, 'filename_load')
+
+    xcall l_create(lst_id, wnd_id, file_name,, 'LC_FILENAME')
+
+    req = D_LNOP
+
+    do  begin
+        xcall l_select(lst_id, req, file_name,,,,,,,,,,,,, f_ptr, count)
+        if(g_select) then
+        begin
+            using g_entnam select
+            ('EXIT'),
+            begin
+                xcall i_force(file_name)
+            end
+            endusing
+        end
+        else
+        begin
+            xcall l_status(lst_id, D_LCURITM, ctr)
+            if(ctr)
+                xcall i_force(file_name)
+            g_entnam = 'EXIT'
+        end
+    end
+    until(g_entnam.eq.'EXIT')
+
+    clear g_entnam
+    xcall e_exit
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; List load method for filenames
+
+subroutine FILENAME_LOAD ,stack
+    a_listid    ,n              ; List id
+    a_req       ,n              ; Request flag
+    a_data      ,a              ; Item data
+    a_inpid     ,n              ; Input window id
+    a_disable   ,n              ; (Optional) Disable flag
+    a_index     ,n              ; Loading index
+
+    a_f_ptr     ,n              ; array memory handle
+    a_count     ,n              ; array size
+
+.include "WND:tools.def"
+.include 'RPSLIB:ddinfo.def'
+
+    structure fil_array
+        file_array              ,a30
+
+proc
+
+    if(a_index.lt.a_count) then
+    begin
+        a_data = ^m(fil_array[a_index], a_f_ptr)
+        xcall i_display(a_inpid,, a_data)
+    end
+    else
+        a_req = D_LEOF
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function CONVERT_VALUE ,^VAL
+    a_type          ,a
+    a_old_value     ,a
+    a_value         ,a
+
+.align
+    record clr
+        decimal         ,d28.10
+        d18             ,d18 @decimal
+
+proc
+    using a_type select
+    ('D'),
+    begin
+        decimal = ^d(%atrim(a_old_value))
+        a_value = decimal ,'XXXXXXXXXXXXXXXXX.XXXXXXXXXX-'
+    end
+    ('I'),
+    begin
+        d18 = ^argn(2)
+        a_value = d18 ,'XXXXXXXXXXXXXXXXX-'
+    end
+    (),
+    begin
+        a_value = a_old_value
+    end
+    endusing
+
+    freturn 0
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

@@ -1,0 +1,113 @@
+main ;ismkey
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.include 'WND:tools.def'
+.include 'RPSLIB:ddinfo.def'
+
+external function
+        ismkey          ,^val
+
+.include 'INC:ismkey.def'               ;function return values plus other defines
+
+.align
+stack record clr_i
+        status          ,i4                     ;function return status
+        num_keys        ,i4                     ;number of keys
+        reclen          ,i4                     ;record length
+
+.align
+stack record clr
+        filespec        ,a FIL_SIZ              ;file specification
+        key_spec        ,[ NM_KEYS ] a KEY_SIZ  ;key specifications (MUST BE REAL ARRAY)
+        str_name        ,a30                    ;structure name
+        log_file        ,a255                   ;log errors to this file name
+
+proc
+
+        clear clr, ^i(clr_i)
+
+        str_name = 'structure_name'
+        log_file = 'C:\errors.log'
+
+        xcall u_start
+
+        xcall dd_init(dcs)
+        using error select
+        (E_OK),
+            begin
+            status = %ismkey(dcs, str_name,, filespec, reclen, num_keys, key_spec, log_file)
+            using status select
+            (ERR_NONE),
+                xcall isamc(filespec(1:%trim(filespec)), reclen, num_keys, key_spec)
+            (ERR_NOSTRUCT),
+                xcall u_message("ISMKEY Error : cannot read structure")
+            (ERR_NOASS),
+                xcall u_message("ISMKEY Error : structure not assigned to file")
+            (ERR_NOKEYS),
+                xcall u_message("ISMKEY Error : no keys defined")
+            (ERR_NOKEYDEF),
+                xcall u_message("ISMKEY Error : not all access keys are defined")
+            (ERR_INVSEG),
+                xcall u_message("ISMKEY Error : invalid segment type (not field)")
+            (ERR_NOFLD),
+                xcall u_message("ISMKEY Error : cannot read field (from key)")
+            (ERR_NOKEYLST),
+                xcall u_message("ISMKEY Error : cannot read list of key names")
+            (ERR_NOSTRNAME),
+                xcall u_message("ISMKEY Error : no structure name")
+            (ERR_NOFILENAME),
+                xcall u_message("ISMKEY Error : no file name")
+            (),
+                xcall u_message("ISMKEY Error : unexpected error " + %string(status))
+            endusing
+            xcall dd_exit(dcs)
+            end
+        (E_NOFIND),
+            xcall u_message("RPS Record not found")
+        (E_OPNERR),
+            xcall u_message("RPS Open error")
+        (E_INVFNC),
+            xcall u_message("RPS Invalid Function")
+        (E_OPNERRM),
+            xcall u_message("RPS Cannot open main file")
+        (E_OPNERRT),
+            xcall u_message("RPS Cannot open text file")
+        (E_BADVERS),
+            xcall u_message("RPS Incompatible version")
+        (),
+            xcall u_message("DD_INIT error "+%string(error))
+        endusing
+        xcall u_finish
+        freturn D_EXIT_SUCCESS
+end
+

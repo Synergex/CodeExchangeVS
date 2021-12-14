@@ -1,0 +1,995 @@
+;-----------------------------------------------------------------------
+;
+;                        Synergy Language Version 9
+;
+;                            Copyright (C) 2010
+;        by Synergex International Corporation.  All rights reserved.
+;
+;         May not be copied or disclosed without the permission of
+;                   Synergex International Corporation.
+;
+;-----------------------------------------------------------------------
+
+;-----------------------------------------------------------------------
+;
+; Module:   ismsts.dbl
+;
+; Facility: Synergy DBMS version 9
+;
+; Description:  ISAM file status reporting routine
+;
+;               Replacement for STATUS
+;
+;-----------------------------------------------------------------------
+
+main ;ismsts
+
+    external function
+        get_input           ,a
+
+    literal
+        nst_desc            ,a2 ,"st"
+        nnd_desc            ,a2 ,"nd"
+        nrd_desc            ,a2 ,"rd"
+        nth_desc            ,a2 ,"th"
+
+.align
+    record clr
+        ismfile             ,a255           ;isam filename
+        outfile             ,a255           ;output filespec (blank = TT:)
+        errtxt              ,a80            ;error text
+        nth_text            ,a2             ;Nth description (see xxx_desc above)
+        fopts               ,a200           ;isinfo FOPTS buffer
+        buffer              ,a80            ;isinfo buffer
+        key_type            ,a1             ;key data type
+        seg_type            ,a1             ;key segment data type
+        dvalue              ,a45            ;data value
+        cmd_opt             ,a1             ;command line option
+
+.align
+    record clr_i
+        ttch                ,i4             ;TT channel
+        ttpage              ,i4             ;TT page size
+        ismch               ,i4             ;isam channel
+        outch               ,i4             ;output channel
+        errnum              ,i4             ;error
+        nth                 ,i4             ;Nth alternate key
+        num_segments        ,i4             ;number of key segments
+        keyno               ,i4             ;key number
+        segno               ,i4             ;segement counter
+        new_status_options  ,i4             ;show new status options
+        key_ascending       ,i4             ;KEY is ascending
+        rec_type            ,i4             ;record type shown
+        retval              ,i4             ;return value
+        argcount            ,i4             ;argument count
+
+proc
+
+    xcall flags(7004020, 1)
+
+    clear clr, ^i(clr_i)
+
+    ttch = %syn_freechn()
+    open(ttch, O, "TT:")
+
+    writes(ttch, "ISAM File Status Utility -- Version " + %versn)
+    writes(ttch, "")
+
+    ;no TT paging
+    clear ttpage
+.ifdef D_GUI
+    errnum = %tnmbr(retval)
+    if(retval >= 0)
+    begin
+        ;default page size
+        ttpage = 20
+    end
+.endc
+
+    ;default output format to table mode
+    clear new_status_options
+
+    ;look for override using logical
+    xcall getlog('ISMSTS_MODE', buffer, retval)
+    if(retval > 0)
+    begin
+        try
+            new_status_options = buffer(1:retval)
+        catch (e)
+            nop
+        endtry
+    end
+
+    begin
+        data cmdlin     ,a256
+        data num_args   ,i4
+        data arg_pos    ,[10]i4
+        data arg_len    ,[10]i4
+        data ctr        ,i4
+        data show_help  ,boolean
+        cmdln(cmdlin, num_args, arg_pos, arg_len)
+        for ctr from 1 thru num_args
+        begin
+            using cmdlin(arg_pos[ctr]:arg_len[ctr]) select
+            ('-h', '-?'),
+                show_help = true
+            ('-m'),
+            begin
+                if(ctr < num_args) then
+                begin
+                    ctr += 1
+                    try
+                        new_status_options = cmdlin(arg_pos[ctr]:arg_len[ctr])
+                    catch (e)
+                        show_help = true
+                    finally
+                        using new_status_options select
+                        (0 thru 2),
+                            nop
+                        (),
+                            show_help = true
+                        endusing
+                    endtry
+                end
+                else
+                    show_help = true
+            end
+            ('-p'),
+            begin
+                if(ctr < num_args) then
+                begin
+                    ctr += 1
+                    try
+                        ttpage = cmdlin(arg_pos[ctr]:arg_len[ctr])
+                    catch (e)
+                        show_help = true
+                    finally
+                        using ttpage select
+                        (>0),
+                            nop
+                        (),
+                            show_help = true
+                        endusing
+                    endtry
+                end
+                else
+                    show_help = true
+            end
+            endusing
+        end
+        if(show_help == true)
+        begin
+            ;show help
+            writes(ttch, "")
+            writes(ttch, "Usage: dbr ismsts [-m <mode>] [-p <pagesize>]")
+            writes(ttch, "Options:")
+            writes(ttch, " -m <mode>      STATUS mode")
+            writes(ttch, "                mode = 0  Table mode (default)")
+            writes(ttch, "                mode = 1  STATUS mode")
+            writes(ttch, "                mode = 2  Updated STATUS mode")
+            writes(ttch, " -p <pagesize>  Paginate output at <pagesize> lines, when output to TT:")
+            writes(ttch, "                (default = 20)")
+            sleep 5
+            stop D_EXIT_SUCCESS
+        end
+    end
+
+    clear ismch, ismfile, outch, outfile
+    repeat
+    begin
+        ;close files (if they are open)
+        call close_files
+
+        ;ask for the isam file name
+        ismfile = %get_input(ttch, "Enter ISAM file name:",
+&           "ISAM file specification")
+        if(!ismfile)
+        begin
+            writes(ttch, "")
+            writes(ttch, "... Normal termination.")
+            exitloop
+        end
+
+        ;ask for the output file specification (or screen)
+        outfile = %get_input(ttch, "File to write status to:",
+&           "file_spec or (CR) for TT:")
+
+        clear errnum, errtxt
+
+        ;open the isam file
+        call open_ismfile
+        if(errnum)
+        begin
+            writes(ttch, "Cannot open ISAM file -- " + %atrim(ismfile)
+&               + " [" + %string(errnum) + ": " + %atrim(errtxt) + "]")
+            writes(ttch, "")
+            nextloop
+        end
+
+        ;open the output file/device
+        call open_outfile
+        if(errnum)
+        begin
+            writes(ttch, "Cannot open OUTPUT file -- " + %atrim(outfile)
+&               + " [" + %string(errnum) + ": " + %atrim(errtxt) + "]")
+            writes(ttch, "")
+            nextloop
+        end
+
+        ;;setup tt data
+        tt_page(ttch, ttpage)
+
+        ;output isam file status
+        using new_status_options select
+        (1),
+            call display_classic_status
+        (2),
+            call display_updated_status
+        (),
+            call display_table_status
+        endusing
+    end
+
+    close ttch
+    stop D_EXIT_SUCCESS
+
+;--------------------------------------------------------------------
+
+open_ismfile,
+
+    ismch = %syn_freechn()
+    open (ismch, I:I, ismfile) [ERR=ismfile_err]
+    if(0)
+    begin
+ismfile_err,
+        errnum = %error
+        xcall ertxt(errnum, errtxt)
+        clear ismch
+    end
+
+    return
+
+;--------------------------------------------------------------------
+
+open_outfile,
+
+    ;if "printing" to screen, clear output filename
+    if(outfile == 'TT: ' || outfile == 'tt: ')
+        clear outfile
+
+    if(outfile) then
+    begin
+        outch = %syn_freechn()
+        open(outch, O, outfile) [ERR=outfile_err]
+        if(0)
+        begin
+outfile_err,
+            errnum = %error
+            xcall ertxt(errnum, errtxt)
+            clear outch
+        end
+    end
+    else
+        outch = ttch
+
+    return
+
+;--------------------------------------------------------------------
+
+close_files,
+
+    if(ismch && ismch)
+        close ismch
+    clear ismch
+
+    if(outfile && outch)
+        close outch
+    clear outch
+
+    return
+
+;--------------------------------------------------------------------
+
+display_classic_status,
+
+    if(outfile) then
+        forms(ttch, 0)
+    else
+        xcall print(outch,, true)
+
+    xcall print(outch, "The record length for this file is "
+&       + %string(%isinfo(ismch, 'SIZE'))
+&       + " characters.  There are "
+&       + %string(%isinfo(ismch, 'NUMKEYS'))
+&       + " keys.", true)
+
+    xcall print(outch, "There are currently "
+&       + %string(%isinfo(ismch, 'NUMRECS'))
+&       + " records in this ISAM file.", true)
+
+    xcall print(outch,, true)
+
+    for keyno from 0 thru %isinfo(ismch, 'NUMKEYS') - 1
+    begin
+        call get_key_name
+        xcall print(outch, %atrim(dvalue) + " is "
+&           + %isinfoa(ismch, 'KEYNAME', keyno), true)
+
+        num_segments = %isinfo(ismch, 'KEYSEGMENTS', keyno)
+
+        xcall print(outch, "The key is "
+&           + %string(%isinfo(ismch, 'KEYLENGTH', keyno))
+&           + " characters long, ")
+        if(num_segments > 1) then
+            xcall print(outch, "segmented ")
+        else
+            xcall print(outch, "starting at position "
+&               + %string(%isinfo(ismch, 'KPOSITION', keyno))
+&               + " within the record,", true)
+
+        xcall print(outch, "and is ordered in ")
+        key_ascending = %isinfo(ismch, 'ASCEND', keyno)
+        if (key_ascending) then
+            xcall print(outch, "ascending sequence ")
+        else
+            xcall print(outch, "decending sequence ")
+
+        if(num_segments > 1)
+        xcall print(outch,, true)
+
+        if(%isinfo(ismch, 'DUPS', keyno)) then
+            xcall print(outch, " with duplicates allowed.", true)
+        else
+            xcall print(outch, " with no duplicates allowed.", true)
+
+        xcall print(outch, "This key may ")
+        if (!%isinfo(ismch, 'MODIFY', keyno))
+            xcall print(outch, "not ")
+        xcall print(outch, "be modified by WRITE.", true)
+
+        if (num_segments > 1)
+        begin
+            key_type = %isinfoa(ismch, 'KTYPE', keyno)
+
+            for segno from 1 thru num_segments
+            begin
+                xcall print(outch, " Segment #" + %string(segno)
+&                   + " starts at "
+&                   + %string(%isinfo(ismch, 'KPOSITION', keyno, segno))
+&                   + " with length "
+&                   + %string(%isinfo(ismch, 'SEGLENGTH', keyno, segno)), true)
+            end
+        end
+
+        xcall print(outch,, true)
+    end
+
+    return
+
+;--------------------------------------------------------------------
+
+display_updated_status,
+
+    if(outfile) then
+        forms(ttch, 0)
+    else
+        xcall print(outch,, true)
+
+
+    xcall print(outch, "This file is ISAM revision "
+&       + %string(%isinfo(ismch, 'REVISION')))
+
+    fopts = %isinfoa(ismch, 'FOPTS')
+
+    if(fopts) then
+    begin
+        xcall print(outch, " and ")
+
+        if(%instr(1,fopts,'TBYTE')) then
+            xcall print(outch, "supports ")
+        else
+            xcall print(outch, "does not support ")
+        xcall print(outch, "terabyte ( >2Gb ) files.", true)
+
+        xcall print(outch, "The record length is "
+&           + %string(%isinfo(ismch, 'SIZE'))
+&           + " characters, and the data is ")
+        if(!%instr(1, fopts, 'COMPRESS'))
+            xcall print(outch, "not ")
+        xcall print(outch, "compressed.", true)
+
+        xcall print(outch, "The page size used is "
+&           + %string(%isinfo(ismch, 'PAGESIZE'))
+&           + " and Static RFA's are ")
+        if(!%instr(1, fopts, 'STATIC_RFA'))
+            xcall print(outch, "not ")
+        xcall print(outch, "supported.", true)
+    end
+    else
+    begin
+        xcall print(outch, ".", true)
+
+        xcall print(outch, "The record length for this file is "
+&           + %string(%isinfo(ismch, 'SIZE'))
+&           + " characters.", true)
+    end
+
+.ifdef DBLv93
+    retval = %isinfo(ismch, 'NETCRYPT')
+    if(retval) then
+        xcall print(outch, "This file supports network encryption.", true)
+    else
+        xcall print(outch, "This file does not support network encryption.", true)
+.endc
+
+    xcall print(outch,, true)
+
+    xcall print(outch, "This file has "
+&       + %string(%isinfo(ismch, 'NUMKEYS'))
+&       + " keys.", true)
+
+    for keyno from 0 thru %isinfo(ismch, 'NUMKEYS') - 1
+    begin
+        call get_key_name
+        xcall print(outch, %atrim(dvalue) + " is "
+&           + %isinfoa(ismch, 'KEYNAME', keyno), true)
+
+        num_segments = %isinfo(ismch, 'KEYSEGMENTS', keyno)
+
+        xcall print(outch, "The key is "
+&           + %string(%isinfo(ismch, 'KEYLENGTH', keyno))
+&           + " characters long, ")
+        if(num_segments > 1) then
+            xcall print(outch, "segmented ")
+        else
+            xcall print(outch, "starting at position "
+&               + %string(%isinfo(ismch, 'KPOSITION', keyno))
+&               + " within the record,", true)
+
+        xcall print(outch, "and is ordered in ")
+        key_ascending = %isinfo(ismch, 'ASCEND', keyno)
+        if (key_ascending) then
+            xcall print(outch, "ascending sequence ")
+        else
+            xcall print(outch, "decending sequence ")
+
+        if(num_segments > 1)
+            xcall print(outch,, true)
+
+        if(%isinfo(ismch, 'DUPS', keyno)) then
+        begin
+            xcall print(outch, " with duplicates added at the ")
+            if (%isinfo(ismch, 'ATEND', keyno)) then
+                xcall print(outch, "end.")
+            else
+                xcall print(outch, "beginning.")
+        end
+        else
+            xcall print(outch, " with no duplicates allowed.", true)
+
+        xcall print(outch, "This key has a depth of "
+&           + %string(%isinfo(ismch, 'KEYDEPTH', keyno))
+&           + ", and may ")
+        if (!%isinfo(ismch, 'MODIFY', keyno))
+            xcall print(outch, "not ")
+        xcall print(outch, "be modified by WRITE.", true)
+
+        if (num_segments > 1)
+        begin
+            key_type = %isinfoa(ismch, 'KTYPE', keyno)
+
+            for segno from 1 thru num_segments
+            begin
+                xcall print(outch, " Segment #" + %string(segno)
+&                   + " starts at "
+&                   + %string(%isinfo(ismch, 'KPOSITION', keyno, segno))
+&                   + " with length "
+&                   + %string(%isinfo(ismch, 'SEGLENGTH', keyno, segno)))
+
+                if(%isinfo(ismch, 'ASCEND', keyno, segno) != key_ascending)
+                begin
+                    if(%isinfo(ismch, 'ASCEND', keyno)) then
+                        xcall print(outch, " in ascending sequence")
+                    else
+                        xcall print(outch, " in decending sequence")
+                end
+                seg_type = %isinfoa(ismch, 'KTYPE', keyno, segno)
+                if(seg_type != key_type)
+                begin
+                    xcall print(outch, ", type is ")
+                    using seg_type select
+                    ('A'),
+                        xcall print(outch, "Alpha")
+                    ('N'),
+                        xcall print(outch, "Nocase")
+                    ('D'),
+                        xcall print(outch, "Decimal")
+                    ('I'),
+                        xcall print(outch, "Integer")
+                    ('U'),
+                        xcall print(outch, "Unsigned")
+                    (),
+                        xcall print(outch, "Unknown (" + seg_type + ")")
+                    endusing
+                end
+
+                xcall print(outch,, true)
+            end
+        end
+
+        xcall print(outch,, true)
+    end
+
+
+    xcall print(outch, "The file was created on "
+&       + %isinfoa(ismch, 'CREATEDATE') + ".", true)
+
+    buffer = %isinfoa(ismch, 'CLEARDATE')
+    if(buffer == 'NODATE') then
+        xcall print(outch, "The file has never been cleared.", true)
+    else
+        xcall print(outch, "The file was last cleared on "
+&           + %atrim(buffer) + ".", true)
+
+    buffer = %isinfoa(ismch, 'REINDEXDATE')
+    if(buffer == 'NODATE') then
+        xcall print(outch, "The file has never been re-indexed.", true)
+    else
+        xcall print(outch, "The file was last re-indexed on "
+&           + %atrim(buffer) + ".", true)
+
+    buffer = %isinfoa(ismch, 'VERIFYDATE')
+    if(buffer == 'NODATE') then
+        xcall print(outch, "The file has never been verified.", true)
+    else
+        xcall print(outch, "The file was last verified on "
+&           + %atrim(buffer) + ".", true)
+
+    xcall print(outch, "There are currently "
+&       + %string(%isinfo(ismch, 'NUMRECS')))
+
+    if(fopts)
+    begin
+        if(%instr(1, fopts, 'FIXED'))
+            xcall print(outch, " fixed length")
+        if(%instr(1, fopts, 'VARIABLE'))
+            xcall print(outch, " variable length")
+        if(%instr(1, fopts, 'MULTIPLE'))
+            xcall print(outch, " multiple fixed length")
+    end
+
+    xcall print(outch, " records in this file.", true)
+
+    xcall print(outch,, true)
+
+    return
+
+;--------------------------------------------------------------------
+
+display_table_status,
+
+    if(outfile) then
+    begin
+        forms(ttch, 0)
+        xcall print_tab(outch, "Filename", %isinfo(ismch, 'FILENAME'))
+    end
+    else
+        xcall print_tab(outch)
+
+    xcall print_tab(outch, "ISAM revision ", %isinfo(ismch, 'REVISION'))
+
+    fopts = %isinfoa(ismch, 'FOPTS')
+
+    clear rec_type
+    if(%instr(1, fopts, 'FIXED'))
+    begin
+        xcall print_tab(outch, "Record type", "fixed length")
+        rec_type = 1
+    end
+    if(%instr(1, fopts, 'VARIABLE'))
+    begin
+        xcall print_tab(outch, "Record type", "variable length")
+        rec_type = 2
+    end
+    if(%instr(1, fopts, 'MULTIPLE'))
+    begin
+        xcall print_tab(outch, "Record type", "multiple fixed length")
+        rec_type = 3
+    end
+    if(!rec_type)
+        xcall print_tab(outch, "Record type")
+
+    ;only show absolute record length for fixed length files
+    using rec_type select
+    (2, 3),
+        xcall print_tab(outch, "Maximum record length", %isinfo(ismch, 'SIZE'))
+    (),
+        xcall print_tab(outch, "Record length", %isinfo(ismch, 'SIZE'))
+    endusing
+
+    if(%instr(1, fopts, 'COMPRESS')) then
+        dvalue = "YES"
+    else
+        dvalue = "NO"
+    xcall print_tab(outch, "Data compression", dvalue)
+
+    if(%instr(1,fopts,'TBYTE')) then
+        dvalue = "YES "
+    else
+        dvalue = "NO "
+    xcall print_tab(outch, "Terabyte file support", dvalue)
+
+    if(%instr(1, fopts, 'STATIC_RFA')) then
+        dvalue = "YES"
+    else
+        dvalue = "NO "
+    xcall print_tab(outch, "Static RFA's", dvalue)
+
+    xcall print_tab(outch, "Page size", %isinfo(ismch, 'PAGESIZE'))
+
+.ifdef DBLv93
+    if(%isinfo(ismch, 'NETCRYPT')) then
+        dvalue = "YES "
+    else
+        dvalue = "NO "
+    xcall print_tab(outch, "Network encryption support", dvalue)
+.endc
+
+    xcall print_tab(outch)
+
+    xcall print_tab(outch, "Number of Keys", %isinfo(ismch, 'NUMKEYS'))
+
+    xcall print_tab(outch)
+
+    for keyno from 0 thru %isinfo(ismch, 'NUMKEYS') - 1
+    begin
+        call get_key_name
+        xcall print_tab(outch, dvalue, %isinfoa(ismch, 'KEYNAME', keyno))
+
+        num_segments = %isinfo(ismch, 'KEYSEGMENTS', keyno)
+
+        key_ascending = %isinfo(ismch, 'ASCEND', keyno)
+        if (key_ascending) then
+            dvalue = "ASCENDING"
+        else
+            dvalue = "DECENDING"
+        xcall print_tab(outch, "  Key order", dvalue)
+
+        if(%isinfo(ismch, 'DUPS', keyno)) then
+        begin
+            if (%isinfo(ismch, 'ATEND', keyno)) then
+                dvalue = "AT END"
+            else
+                dvalue = "AT START"
+        end
+        else
+            dvalue = "NO"
+        xcall print_tab(outch, "  Key duplicates", dvalue)
+
+        if(%isinfo(ismch, 'MODIFY', keyno)) then
+            dvalue = "YES"
+        else
+            dvalue = "NO"
+        xcall print_tab(outch, "  Key modifiable", dvalue)
+
+        dvalue = %isinfo(ismch, 'KEYDENSITY', keyno) [LEFT]
+        if(dvalue == '0 ')
+            clear dvalue
+        xcall print_tab(outch, "  Key density", dvalue)
+
+        xcall print_tab(outch, "  Key length", %isinfo(ismch, 'KEYLENGTH', keyno))
+
+        key_type = %isinfoa(ismch, 'KTYPE', keyno)
+
+        xcall print_tab(outch, "  Segment #", "start:  len:order:type")
+        for segno from 1 thru num_segments
+        begin
+            clear dvalue
+            dvalue(1:5) = %isinfo(ismch, 'KPOSITION', keyno, segno)
+            dvalue(6:1) = ':'
+            dvalue(7:5) = %isinfo(ismch, 'SEGLENGTH', keyno, segno)
+            dvalue(12:1) = ':'
+            if(%isinfo(ismch, 'ASCEND', keyno, segno) != key_ascending)
+            begin
+                if(%isinfo(ismch, 'ASCEND', keyno)) then
+                    dvalue(13:5) = 'ASC'
+                else
+                    dvalue(13:5) = 'DES'
+            end
+            dvalue(18:1) = ':'
+            seg_type = %isinfoa(ismch, 'KTYPE', keyno, segno)
+            if(seg_type != key_type)
+            begin
+                using seg_type select
+                ('A'),
+                    dvalue(19:8) = "Alpha"
+                ('N'),
+                    dvalue(19:8) = "Nocase"
+                ('D'),
+                    dvalue(19:8) = "Decimal"
+                ('I'),
+                    dvalue(19:8) = "Integer"
+                ('U'),
+                    dvalue(19:8) = "Unsigned"
+                (),
+                    dvalue(19:8) = "(" + %atrim(seg_type) + ")"
+                endusing
+            end
+            ;;dvalue(27:1) = ':'
+
+            xcall print_tab(outch, %string(segno,'ZZZZX'), dvalue)
+        end
+
+        xcall print_tab(outch)
+    end
+
+
+    buffer = %isinfoa(ismch, 'CREATEDATE')
+    if(buffer == 'NODATE')
+        clear buffer
+    xcall print_tab(outch, "File created on ", buffer)
+
+    buffer = %isinfoa(ismch, 'CLEARDATE')
+    if(buffer == 'NODATE')
+        clear buffer
+    xcall print_tab(outch, "File last cleared on ", buffer)
+
+    buffer = %isinfoa(ismch, 'REINDEXDATE')
+    if(buffer == 'NODATE')
+        clear buffer
+    xcall print_tab(outch, "File last re-indexed on ", buffer)
+
+    buffer = %isinfoa(ismch, 'VERIFYDATE')
+    if(buffer == 'NODATE')
+        clear buffer
+    xcall print_tab(outch, "File last verified on ", buffer)
+
+    xcall print_tab(outch)
+
+    xcall print_tab(outch, "Number of records", %string(%isinfo(ismch, 'NUMRECS')))
+
+    for keyno from 0 thru %isinfo(ismch, 'NUMKEYS') - 1
+    begin
+        call get_key_name
+        dvalue = %atrim(dvalue) + " depth"
+
+        xcall print_tab(outch, dvalue, %isinfo(ismch, 'KEYDEPTH', keyno))
+    end
+
+    xcall print_tab(outch)
+
+    return
+
+;--------------------------------------------------------------------
+
+get_key_name,
+
+    if(keyno) then
+    begin
+        using keyno select
+        (4 thru 20),
+            nth = 4
+        (),
+        begin
+            nth = keyno
+            while(nth > 10)
+                nth -= 10
+        end
+        endusing
+
+        using nth select
+        (1),
+            nth_text = nst_desc
+        (2),
+            nth_text = nnd_desc
+        (3),
+            nth_text = nrd_desc
+        (),
+            nth_text = nth_desc
+        endusing
+        dvalue = %string(keyno) + nth_text + " alternate key"
+    end
+    else
+        dvalue = "Primary key"
+
+    return
+
+endmain
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine print
+    req in  outch               ,n              ;output channel
+    opt in  a_prompt            ,a              ;data
+    opt in  a_newline           ,n              ;newline required
+    endparams
+
+proc
+
+    if(^passed(a_prompt) && a_prompt)
+        display(outch, a_prompt)
+
+    if(^passed(a_newline) && a_newline)
+    begin
+        forms(outch, 1)
+
+        ;if outputting to TT: - use page mode
+        tt_page(outch)
+    end
+
+    xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine print_tab
+    req in          outch           ,n      ;output channel
+    opt in          a_prompt        ,a      ;prompt
+    opt in mismatch a_value         ,n      ;value
+    endparams
+
+.align
+    record print_rec
+        data                ,a30
+        delim               ,a3
+        value               ,a45
+
+proc
+
+    if(^passed(a_prompt) || ^passed(a_value)) then
+    begin
+        clear print_rec
+        delim = " : "
+
+        if(^passed(a_prompt))
+            data = a_prompt
+
+        if(^passed(a_value)) then
+        begin
+            if(^datatype(3) == D_TYPE_A) then
+                writes(outch, data + delim + %atrim(^a(a_value)))
+            else
+            begin
+                value = a_value [LEFT]
+                writes(outch, print_rec)
+            end
+        end
+        else
+            writes(outch, print_rec)
+    end
+    else
+        writes(outch, "")
+
+    ;if outputting to TT: - use page mode
+    tt_page(outch)
+
+    xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine tt_page
+    req in      aChan           ,n          ;output channel (or TT channel)
+    opt in      aPageSize       ,n          ;TT page size
+    endparams
+
+    static record
+        ttch                ,i4             ;TT channel
+        ttpage              ,i4             ;TT page size
+        ttcount             ,i4             ;TT line number
+    endrecord
+
+proc
+
+    ;;if pagesize is passed, setup data
+    if(^passed(aPageSize))
+    begin
+        ttCh = aChan
+        ttPage = aPageSize
+        ttCount = 0
+        xreturn
+    end
+
+    ;if outputting to TT: - use page mode
+    if(ttch == aChan && ttpage)
+    begin
+        incr ttcount
+
+        if(ttcount > ttpage)
+        begin
+            ;any key to continue
+            xcall anykey(ttch)
+
+            clear ttcount
+        end
+    end
+
+    xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function get_input ,a
+    req in  a_chan              ,n              ;channel
+    req in  a_prompt            ,a              ;prompt
+    opt in  a_help              ,a              ;OPTIONAL help
+    endparams
+
+.align
+    record
+        ctr                 ,i4
+        buffer              ,a1024
+
+proc
+
+    repeat
+    begin
+        clear buffer, ctr
+        display(a_chan, a_prompt + "  ")
+        reads(a_chan, buffer, eof)
+        if(ctr = %rsize)
+        begin
+            if(buffer == '?')
+            begin
+                if(^passed(a_help) && a_help) then
+                    writes(a_chan, "... Valid input:  " + a_help)
+                else
+                    writes(a_chan, "... No help available")
+                nextloop
+            end
+        end
+eof,
+        exitloop
+    end
+
+    if(ctr)
+        freturn buffer(1:ctr)
+
+    freturn ''
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine anykey
+    req in  a_ttch          ,n              ;TT channel
+    endparams
+
+.align
+    record clr
+        char                ,a1
+
+proc
+
+    clear clr
+
+    ;disable local character echo
+    xcall flags(50000, 1)
+
+    display(a_ttch, "Press any key to continue ")
+
+    accept(a_ttch, char, eof, WAIT:30)
+
+    ;if CR, get LF
+    if(char == %char(13))
+        accept(a_ttch, char, eof, WAIT:1)
+
+eof,
+
+    ;overwrite prompt with spaces, and re-position
+    display(a_ttch, %char(13))
+    display(a_ttch, "                          ")
+    display(a_ttch, %char(13))
+
+    ;enable local character echo
+    xcall flags(50000, 0)
+
+    xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

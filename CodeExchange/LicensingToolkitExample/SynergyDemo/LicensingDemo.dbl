@@ -1,0 +1,1583 @@
+;;=============================================================================
+.ifndef LTDEMO_INCLUDE
+;;=============================================================================
+;; Synergy Licensing Toolkit Example
+;;=============================================================================
+;;
+;; Author:      Steve Ives, Synergex Professional Services Group
+;; Date:        17th April 2009
+;; Revision:    1
+;;
+;; Introduction
+;; ------------
+;; The Synergy Licensing Toolkit allows you to take advantage of the Synergex
+;; product licensing technologies in your own applications.  This download
+;; contains examples of how to create license keys, install license keys onto
+;; runtime systems, and how to implement license checking in your applications.
+;;
+;; Requirements and Setup
+;; ----------------------
+;; The availability of the Synergy Licensing Toolkit coincided with the release
+;; of Synergy/DE V9.1.5b in April 2009.  In order to use these examples you
+;; will need to have Synergy/DE V9.1.5b or higher installed on a supported
+;; Microsoft Windows system.
+;;
+;; To obtain a copy of the Synergy Licensing Toolkit you will need to contact
+;; Synergex and request it.  You will need to tell Synergex the "Licensee name"
+;; and "Registration String" from your Synergy License Server.  You can find
+;; this information using the Synergy Configuation Program, or using the LMU
+;; command at the Windows command prompt.
+;;
+;; As well as providing you with a copy of the Licensing Toolkit files and
+;; documentation Synergex will provide you with a unique "Producer Code", and
+;; an LMK9 license for that producer code.  You must install that license onto
+;; your license server in order to be able to use the KMK.EXE program to
+;; produce license keys for your producer code.
+;;
+;; You will also need to edit the file "LicensingDemo.dbl" that is
+;; provided as part of this example and change the value of the variable
+;; "ProducerCode" to match the unique producer code provided by Synergex.
+;; Once you have done this you will need to recompile the program (see below).
+;;
+;;
+;; Development Environment
+;; -----------------------
+;; This download includes a pre-configured Workbench development environment.
+;; Use workbench to open the Workspace LicensingToolkit.vpw. Note that to open
+;; a workspace you use the menu commands "Project" > "Open Workspace".
+;;
+;; Once you have the workspace open you can compile the demo program by
+;; selecting "Build" > "Compile" from the menu.  Then link it with "Build" >
+;; "Build" and run it with "Build" > Execute".
+;;
+;; Running the demo
+;; ----------------
+;; When you run the demo the program will check that you have an LMK9 license
+;; for your producer code installed on your license server.  You will not be
+;; able to proceed if this is not the case, or if the LMK9 license is a
+;; temporary license which has expired.
+;;
+;; Next the program checks to see if there are any licenses FROM your producer
+;; code installed on the system. If there are it will display them.
+;;
+;; The demo uses license codes for five imaginary products.  These are:
+;;
+;; Application             Version         License Code
+;; -------------------     -------         ------------
+;; Accounts Payable        1.0             AP010
+;; Accounts Receivable     1.0             AR010
+;; General Ledger          1.0             GL010
+;; Fixed Assets            1.0             FA010
+;; Inventoty               1.0             IN010
+;;
+;; To get started you need to create some license keys for these applications,
+;; and install the license keys onto your system.  From the "Manage Keys" menu,
+;; select "Create License Install Key File".  You should see a warning telling
+;; you that no license keys were found and that default demo data is being
+;; used. Click OK and you will see an input window that allows you to enter the
+;; number of users for each of the five products, and an optional expiry date
+;; for each license. You will notice that the "Licensee" and "Registration
+;; String" fields have been pre-populated with the data from your own system.
+;; If you wish you can enter the details from a different system in order to
+;; generate licenses for that system.
+;;
+;;   Note: The default demo data sets the Fixed Assets license (FA010) as
+;;         having expired 10 days earlier, and sets the Inventory license
+;;         (IN010) to expire in 20 days time.  This is so that you can see how
+;;         temporary and expired licenses are handled.
+;;
+;; When you click the OK button the program uses the LMK utiltity to create the
+;; license keys that you have specified.  These license keys are stored in a
+;; "Key File" called "installkeys.skf". The program will then ask if you would
+;; like to install the keys on the system.
+;;
+;; To be able to install the keys from within the program you need to be
+;; running ON the license server system.  If you are not on the license server
+;; then you will need to manually install the keys on the license server. You
+;; can do this by copying the generated license file (installkeys.skf) to the
+;; license server, and then on the server you can use:
+;;
+;;   - The Synergy Configuration program (Windows)
+;;   - The LMU utility at a command prompt (Windows or UNIX)
+;;
+;;   Note: Installing and uninstalling license keys takes a few seconds,
+;;         because the Synergy License Manager service is restarted.
+;;
+;; Once you have installed the keys you should see that the keys are displayed
+;; in the body of the application.  If you installed the keys outside of the
+;; demo program then press F5 to refresh the display.
+;;
+;; On the "Key Status" menu you can use several options to programatically
+;; check the status of a license key.  This simulates what you could do in a
+;; program to determine if licenses you require are installed and available.
+;;
+;; On the "Simulation" menu you can simulate starting and stopping programs
+;; which allocate and deallocate licenses.  The license usage column in the
+;; display will be updated to reflect the number of licenses installed and
+;; used.  This display is built by capturing the output of the LMU command, so
+;; you should find that you will see the same status if you use the LMU command
+;; at a command prompt.
+;;
+;; You can create different combinations of licenses and install them on your
+;; system at any time.  When you are done you can remove the licenses by
+;; selecting the "Generate License Uninstall Keyfile" from the "Manage Keys"
+;; menu and then execute the resulting key file (removekeys.skf).
+;;
+;;   Note: Licenses are removed by installing a license for 0 users.
+;;
+;; IMPORTANT NOTE RE SEAT NUMBERS
+;; ------------------------------
+;; To be able to simulate multiple users logging licenses in and out the code
+;; in this demo application uses "seat numbers".  A seat number is a mechanism
+;; which allows the Licensing Toolkit to allocate unique licenses to individual
+;; users who may be using a single process on a system.  For example, with
+;; xfNetLink client applications multiple physical users may be represented by
+;; a single xfServerPlus session, so passing a unique (application defined)
+;; seat number allows the Licensing Toolkit toolkit to recognise one user from
+;; another and allocate licenses to the "user" not the "process".  When you use
+;; seat numbers in a Windows application like this one the result is that
+;; licenses are allocated to each running program, rather than all instances of
+;; a program a users workstation sharing one license.
+;;
+;; Enjoy!
+;;
+;;=============================================================================
+;;
+import Synergex.SynergyDE.Collections
+;;
+.define LMSTS_OK            0       ;Product has been configured
+.define LMSTS_NOCONFIG      1       ;Product has not been configured
+.define LMSTS_MAXUSR        2       ;Concurrent user maximum reached
+.define LMSTS_BADTOK        3       ;Bad license token (logout)
+.define LMSTS_TIMEOUT       7       ;Product demo has expired
+;;
+.define D_INSTALL_KEYFILE   "installkeys.skf"
+.define D_REMOVE_KEYFILE    "removekeys.skf"
+;;
+;; This structure can be used when retrieving license information via LM_LOGIN
+;;
+structure lm_license
+    lm_applic           ,a6
+    lm_usrmax           ,d4
+    lm_expdat           ,d8
+    lm_insdat           ,d8
+    lm_custom           ,a100
+endstructure
+;;
+;; This structure can be used when retrieving site information via LM_INFO
+;;
+structure lm_site
+                        ,a6
+    lm_licensee         ,a50
+    lm_regstr           ,a12
+    lm_regdat           ,d8
+    lm_timout           ,d8
+endstructure
+;;
+;; This structure can be used when retrieving license lists from LicenseList
+;; The LicenseList routine is part of this demo environment, it is NOT part
+;; of the Synergy Licensing Toolkit.
+;;
+structure strLicenseList
+    application         ,a6
+    maxusers            ,d4
+    inuse               ,d4
+    expires             ,d8
+    installed           ,d8
+    customdata          ,a100
+endstructure
+;;
+;;This structure is used when creating key files to install or remove licenses
+;;
+structure strNewKeyData
+    licensee    ,a50
+    regstring   ,a12
+    product     ,[5]a6
+    units       ,[5]d4
+    expiry      ,[5]d8
+    custom      ,[5]a100
+endstructure
+;;
+;;=============================================================================
+;;
+;;
+main LicensingDemo
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+    .define LTDEMO_INCLUDE
+    .include "INC:LicensingDemo.dbl"
+
+    record
+        ok          ,boolean, true
+        LicenseCode ,a6
+        ApTokens    ,@ArrayList
+        ArTokens    ,@ArrayList
+        GlTokens    ,@ArrayList
+        FaTokens    ,@ArrayList
+        InTokens    ,@ArrayList
+        TmpTokens   ,@ArrayList
+        Licenses    ,@ArrayList
+        License     ,strLicenseList
+        DontList    ,boolean
+        TmpSeat     ,int
+        TmpToken    ,int
+        TmpText     ,a70
+        KeyFile     ,a255
+    endrecord
+
+proc
+
+    ;;Start UI Toolkit and setup environment
+    AppStartup()
+
+    ;;Make sure we can access LMK.EXE
+    if (!(ok=LicenseCheckLmkExe()))
+        u_msgbox("License key generator (lmk.exe) not found.\nEnsure it is in a folder included in PATH.",D_MICONSTOP|D_MCENTER,"LMK Not Found")
+
+    ;;Make sure we have a producer code and LMK9 key for that producer
+    if (ok&&(ok=GetProducerCode()))
+    begin
+        ;;We're good to go, list any app keys already installed
+        ListKeys()
+
+        ;;These ArrayList's will store the "login tokens" for the various keys
+        ApTokens = new ArrayList()
+        ArTokens = new ArrayList()
+        GlTokens = new ArrayList()
+        FaTokens = new ArrayList()
+        InTokens = new ArrayList()
+
+        ;;Process the UI Toolkit menu
+        repeat
+        begin
+            m_process()
+            using g_entnam select
+            ("LISTKEYS"),
+                ListKeys()
+            ("KEYFILEINS"),
+                CreateInstallKeyFile()
+            ("KEYFILEDEL"),
+                CreateUninstallKeyFile()
+            ("VWFILEINS"),
+                ViewFile(D_INSTALL_KEYFILE)
+            ("VWFILEDEL"),
+                ViewFile(D_REMOVE_KEYFILE)
+            ("DELKEYFILE"),
+            begin
+                delet(D_INSTALL_KEYFILE)
+                delet(D_REMOVE_KEYFILE)
+            end
+            ("INSKEYFILE"),
+                call InstallKeyFile
+            ("CHK_"),
+                call CheckLicense
+            ("SIM_"),
+            begin
+                LicenseCode = g_entnam(5,10)
+                call StartProgram
+            end
+            ("END_"),
+            begin
+                LicenseCode = g_entnam(5,10)
+                call StopProgram
+            end
+            ("START_ALL"),
+                call StartAllPrograms
+            ("STOP_ALL"),
+                call StopAllPrograms
+            ("EXITAPP"),
+                exitloop
+            endusing
+        end
+
+        ;;Make sure we don't leave any licenses allocated.  Technically
+        ;;this isn't strictly necessary because during normal shutdown the
+        ;;Synergy runtime will automatically deallocate any licenses that
+        ;;were allocated by the program. But it's better programming
+        ;;practice to clean up after yourself!
+
+        call StopAllPrograms
+    end
+
+    u_finish()
+    freturn D_EXIT_SUCCESS
+
+;;-----------------------------------------------------------------------------
+;; Find a keyfile then execute it
+;;
+InstallKeyFile,
+
+    if (u_getfilename(keyfile,"Open Key File",1,"License Key Files (*.skf)","*.skf"))
+        ExecuteKeyFile(KeyFile)
+
+    return
+
+;;-----------------------------------------------------------------------------
+;; Check the status of a specific license
+;;
+CheckLicense,
+
+    LicenseCode = g_entnam(5,10)
+    if (LicenseActive(ProducerCode,LicenseCode,,tmptext))
+        nop
+    u_msgbox(tmptext,D_MCENTER)
+
+    return
+
+;;-----------------------------------------------------------------------------
+;; Simulate starting a licensed program.  The license key to use must already
+;; be in the LicenseCode variable.
+;;
+StartProgram,
+
+    ;;Turn on the wait cursor
+    xcall w_proc(WP_HOURGLASS_ON)
+
+    ;;Select the collection of tokens to use based on the license code
+    call SelectTokenCollection
+
+    ;;Set the seat number to use
+    TmpSeat = TmpTokens.Count+1
+
+    if (LicenseLogin(ProducerCode,LicenseCode,TmpSeat,TmpToken,TmpText)) then
+    begin
+        ;;Logged in, store the token
+        TmpTokens.Add((@int)TmpToken)
+        ;;Show the new license summary
+        if (!DontList)
+            ListKeys()
+        ;;Enable or disable menu menu entries
+        if (TmpTokens.Count) then
+            m_enable(D_ENTRY,idc_sim,"END_"+LicenseCode)
+        else
+            m_disable(D_ENTRY,idc_sim,"END_"+LicenseCode)
+    end
+    else
+        u_msgbox(TmpText,D_MCENTER|D_MICONEXCLAM,"Failed to Start Program")
+
+    ;;Turn off the wait cursor
+    xcall w_proc(WP_HOURGLASS_OFF)
+
+    return
+
+;;-----------------------------------------------------------------------------
+;; Simulate stopping a licensed program.  The license key to use must already
+;; be in the LicenseCode variable.
+;;
+StopProgram,
+
+    ;;Turn on the wait cursor
+    xcall w_proc(WP_HOURGLASS_ON)
+
+    ;;Select the collection of tokens to use based on the license code
+    call SelectTokenCollection
+
+    ;;Get the seat number and token to use
+    TmpSeat = TmpTokens.Count
+    TmpToken = (int)TmpTokens[TmpTokens.Count]
+
+    if (LicenseLogout(ProducerCode,LicenseCode,TmpSeat,TmpToken,TmpText)) then
+    begin
+        ;;Logged out, remove the token
+        TmpTokens.RemoveAt(TmpSeat)
+        ;;Show the new license summary
+        if (!DontList)
+            ListKeys()
+        ;;Enable or disable menu menu entries
+        if (TmpTokens.Count) then
+            m_enable(D_ENTRY,idc_sim,"END_"+LicenseCode)
+        else
+            m_disable(D_ENTRY,idc_sim,"END_"+LicenseCode)
+    end
+    else
+        u_msgbox("Failed to deallocate license. "+TmpText,D_MCENTER)
+
+    ;;Turn off the wait cursor
+    xcall w_proc(WP_HOURGLASS_OFF)
+
+    return
+
+;;-----------------------------------------------------------------------------
+;; Simulate stopping all running programs (deallocate all licenses)
+;;
+StopAllPrograms,
+
+    DontList = true
+
+    LicenseCode = "AP010"
+    call StopPrograms
+
+    LicenseCode = "AR010"
+    call StopPrograms
+
+    LicenseCode = "GL010"
+    call StopPrograms
+
+    LicenseCode = "FA010"
+    call StopPrograms
+
+    LicenseCode = "IN010"
+    call StopPrograms
+
+    DontList = false
+    ListKeys()
+
+    return
+
+;;-----------------------------------------------------------------------------
+;; Simulate stopping all programs for a specific license code.  The license
+;; code must already be in the LicenseCode variable
+;;
+StopPrograms,
+
+    call SelectTokenCollection
+
+    if (TmpTokens.Count)
+    begin
+        data progs, int, TmpTokens.Count
+        data ix, int
+        for ix from 1 thru progs
+            call StopProgram
+    end
+
+;;-----------------------------------------------------------------------------
+;; Based on the license defined in the LicenseCode variable, select the
+;; appropriate collection of login tokens to use for a start or stop
+;; operation.
+;;
+SelectTokenCollection,
+
+    using LicenseCode select
+    ("AP010"),
+        TmpTokens = ApTokens
+    ("AR010"),
+        TmpTokens = ArTokens
+    ("GL010"),
+        TmpTokens = GlTokens
+    ("FA010"),
+        TmpTokens = FaTokens
+    ("IN010"),
+        TmpTokens = InTokens
+    endusing
+
+    return
+
+;;-----------------------------------------------------------------------------
+;; Simulate starting multiple programs such that all available licenses are
+;; allocated.
+;;
+StartAllPrograms,
+
+    DontList = true
+
+    ;;Get a collection of installed keys
+    LicenseList(ProducerCode,Licenses)
+    begin
+        data ix1    ,int
+        data ix2    ,int
+        data today  ,d8
+        ^a(today) = %datetime
+        for ix1 from 1 thru Licenses.Count
+        begin
+            License = (strLicenseList)Licenses[ix1]
+            if (!License.expires||(License.expires>today))
+            begin
+                LicenseCode = License.application
+                for ix2 from License.inuse+1 thru License.maxusers
+                    call StartProgram
+            end
+        end
+    end
+
+    DontList = false
+    ListKeys()
+
+    return
+
+endfunction
+;;
+;;=============================================================================
+;; Display the current status of the application licenses available on this
+;; system.
+;;
+subroutine ListKeys
+    endparams
+
+    .define LTDEMO_INCLUDE
+    .include "INC:LicensingDemo.dbl"
+
+    stack record
+        licenses    ,@ArrayList
+        license     ,strLicenseList
+        LmData      ,lm_site
+        ix          ,int
+    endrecord
+
+    stack record outbuf
+                    ,a2
+        product     ,a7
+                    ,a2
+        installed   ,a11
+                    ,a2
+        expires     ,a11
+                    ,a2
+        seats       ,a5
+                    ,a2
+        allocated   ,a4
+                    ,a2
+        custom      ,a28
+    endrecord
+
+proc
+
+    ;;Display column headers
+
+    writes(g_terminal,"")
+    writes(g_terminal,"This Systems License Data (LMU)")
+    writes(g_terminal,"")
+    writes(g_terminal,"")
+
+    ;;Get this systems license information
+    lm_info(ix,LmData)
+    writes(g_terminal,"  Licensee name       : "+LmData.lm_licensee)
+    writes(g_terminal,"  Registration string : "+LmData.lm_regstr)
+    writes(g_terminal,"  Installation date   : "+date(jperiod(LmData.lm_regdat)))
+    writes(g_terminal,"  Expiry date         : "+date(jperiod(LmData.lm_timout)))
+    writes(g_terminal,"")
+
+
+    clear outbuf
+    outbuf.product = "Product"
+    outbuf.installed = "Installed"
+    outbuf.expires = "Expires"
+    outbuf.seats = "Seats"
+    outbuf.allocated = "Used"
+    outbuf.custom = "Custom Data"
+    writes(g_terminal,outbuf)
+
+    fill("-",outbuf)
+    clear outbuf(1:2)
+    writes(g_terminal,outbuf)
+
+    ;;Get a collection of installed keys
+    LicenseList(ProducerCode,licenses)
+
+    ;;Display them
+    for ix from 1 thru licenses.Count
+    begin
+        license = (strLicenseList)licenses[ix]
+        clear outbuf
+        outbuf.product = license.application
+        outbuf.installed = date(jperiod(license.installed))
+        if (license.expires)
+            outbuf.expires = date(jperiod(license.expires))
+        outbuf.seats = string(license.maxusers)
+        outbuf.allocated = string(license.inuse)
+        outbuf.custom = license.customdata
+        writes(g_terminal,outbuf)
+    end
+
+    ;;Display number of keys found
+    writes(g_terminal,"")
+    writes(g_terminal,"  "+string(licenses.count)+" application licenses found")
+
+    xreturn
+
+endsubroutine
+;;
+;;=============================================================================
+;; Create a license "key file" containing application licenses.
+;;
+subroutine CreateInstallKeyFile
+    endparams
+
+    .define LTDEMO_INCLUDE
+    .include "INC:LicensingDemo.dbl"
+
+    stack record localData
+        bldid       ,int
+        inpid       ,int
+        ix          ,int
+        thisIx      ,int
+        status      ,int
+        created     ,boolean
+        LmData      ,lm_site
+        licenses    ,@ArrayList
+        license     ,strLicenseList
+        NewKeyData  ,strNewKeyData
+    endrecord
+
+    record
+        strfields   ,[22]a30,   "LICENSEE",
+        &                       "REGSTRING",
+        &                       "PRODUCT1","PRODUCT2","PRODUCT3","PRODUCT4","PRODUCT5",
+        &                       "UNITS1","UNITS2","UNITS3","UNITS4","UNITS5",
+        &                       "EXPIRY1","EXPIRY2","EXPIRY3","EXPIRY4","EXPIRY5",
+        &                       "CUSTOM1","CUSTOM2","CUSTOM3","CUSTOM4","CUSTOM5"
+        setfields   ,[22]a30,   "LICENSEE",
+        &                       "REGSTRING",
+        &                       "PRODUCT1","UNITS1","EXPIRY1","CUSTOM1",
+        &                       "PRODUCT2","UNITS2","EXPIRY2","CUSTOM2",
+        &                       "PRODUCT3","UNITS3","EXPIRY3","CUSTOM3",
+        &                       "PRODUCT4","UNITS4","EXPIRY4","CUSTOM4",
+        &                       "PRODUCT5","UNITS5","EXPIRY5","CUSTOM5"
+    endrecord
+
+proc
+
+    init localData
+
+    ;;Get this systems license information
+    lm_info(status,LmData)
+
+    ;;Use licensee name and registration string as defaults
+    NewKeyData.licensee = LmData.lm_licensee
+    NewKeyData.regstring = LmData.lm_regstr
+
+    ;;Get the application licenses currently installed on this system
+    LicenseList(ProducerCode,licenses)
+
+    ;;Did we find any?
+    if (licenses.count) then
+    begin
+        ;;Yes, load them as defaults
+        NewKeyData.product[1]  = "AP010"
+        NewKeyData.product[2]  = "AR010"
+        NewKeyData.product[3]  = "GL010"
+        NewKeyData.product[4]  = "FA010"
+        NewKeyData.product[5]  = "IN010"
+        NewKeyData.custom[1]   = "ACCOUNTS PAYABLE"
+        NewKeyData.custom[2]   = "ACCOUNTS RECEIVABLE"
+        NewKeyData.custom[3]   = "GENERAL LEDGER"
+        NewKeyData.custom[4]   = "FIXED ASSETS"
+        NewKeyData.custom[5]   = "INVENTORY"
+        for ix from 1 thru licenses.Count
+        begin
+            license = (strLicenseList)licenses[ix]
+            using license.application select
+            ("AP010"),  thisIx = 1
+            ("AR010"),  thisIx = 2
+            ("GL010"),  thisIx = 3
+            ("FA010"),  thisIx = 4
+            ("IN010"),  thisIx = 5
+            endusing
+            NewKeyData.units[thisIx] = license.maxusers
+            NewKeyData.expiry[thisIx] = license.expires
+        end
+    end
+    else
+    begin
+        ;;No, hard code some defaults
+
+        NewKeyData.product[1]  = "AP010"
+        NewKeyData.units[1]    = 3
+        NewKeyData.expiry[1]   = 0
+        NewKeyData.custom[1]   = "ACCOUNTS PAYABLE"
+
+        NewKeyData.product[2]  = "AR010"
+        NewKeyData.units[2]    = 5
+        NewKeyData.expiry[2]   = 0
+        NewKeyData.custom[2]   = "ACCOUNTS RECEIVABLE"
+
+        NewKeyData.product[3]  = "GL010"
+        NewKeyData.units[3]    = 1
+        NewKeyData.expiry[3]   = 0
+        NewKeyData.custom[3]   = "GENERAL LEDGER"
+
+        NewKeyData.product[4]  = "FA010"
+        NewKeyData.units[4]    = 1
+        NewKeyData.expiry[4]   = ndate(jperiod("-10"))  ;Expired 10 days ago
+        NewKeyData.custom[4]   = "FIXED ASSETS"
+
+        NewKeyData.product[5]  = "IN010"
+        NewKeyData.units[5]    = 10
+        NewKeyData.expiry[5]   = ndate(jperiod("+20"))  ;Will expire in 20 days
+        NewKeyData.custom[5]   = "INVENTORY"
+
+        u_msgbox("No licenses installed. Using default demo data.",D_MICONINFO|D_MCENTER,"Information")
+
+    end
+
+    e_enter()
+
+    ;;Build the input window
+    ib_input(bldid,"NEWKEYS",15,66)
+    ib_field(bldid,"LICENSEE", D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE, 50,D_FLD_PROMPT,"Licensee",D_FLD_REQUIRED,D_FLD_POS,2,2,D_FLD_FPOS,2,14)
+    ib_field(bldid,"REGSTRING",D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE, 12,D_FLD_PROMPT,"Reg String",D_FLD_REQUIRED,D_FLD_POS,4,2,D_FLD_FPOS,4,14)
+    ib_field(bldid,"PRODUCT1", D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,  6,D_FLD_PROMPT,"Product",D_FLD_UC,D_FLD_POS,6,14,D_FLD_FPOS,7,14,D_FLD_DISABLED)
+    ib_field(bldid,"UNITS1",   D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  4,D_FLD_PROMPT,"Units",D_FLD_POS,6,22,D_FLD_FPOS,7,22,D_FLD_BZRO,D_FLD_CHANGE,"LicenseUnitChange")
+    ib_field(bldid,"EXPIRY1",  D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  8,D_FLD_PROMPT,"Expiry",D_FLD_DATE,D_DATE_Y4MD,D_FLD_POS,6,28,D_FLD_FPOS,7,28,D_FLD_BZRO)
+    ib_field(bldid,"CUSTOM1",  D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,100,D_FLD_PROMPT,"Custom Data",D_FLD_UC,D_FLD_POS,6,41,D_FLD_FPOS,7,41,D_FLD_VIEWLEN,24)
+    ib_field(bldid,"PRODUCT2", D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,  6,D_FLD_UC,D_FLD_FPOS,8,14,D_FLD_DISABLED)
+    ib_field(bldid,"UNITS2",   D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  4,D_FLD_FPOS,8,22,D_FLD_BZRO,D_FLD_CHANGE,"LicenseUnitChange")
+    ib_field(bldid,"EXPIRY2",  D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  8,D_FLD_DATE,D_DATE_Y4MD,D_FLD_FPOS,8,28,D_FLD_BZRO)
+    ib_field(bldid,"CUSTOM2",  D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,100,D_FLD_UC,D_FLD_FPOS,8,41,D_FLD_VIEWLEN,24)
+    ib_field(bldid,"PRODUCT3", D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,  6,D_FLD_UC,D_FLD_FPOS,9,14,D_FLD_DISABLED)
+    ib_field(bldid,"UNITS3",   D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  4,D_FLD_FPOS,9,22,D_FLD_BZRO,D_FLD_CHANGE,"LicenseUnitChange")
+    ib_field(bldid,"EXPIRY3",  D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  8,D_FLD_DATE,D_DATE_Y4MD,D_FLD_FPOS,9,28,D_FLD_BZRO)
+    ib_field(bldid,"CUSTOM3",  D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,100,D_FLD_UC,D_FLD_FPOS,9,41,D_FLD_VIEWLEN,24)
+    ib_field(bldid,"PRODUCT4", D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,  6,D_FLD_UC,D_FLD_FPOS,10,14,D_FLD_DISABLED)
+    ib_field(bldid,"UNITS4",   D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  4,D_FLD_FPOS,10,22,D_FLD_BZRO,D_FLD_CHANGE,"LicenseUnitChange")
+    ib_field(bldid,"EXPIRY4",  D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  8,D_FLD_DATE,D_DATE_Y4MD,D_FLD_FPOS,10,28,D_FLD_BZRO)
+    ib_field(bldid,"CUSTOM4",  D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,100,D_FLD_UC,D_FLD_FPOS,10,41,D_FLD_VIEWLEN,24)
+    ib_field(bldid,"PRODUCT5", D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,  6,D_FLD_UC,D_FLD_FPOS,11,14,D_FLD_DISABLED)
+    ib_field(bldid,"UNITS5",   D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  4,D_FLD_FPOS,11,22,D_FLD_BZRO,D_FLD_CHANGE,"LicenseUnitChange")
+    ib_field(bldid,"EXPIRY5",  D_FLD_TYPE,D_DECIMAL,D_FLD_SIZE,  8,D_FLD_DATE,D_DATE_Y4MD,D_FLD_FPOS,11,28,D_FLD_BZRO)
+    ib_field(bldid,"CUSTOM5",  D_FLD_TYPE,D_ALPHA  ,D_FLD_SIZE,100,D_FLD_UC,D_FLD_FPOS,11,41,D_FLD_VIEWLEN,24)
+    ib_structure(bldid,"NEWKEYS",22,strfields)
+    ib_set(bldid,"ALL","NEWKEYS",22,setfields)
+    ib_button(bldid,"I_OK",DSB_TEXT,"OK")
+    ib_button(bldid,"O_ABANDON",DSB_TEXT,"Cancel")
+    ib_buttonset(bldid,,,DSB_END)
+    ib_end(bldid,inpid)
+    w_brdr(inpid,WB_TITLE,"Create License Install Key File")
+    u_wndevents(D_ASSIGN,mset_close,inpid)
+    u_window(D_PLACE,inpid,4,6)
+
+    ;;Put the initial data in the window
+    i_display(inpid,,NewKeyData)
+    i_next(inpid,,"UNITS1")
+
+    ;;Process input
+    repeat
+    begin
+        i_input(inpid,,NewKeyData)
+
+        if (g_select) then
+            if (g_entnam=="O_ABANDON")
+                exitloop
+        else
+        begin
+            data command, a1024
+
+            ;;Delete any old keyfile
+            delet(D_INSTALL_KEYFILE)
+
+            ;;Create a new keyfile
+            s_bld(command,,'lmk -c"%a" -fc%a',NewKeyData.licensee,D_INSTALL_KEYFILE)
+            spawn(command,D_NOWINDOW)
+
+            ;;Add the licenses to the key file
+            for ix from 1 thru 5
+            begin
+                s_bld(command,,'lmk -a"%a" -c"%a" -r"%a" -u%a -fa%a',NewKeyData.product[ix],NewKeyData.licensee,NewKeyData.regstring,string(NewKeyData.units[ix]),D_INSTALL_KEYFILE)
+                ;;Add optional expiry date
+                if (NewKeyData.expiry[ix])
+                    s_bld(command,,'%a -d%a',command,string(jperiod(NewKeyData.expiry[ix])-%jperiod(19920101)+1))
+                ;;Add optional custom string
+                if (NewKeyData.custom[ix])
+                    s_bld(command,,'%a -x"%a"',command,NewKeyData.custom[ix])
+                ;;Execute the LMK command
+                spawn(command,D_NOWINDOW)
+            end
+
+            ;;We're done
+            created = true
+            exitloop
+        end
+    end
+
+    e_exit()
+
+    ;;Execute it now?
+    if (created)
+        if (u_msgbox("Execute the key file now?",D_MCENTER|D_MICONQUESTION|D_MYESNO,"Install Keys")==D_MIDYES)
+            ExecuteKeyFile(D_INSTALL_KEYFILE)
+
+    xreturn
+
+endsubroutine
+;;
+;;=============================================================================
+;; Change method for the units / seats fields in the create key file input
+;; window.
+;;
+function LicenseUnitChange ,^val ,reentrant
+    a_data_entered      ,a
+    a_data_stored       ,a
+    a_pending_status    ,n
+    .include "WND:inpinf.def"
+    a_inprec            ,strNewKeyData
+    endparams
+
+    .define LTDEMO_INCLUDE
+    .include "INC:LicensingDemo.dbl"
+
+    stack record
+        fldName         ,a30
+        fldNum          ,a1
+    endrecord
+
+.proc
+
+    fldName = i_getstring(inp_wndid,inp_fldnam)
+    fldNum  = fldName(6:1)
+
+    if (^d(a_data_entered)) then
+    begin
+        i_enable(D_FLDS,inp_wndid,"EXPIRY"+fldNum,"CUSTOM"+fldNum)
+        i_next(inp_wndid,,"EXPIRY"+fldNum)
+    end
+    else
+    begin
+        i_putfld(inp_wndid,,a_inprec,"EXPIRY"+fldNum,0)
+        i_putfld(inp_wndid,,a_inprec,"CUSTOM"+fldNum,"")
+        i_disable(D_FLDS,inp_wndid,"EXPIRY"+fldNum,"CUSTOM"+fldNum)
+        if (^d(fldNum)<5) then
+            i_next(inp_wndid,,"UNITS"+^a(^d(fldNum)+=1))
+        else
+            i_next(inp_wndid,,"UNITS1")
+    end
+
+    freturn a_pending_status
+
+endfunction
+;;
+;;=============================================================================
+;; Create a license "key file" to remove all application licenses from a system.
+;;
+subroutine CreateUninstallKeyFile
+    endparams
+
+    .define LTDEMO_INCLUDE
+    .include "INC:LicensingDemo.dbl"
+
+    stack record localData
+        ix          ,int
+        status      ,int
+        LmData      ,lm_site
+        NewKeyData  ,strNewKeyData
+        command     ,a1024
+    endrecord
+
+proc
+
+    init localData
+
+    ;;Use the current systems licensee name and registration string
+    lm_info(status,LmData)
+    NewKeyData.licensee = LmData.lm_licensee
+    NewKeyData.regstring = LmData.lm_regstr
+
+    ;;Set our demo product names
+    NewKeyData.product[1] = "AP010"
+    NewKeyData.product[2] = "AR010"
+    NewKeyData.product[3] = "GL010"
+    NewKeyData.product[4] = "FA010"
+    NewKeyData.product[5] = "IN010"
+
+    ;;Delete any old keyfile
+    delet(D_REMOVE_KEYFILE)
+
+    ;;Create a new keyfile
+    s_bld(command,,'lmk -c"%a" -fc%a',NewKeyData.licensee,D_REMOVE_KEYFILE)
+    spawn(command,D_NOWINDOW)
+    for ix from 1 thru 5
+    begin
+        s_bld(command,,'lmk -a"%a" -c"%a" -r"%a" -u0 -fa%a',NewKeyData.product[ix],NewKeyData.licensee,NewKeyData.regstring,D_REMOVE_KEYFILE)
+        spawn(command,D_NOWINDOW)
+    end
+
+    if (u_msgbox("Execute the key file now?",D_MCENTER|D_MICONQUESTION|D_MYESNO,"Uninstall Keys")==D_MIDYES)
+        ExecuteKeyFile(D_REMOVE_KEYFILE)
+
+    xreturn
+
+endsubroutine
+;;
+;;=============================================================================
+;; Execute a license key file.
+;;
+;;
+subroutine ExecuteKeyFile
+    required in keyFile ,string
+    endparams
+
+    .define LTDEMO_INCLUDE
+    .include "INC:LicensingDemo.dbl"
+
+    stack record
+        ch      ,int
+    endrecord
+
+proc
+
+    ;;Turn on the wait cursor
+    xcall w_proc(WP_HOURGLASS_ON)
+
+    ;; This routine spawns a Windows batch file which then uses the LMU utility
+    ;; to process a license "key file".  The reason that this has been
+    ;; implemented in this way is to support 64-bit systems which are running
+    ;; 32-bit Synergy  applications. In this scenario the Synergy license server
+    ;; is a 64-bit process and ONLY the 64-bit version of LMU can execute key
+    ;; files to install licenses. This is because the 32-bit installation is
+    ;; actually a license CLIENT to the 64-bit license server (and licenses can
+    ;; only be installed ON the server).  The batch file resets DBLDIR and PATH
+    ;; to the 64-bit Synergy installation so that we spawn the 64-bit LMU
+    ;; program.
+    ;;
+    ;; If you are running this program on a 32-bit system, or if you're on a
+    ;; 64-bit system and building a 64-bit application then you could change
+    ;; this routine to simply do an XCALL SPAWN of the LMU command (rather than
+    ;; spawning the batch file to run the LMU command.
+
+    ;;Create the batch file
+    u_open(ch,"o:s","ExecuteKeyFile.bat")
+    writes(ch,'@echo off')
+    writes(ch,'setlocal')
+    writes(ch,'set DBLDIR=C:\Program Files\Synergex\SynergyDE\dbl')
+    writes(ch,'set PATH=C:\Program Files\Synergex\SynergyDE\dbl\bin;%PATH%')
+    writes(ch,'lmu -f"%*"')
+    writes(ch,'endlocal')
+    u_close(ch)
+
+    ;;Execute the curent key file
+    spawn("ExecuteKeyFile.bat "+keyFile,D_NOWINDOW)
+
+    delet("ExecuteKeyFile.bat")
+
+    ;;Diplay the new keys
+    ListKeys()
+
+    ;;Turn off the wait cursor
+    xcall w_proc(WP_HOURGLASS_OFF)
+
+    return
+
+endsubroutine
+;;
+;;=============================================================================
+;; Spawn notepad to view a text file
+;;
+subroutine ViewFile
+    required in FileName ,string
+    endparams
+
+    .define LTDEMO_INCLUDE
+    .include "INC:LicensingDemo.dbl"
+
+    stack record
+        ch      ,int
+        error   ,int
+    endrecord
+
+proc
+
+    u_open(ch,"i:s",FileName,,,error)
+
+    if error then
+        u_msgbox("File " + atrim(FileName) + " not found!",D_MICONINFO|D_MCENTER)
+    else
+    begin
+        u_close(ch)
+        spawn("notepad "+atrim(FileName),D_NOWINDOW|D_NOWAIT)
+    end
+
+    return
+
+endsubroutine
+;;
+;;=============================================================================
+;; UI Toolkit application and environment setup code
+;;
+subroutine AppStartup
+    endparams
+
+    .define LTDEMO_INCLUDE
+    .define LTDEMO_INIT
+    .include "INC:LicensingDemo.dbl"
+
+    record
+        ix              ,int
+        mbcontrol       ,a2048
+    endrecord
+
+proc
+
+    u_start(,1,0)
+    e_sect("Synergy Licensing Toolkit Demo",D_HEADER)
+
+    e_state(D_ON,D_RETURNBTN)
+
+    mb_column(mbcontrol,"FILE","File",D_GLOBAL)
+    mb_entry(mbcontrol,"EXITAPP","Exit",ESC_KEY)
+    mb_end(mbcontrol,idc_file)
+
+    mb_column(mbcontrol,"KEYS","Manage Keys")
+    mb_entry(mbcontrol,"KEYFILEINS","Create License Install Key File")
+    mb_entry(mbcontrol,"KEYFILEDEL","Create License Uninstall Key File")
+    mb_line(mbcontrol)
+    mb_entry(mbcontrol,"VWFILEINS","View License Install Key File")
+    mb_entry(mbcontrol,"VWFILEDEL","View License Uninstall Key File")
+    mb_line(mbcontrol)
+    mb_entry(mbcontrol,"DELKEYFILE","Delete Key Files")
+    mb_line(mbcontrol)
+    mb_entry(mbcontrol,"INSKEYFILE","Execute Key File")
+    mb_end(mbcontrol,idc_keys)
+
+    mb_column(mbcontrol,"CHECK","Key Status")
+    mb_entry(mbcontrol,"CHK_AP010","Check License AP010")
+    mb_entry(mbcontrol,"CHK_AR010","Check License AR010")
+    mb_entry(mbcontrol,"CHK_GL010","Check License GL010")
+    mb_entry(mbcontrol,"CHK_FA010","Check License FA010")
+    mb_entry(mbcontrol,"CHK_IN010","Check License IN010")
+    mb_line(mbcontrol)
+    mb_entry(mbcontrol,"LISTKEYS","Refresh Key List",F5_KEY)
+    mb_end(mbcontrol,idc_check)
+
+    mb_column(mbcontrol,"SIMULATE","Simulation")
+    mb_entry(mbcontrol,"SIM_AP010","Start A/P Program")
+    mb_entry(mbcontrol,"END_AP010","Stop A/P Program",,,,,true)
+    mb_line(mbcontrol)
+    mb_entry(mbcontrol,"SIM_AR010","Start A/R Program")
+    mb_entry(mbcontrol,"END_AR010","Stop A/R Program",,,,,true)
+    mb_line(mbcontrol)
+    mb_entry(mbcontrol,"SIM_GL010","Start G/L Program")
+    mb_entry(mbcontrol,"END_GL010","Stop G/L Program",,,,,true)
+    mb_line(mbcontrol)
+    mb_entry(mbcontrol,"SIM_FA010","Start Fixed Assets Program")
+    mb_entry(mbcontrol,"END_FA010","Stop Fixed Assets Program",,,,,true)
+    mb_line(mbcontrol)
+    mb_entry(mbcontrol,"SIM_IN010","Start Inventory Program")
+    mb_entry(mbcontrol,"END_IN010","Stop Inventory Program",,,,,true)
+    mb_line(mbcontrol)
+    mb_entry(mbcontrol,"START_ALL","Start All Programs")
+    mb_entry(mbcontrol,"STOP_ALL","Stop All Programs")
+    mb_end(mbcontrol,idc_sim)
+
+    mset_close = u_wndevents(D_CREATE,,D_EVENT_CLOSE,"CloseBox")
+
+    ;;Suppress the artifical delay in the LMU command
+    setlog("NO_LMUDELAY","1",ix)
+
+    xreturn
+
+endsubroutine
+;;
+;;=============================================================================
+;;
+;;
+subroutine CloseBox
+    endparams
+proc
+    m_signal("O_ABANDON")
+    xreturn
+endsubroutine
+;;
+;;=============================================================================
+;; This function loads the producer code.  It first checks the environment
+;; variable LMTK_PRODUCER, and if that doesn't help it prompts the user to
+;; enter the producer code.  In both cases a check is made to ensure that
+;; an LMK9 license exists for the selected producer code.
+;;
+function GetProducerCode, boolean
+    endparams
+
+    .define LTDEMO_INCLUDE
+    .include "INC:LicensingDemo.dbl"
+
+    stack record localData
+        bldid           ,int
+        inpid           ,int
+        GotProducer     ,boolean
+        message         ,a256
+    endrecord
+
+
+proc
+
+    init localData
+
+    ;;See if we have producer code in the logical LMTK_PRODUCER
+    getlog("LMTK_PRODUCER",ProducerCode,inpid)
+    if (inpid)
+    begin
+        ;;Yes, do we have a license for it?
+        if (LicenseCheckLmkKey(ProducerCode)) then
+            GotProducer = true
+        else
+        begin
+            s_bld(message,,"No LMK9 license was found for producer code %a. The producer code was set by environment variable LMTK_PROVIDER. Would you like to enter a different producer code?",ProducerCode)
+            clear ProducerCode
+            if (u_msgbox(message,D_MYESNO|D_MCENTER|D_MICONQUESTION,"No License For Producer Code")==D_MIDNO)
+                GotProducer = true
+        end
+    end
+
+    if (!GotProducer)
+    begin
+        e_enter()
+        ;;Build the input window
+        ib_input(bldid,"PRODUCER",3,25)
+        ib_field(bldid,"PRODUCER",D_FLD_TYPE,D_ALPHA,D_FLD_SIZE,6,D_FLD_PROMPT,"Producer Code",D_FLD_REQUIRED,D_FLD_POS,2,2,D_FLD_FPOS,2,16)
+        ib_button(bldid,"I_OK",DSB_TEXT,"OK")
+        ib_button(bldid,"O_ABANDON",DSB_TEXT,"Cancel")
+        ib_buttonset(bldid,,,DSB_END)
+        ib_end(bldid,inpid)
+        w_brdr(inpid,WB_TITLE,"Enter Producer Code")
+        u_wndevents(D_ASSIGN,mset_close,inpid)
+        u_window(D_PLACE,inpid,10,30)
+
+        repeat
+        begin
+            ;;Process input
+            i_input(inpid,,ProducerCode)
+
+            if (g_select&&(g_entnam=="O_ABANDON")) then
+            begin
+                clear ProducerCode
+                exitloop
+            end
+            else
+            begin
+                if (LicenseCheckLmkKey(ProducerCode)) then
+                    exitloop
+                else
+                begin
+                    s_bld(message,,"No LMK9 license was found for producer code %a.\nWould you like to try again?",ProducerCode)
+                    if (u_msgbox(message,D_MYESNO|D_MCENTER|D_MICONQUESTION,"No License For Producer Code")==D_MIDYES) then
+                        i_init(inpid,,ProducerCode)
+                    else
+                    begin
+                        clear ProducerCode
+                        exitloop
+                    end
+                end
+            end
+        end
+        e_exit()
+    end
+
+    freturn (producercode!="      ")
+
+endfunction
+
+;;*****************************************************************************
+;;*****************************************************************************
+;; ROUTINES BELOW HERE ARE PRETTY GENERIC AND COULD EASILY BE USED IN OTHER
+;; ENVIRONMENTS
+;;*****************************************************************************
+;;*****************************************************************************
+
+;;
+;;=============================================================================
+;; This function checks that LMK.EXE is in PATH
+;;
+function LicenseCheckLmkExe, boolean
+    endparams
+
+    stack record
+        retval  ,boolean
+        status  ,int
+    endrecord
+
+proc
+    retval = true
+    spawn("LMK",D_NOWINDOW)
+    xcall xstat(status)
+    if (status)
+        retval = false
+
+    freturn retval
+
+endfunction
+;;
+;;=============================================================================
+;; This function verifies that an LMK9 license for your producer code is
+;; installed and has not expired.
+;;
+function LicenseCheckLmkKey, boolean
+    required in  producer   ,a
+    optional out statustext ,a
+    endparams
+
+    stack record localData
+        status          ,int
+        token           ,int
+        slot            ,int
+        lic_ok          ,boolean
+        license_data    ,lm_license
+        today           ,a8
+    endrecord
+
+proc
+
+    init localData
+
+    lm_login(status,"999","LMK9",token,license_data,slot,1)
+
+    using status select
+    (LMSTS_OK),
+    begin
+        ;;Is it for the correct producer code?
+        if (license_data.lm_custom!=atrim(producer)) then
+        begin
+            if (^passed(statustext))
+                statustext = "No LMK9 license found for producer code " + atrim(producer) + "."
+        end
+        else
+        begin
+            ;;Is this a permanent license?
+            if (!license_data.lm_expdat) then
+            begin
+                ;;Yes
+                lic_ok = true
+                if (^passed(statustext))
+                    statustext = "Permanent LMK9 license found and active."
+            end
+            else
+            begin
+                ;;No, it's temporary.  Did it already expire?
+                today = %datetime
+                if (license_data.lm_expdat<^d(today)) then
+                begin
+                    ;;Yes, it already expired
+                    if (^passed(statustext))
+                        statustext = "Temporary LMK9 license expired on "+date(jperiod(license_data.lm_expdat))
+                end
+                else
+                begin
+                    ;;No, it's still active
+                    lic_ok = true
+                    if (^passed(statustext))
+                        statustext = "Temporary LMK9 license will expire on "+date(jperiod(license_data.lm_expdat))
+                end
+            end
+        end
+    end
+    (LMSTS_NOCONFIG),
+    begin
+        if (^passed(statustext))
+            statustext = "No LMK9 license installed."
+    end
+    (),
+    begin
+        if (^passed(statustext))
+            statustext = "Failed to retrieve license status."
+    end
+    endusing
+
+    freturn lic_ok
+
+endfunction
+;;
+;;=============================================================================
+;; This function verifies that a specified application license is present and
+;; has not expired.
+;;
+function LicenseActive, boolean
+    required in  producer   ,a
+    required in  product    ,a
+    optional out maxusers   ,n
+    optional out statustext ,a
+    endparams
+
+    stack record
+        status          ,int
+        token           ,int
+        slot            ,int
+        lic_ok          ,boolean
+        license_data    ,lm_license
+        today           ,a8
+        lic_type        ,a9
+        lic_state       ,a30
+    endrecord
+
+proc
+
+    lic_ok=false
+
+    lm_login(status,producer,product,token,license_data,slot,1)
+
+    using status select
+    (LMSTS_OK),
+    begin
+        ;;Is this a permanent license?
+        if (!license_data.lm_expdat) then
+        begin
+            ;;Yes
+            lic_ok = true
+            lic_type = "Permanent"
+            lic_state = "is active"
+        end
+        else
+        begin
+            ;;No, it's temporary.  Did it already expire?
+            lic_type = "Temporary"
+            today = %datetime
+            if (license_data.lm_expdat<^d(today)) then
+            begin
+                ;;Yes, it already expired
+                lic_state = "expired on "+date(jperiod(license_data.lm_expdat))
+            end
+            else
+            begin
+                ;;No, it's still active
+                lic_ok = true
+                lic_state = "will expire on "+date(jperiod(license_data.lm_expdat))
+            end
+        end
+
+        if (^passed(statustext))
+            s_bld(statustext,,"%a %d user license %a %a.",lic_type,license_data.lm_usrmax,product,lic_state)
+
+        if (^passed(maxusers))
+            maxusers = license_data.lm_usrmax
+    end
+    (LMSTS_NOCONFIG),
+    begin
+        if (^passed(statustext))
+            statustext = "License "+atrim(product)+" is not installed."
+    end
+    (),
+    begin
+        if (^passed(statustext))
+            statustext = "Failed to retrieve license status."
+    end
+    endusing
+
+    freturn lic_ok
+
+endfunction
+;;
+;;=============================================================================
+;; This function logs in (allocates) a specified application license
+;;
+function LicenseLogin, boolean
+    required in  producer   ,a
+    required in  product    ,a
+    required in  seat       ,int
+    required out token      ,int
+    optional out statustext ,a
+    endparams
+
+    ;;-----------------------------------------------------------------------
+    ;;REVIEW "IMPORTANT NOTE RE SEAT NUMBERS" IN THE COMMENTS AT TOP OF FILE!
+    ;;-----------------------------------------------------------------------
+
+    stack record
+        status          ,int
+        slot            ,int
+        lic_ok          ,boolean
+        license_data    ,lm_license
+    endrecord
+
+proc
+
+    lic_ok=false
+    clear token
+
+    lm_login(status,producer,product,token,license_data,slot,,seat)
+
+    using status select
+    (LMSTS_OK),
+    begin
+        ;;Workaround for the fact that LM_LOGIN does not currently enforce timed out licenses
+        data today, d8
+        ^a(today) = %datetime
+        if (license_data.lm_expdat&&(license_data.lm_expdat<today)) then
+        begin
+            ;;License has expired, log it out again!
+            lm_logout(status,producer,product,token,seat)
+            if (^passed(statustext))
+                statustext = "Your "+atrim(product)+" license expired on "+date(jperiod(license_data.lm_expdat))+"."
+        end
+        else
+        begin
+            lic_ok = true
+            if (^passed(statustext))
+                statustext = "License "+atrim(product)+" was allocated."
+        end
+    end
+    (LMSTS_MAXUSR),
+        if (^passed(statustext))
+            statustext = string(license_data.lm_usrmax)+" user maximum was exceeded for license "+atrim(product)+"."
+    (LMSTS_NOCONFIG),
+        if (^passed(statustext))
+            statustext = "No "+atrim(product)+" license installed."
+    (LMSTS_TIMEOUT),    ;*********************************Currently not supported by LM_LOGIN********************************
+        if (^passed(statustext))
+            statustext = "License "+atrim(product)+" expired on "+date(jperiod(license_data.lm_expdat))+"."
+    (),
+        if (^passed(statustext))
+            statustext = "Failed to retrieve license status."
+    endusing
+
+    freturn lic_ok
+
+endfunction
+;;
+;;=============================================================================
+;; This function logs out (deallocates) and specified application license.
+;;
+function LicenseLogout, boolean
+    required in  producer   ,a
+    required in  product    ,a
+    required in  seat       ,int
+    required out token      ,int
+    optional out statustext ,a
+    endparams
+
+    ;;-----------------------------------------------------------------------
+    ;;REVIEW "IMPORTANT NOTE RE SEAT NUMBERS" IN THE COMMENTS AT TOP OF FILE!
+    ;;-----------------------------------------------------------------------
+
+    stack record
+        status          ,int
+        lic_ok          ,boolean
+    endrecord
+
+proc
+
+    lic_ok=false
+
+    lm_logout(status,producer,product,token,seat)
+
+    using status select
+    (LMSTS_OK),
+    begin
+        lic_ok = true
+        if (^passed(statustext))
+            statustext = "License "+atrim(product)+" was deallocated."
+    end
+    (LMSTS_BADTOK),
+        if (^passed(statustext))
+            statustext = "Invalid license token."
+    (),
+        if (^passed(statustext))
+            statustext = "Failed to deallocate license."
+    endusing
+
+    freturn lic_ok
+
+endfunction
+;;
+;;=============================================================================
+;; This function returns a collection of information about the application
+;; licenses that are installed on the current system.  The routine returns
+;; only licenses that are from your unique producer code.  The license details
+;; are obtained by capturing and processing the output of the LMU command.
+;;
+subroutine LicenseList
+    required in  producer   ,a
+    required out licenses   , @ArrayList
+    endparams
+
+    stack record
+        license     ,strLicenseList
+        ch          ,int
+        pipedata    ,a150
+    endrecord
+
+proc
+
+    licenses = new ArrayList()
+
+    open(ch=syn_freechn(),"i","|lmu")
+
+    repeat
+    begin
+
+        reads(ch,pipedata,eof)
+
+        ;;This is a workaround for a bug in the read pipe logic up to and including
+        ;;9.1.5b.  At appears that on 512 character boundries an extra line feed can
+        ;;appear in the output data.
+        if (pipedata(1:1)==char(10))
+            pipedata = pipedata(2,%rdlen)
+
+        ;;Ignore licenses that are not for our producer code.  This code will also drop
+        ;;the header lines at the top of the LMU output.
+        if (pipedata(7:6)!=producer)
+            nextloop
+
+        ;;We got one, format output buffer and display it
+        clear license
+        license.application = pipedata(14:6)
+        license.maxusers = ^d(pipedata(21:4))
+        license.inuse = ^d(pipedata(2:4))
+        license.expires = ^d(pipedata(35:8))
+        license.installed = ^d(pipedata(26:8))
+        license.customdata = pipedata(44:100)
+
+        ;;Add the license to the returned collection
+        licenses.Add((@strLicenseList)license)
+    end
+eof,
+    close ch
+
+    xreturn
+
+endsubroutine
+
+;;=============================================================================
+.else
+;;=============================================================================
+
+.undefine LTDEMO_INCLUDE
+
+.include "WND:tools.def"
+.include "WND:inpctl.def"
+.include "WND:windows.def"
+
+.ifdef LTDEMO_INIT
+.undefine LTDEMO_INIT
+global data section LicensingDemoData, init
+.else
+global data section LicensingDemoData
+.endc
+
+record
+    idc_file            ,int
+    idc_keys            ,int
+    idc_check           ,int
+    idc_sim             ,int
+    mset_close          ,int
+    ProducerCode        ,a6
+endrecord
+
+endglobal
+
+external function
+    GetProducerCode     ,boolean
+    LicenseCheckLmkKey  ,boolean
+    LicenseCheckLmkExe  ,boolean
+    LicenseActive       ,boolean
+    LicenseLogin        ,boolean
+    LicenseLogout       ,boolean
+endexternal
+
+;;=============================================================================
+.endc
+;;=============================================================================
+

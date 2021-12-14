@@ -1,0 +1,62 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+main
+.ifdef OS_VMS
+.define D_PRODUCT_TYPE  a24
+.define D_PRODUCER_TYPE a24
+.else ;OS_VMS
+.define D_PRODUCT_TYPE  a6
+.define D_PRODUCER_TYPE a6
+.endc ;OS_VMS
+    external function
+        my_lm_stat  ,i
+    endexternal
+    record
+        users       ,i4
+        sys_err     ,i4
+        sts         ,i4
+        token       ,i4
+        producer    ,D_PRODUCER_TYPE
+        product     ,D_PRODUCT_TYPE
+proc
+    open(1, O, 'TT:')
+    writes(1, "LCT_LMF   v1.1")
+
+.ifdef OS_VMS
+    producer = 'SYNERGY'
+    product = 'AXP-RUN9'
+.else ;OS_VMS
+    producer = '999'
+    product = 'RUN9'
+.endc ;OS_VMS
+
+    sts = %my_lm_stat(producer, product, users, sys_err)
+    writes(1, "lm_stat   status="+%string(sts)+" Product="+product+" users="+%string(users))
+
+.ifdef OS_VMS
+    xcall my_lm_login(sts, producer, product)
+    writes(1, "lm_login  status="+%string(sts)+" Product="+product+'            token=none')
+.endc ;OS_VMS
+
+    sts = %my_lm_stat(producer, product, users, sys_err)
+    writes(1, "lm_stat   status="+%string(sts)+" Product="+product+' users='+%string(users))
+
+    xcall my_lm_login(sts, producer, product, token)
+    writes(1, "lm_login  status="+%string(sts)+" Product="+product+'            token='+%string(token))
+
+    sts = %my_lm_stat(producer, product, users, sys_err)
+    writes(1, "lm_stat   status="+%string(sts)+" Product="+product+' users='+%string(users))
+
+    xcall my_lm_logout(sts, producer, product, token)
+    writes(1, "lm_logout status="+%string(sts)+" Product="+product+'            token='+%string(token))
+    clear token
+
+    sts = %my_lm_stat(producer, product, users, sys_err)
+    writes(1, "lm_stat   status="+%string(sts)+" Product="+product+' users='+%string(users))
+
+    close 1
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    stop D_EXIT_SUCCESS
+endmain
+

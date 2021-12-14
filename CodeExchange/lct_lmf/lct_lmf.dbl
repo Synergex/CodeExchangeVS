@@ -1,0 +1,570 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+; Wrapper routines for Synergy/DE Licensing Toolkit
+;
+; Uses OpenVMS LMF System Services (LMF) or Synergy/DE Licensing Toolkit (LM)
+;
+; Parameters that start with A_LM_* are only used by the Synergy/DE Licensing
+; Toolkit, and are not used with OpenVMS LMF
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+; v1.1  Added support for using LMU
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifdef OS_VMS
+.define D_PRODUCT_TYPE  a24
+.define D_PRODUCER_TYPE a24
+.else ;OS_VMS
+.define D_PRODUCT_TYPE  a6
+.define D_PRODUCER_TYPE a6
+.endc ;OS_VMS
+
+.ifndef LM_OK
+
+;C defines
+.define LM_OK           0
+.define LM_NOTINS       1
+.define LM_MAXUSR       2
+.define LM_MFAULT       5
+.define LM_INTCON       6
+.define LM_EXPDEMO      7
+.define INIT_NOFILE     171
+.define INIT_BADSND     172
+.define INIT_BADRCV     172
+.define INIT_NOSYND     174
+.define INIT_NOLICENSE  175
+.define INIT_NOPIPE     176
+.define INIT_OLDLMDB    177
+.define INIT_BUSYPIPE   179
+.define OPS_INITCON     180
+.define OPS_BADSND      181
+.define OPS_BADRCV      182
+.define OPS_NOSYND      183
+.define OPS_MFAULT      184
+.define OPS_NOPIPE      185
+.define OPS_EXCLOGINS   186
+.define OPS_BUSYPIPE    188
+
+;Synergy defines
+.define LMSTS_OK        0   ;ok
+.define LMSTS_NOCONFIG  1   ;license not configured
+.define LMSTS_MAXUSR    2   ;exceeded concurrent user maximum
+.define LMSTS_BADTOK    3   ;bad token
+.define LMSTS_TIMEOUT   7   ;demo expired
+.define LMSTS_NOSYND    183
+.define LMSTS_NOACESS   185
+
+.endc ;LM_OK
+
+;;.define D_ENABLE_LM_DEBUGGING
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine my_lm_login
+    req out     a_status        ,n          ;return status
+    req in      a_producer      ,a          ;Synergex/HP assigned producer code
+    req in      a_application   ,a          ;application code
+.ifdef OS_VMS
+    opt out     a_token         ,i          ;token
+.else
+    req out     a_token         ,i          ;token
+.endc ;OS_VMS
+    opt out     a_lm_rec        ,a          ;LM_RECORD
+    opt out     a_lm_slot_num   ,n          ;LM slot number
+    opt in      a_check         ,n          ;check (or login) license
+    opt inout   a_lm_seat       ,n          ;LM seat number (LM only)
+    endparams
+
+.ifdef OS_VMS
+
+.include '$LICENSEDEF' library 'DBLSTARLET'
+.ifndef LICENSE_FACILITY
+;+
+; Module $LICENSEDEF
+;-
+    literal
+        LICENSE_FACILITY,           i,      2708
+        LICENSE$_SYSMGR,            i,      177505059
+        LICENSE$_NOAUTH,            i,      177507058
+        LICENSE$_NOLICENSE,         i,      177507860
+        LICENSE$_EXCEEDED,          i,      177507868
+        LICENSE$_NOT_STARTED,       i,      177507876
+        LICENSE$_INVALID_DATE,      i,      177507884
+        LICENSE$_INVALID_VERSION,   i,      177507892
+        LICENSE$_TERMINATED,        i,      177507900
+        LICENSE$_NOTINRSRVLIST,     i,      177507908
+        LICENSE$_BADPARAM,          i,      177507916
+        LICENSE$_ILLPRODUCER,       i,      177507924
+        LICENSE$_WRONUMARG,         i,      177507932
+        LICENSE$_INVALID_HW_ID,     i,      177507940
+        LICENSE$_INVALID_TOKEN,     i,      177507948
+        LICENSE$_USER_MODE,         i,      177507956
+.endc ;LICENSE_FACILITY
+
+    external function
+        sys$grant_license   ,^val
+        sys$release_license ,^val
+    endexternal
+.endc ;OS_VMS
+
+    record lm_record
+        lm_applic       ,a6
+        lm_usrmax       ,d4
+        lm_expdat       ,d8
+        lm_insdat       ,d8
+        lm_custom       ,a100
+    endrecord
+
+    record lm_site
+        ,a6
+        lm_licensee     ,a50
+        lm_regstr       ,a12
+        lm_regdat       ,d8
+        lm_timout       ,d8
+    endrecord
+
+    record lcl_vars
+        sts             ,i4                 ;status
+        token           ,i4                 ;licensing token
+        slot_num        ,i4                 ;LM slot number
+        application     ,D_PRODUCT_TYPE
+        producer        ,D_PRODUCER_TYPE
+        dateToday       ,d8                 ;today's date
+    endrecord
+
+.ifndef D_ENABLE_LM_DEBUGGING
+.nodebug ;disable debugging
+.endc ;D_ENABLE_LM_DEBUGGING
+
+proc
+
+    clear lm_record
+    clear token
+    producer = a_producer
+    application = a_application
+
+.ifdef OS_VMS
+
+    sts = %sys$grant_license(application(1:%trim(application)),
+&       producer(1:%trim(producer)), ^ref(token), ^val(0))
+    if(sts .band. 1) then
+    begin
+        if(^passed(a_check) && a_check)
+        begin
+            sts = %sys$release_license(^ref(token))
+            clear token
+        end
+        a_status = LMSTS_OK
+    end
+    else
+    begin
+        clear token
+        using sts select
+        (LICENSE$_EXCEEDED),
+            a_status = LMSTS_MAXUSR
+        (LICENSE$_INVALID_DATE, LICENSE$_TERMINATED),
+            a_status = LMSTS_TIMEOUT
+        (), ;LICENSE$_NOLICENSE
+            a_status = LMSTS_NOCONFIG
+        endusing
+    end
+
+.else ;OS_VMS
+
+    if(^passed(a_lm_slot_num)) then
+        slot_num = a_lm_slot_num
+    else
+        slot_num = 0
+    xcall lm_login(a_status, producer(1:%trim(producer)),
+&       application(1:%trim(application)), token, lm_record, slot_num,
+&       a_check, a_lm_seat)
+    if(a_status == LMSTS_NOCONFIG)
+    begin ;license is not configured, allow a grace period
+        ^a(dateToday) = %datetime
+        xcall my_lm_info(sts, lm_site)
+        if(lm_site.lm_timout >= dateToday)
+            a_status = LMSTS_OK
+    end
+    if(^passed(a_lm_rec))
+        a_lm_rec = lm_record
+    if(^passed(a_lm_slot_num))
+        a_lm_slot_num = slot_num
+
+.endc ;OS_VMS
+
+    if(^passed(a_token))
+        a_token = token
+    xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine my_lm_logout
+    req out     a_status        ,n  ;return status
+.ifdef OS_VMS
+    opt in      a_producer      ,a  ;HP assigned producer code
+    opt in      a_application   ,a  ;application code
+.else
+    req in      a_producer      ,a  ;Synergex assigned producer code
+    req in      a_application   ,a  ;application code
+.endc ;OS_VMS
+    req in      a_token         ,i  ;token
+    opt in      a_lm_seat       ,n  ;LM seat number (LM only)
+    endparams
+
+.ifdef OS_VMS
+    external function
+        sys$release_license ,^val
+    endexternal
+.endc ;OS_VMS
+
+.ifndef D_ENABLE_LM_DEBUGGING
+.nodebug ;disable debugging
+.endc ;D_ENABLE_LM_DEBUGGING
+
+proc
+
+.ifdef OS_VMS
+
+    if(a_token) then
+    begin
+        data token  ,i4         ;licensing token (required to perform a logout)
+        data sts    ,i4         ;status
+        token = a_token
+        sts = %sys$release_license(^ref(token))
+        if(sts .band. 1) then
+            a_status = LMSTS_OK
+        else
+            a_status = LMSTS_BADTOK
+    end
+    else
+        a_status = LMSTS_BADTOK
+
+.else ;OS_VMS
+
+    xcall lm_logout(a_status, a_producer, a_application, a_token, a_lm_seat)
+
+.endc ;OS_VMS
+
+    xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine my_lm_info
+    req out     a_status    ,n              ;return status
+    req out     a_lm_site   ,a              ;LM_SITE record
+    endparams
+
+    record lm_site
+        ,a6
+        lm_licensee     ,a50
+        lm_regstr       ,a12
+        lm_regdat       ,d8
+        lm_timout       ,d8
+    endrecord
+
+.ifndef D_ENABLE_LM_DEBUGGING
+.nodebug ;disable debugging
+.endc ;D_ENABLE_LM_DEBUGGING
+
+proc
+
+    clear lm_site
+.ifdef OS_VMS
+    ;no "license" info on OpenVMS
+    a_status = LMSTS_OK
+.else ;OS_VMS
+    xcall lm_info(a_status, lm_site)
+.endc ;OS_VMS
+    a_lm_site = lm_site
+    xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; returns : +ve = win_lm_stat error status
+;           -ve = dll/Synergy error
+;           0 = no error
+
+function my_lm_stat ,i
+    req in      a_producer      ,a          ;Synergex/HP assigned producer code
+    req in      a_application   ,a          ;application code
+    req out     a_users         ,i          ;current users
+    req out     a_syserr        ,i          ;system error
+    endparams
+
+    external function
+        decodeLMUoutput ,i
+    endexternal
+
+    record lcl_vars
+        fstatus         ,i4                 ;function return status
+        users           ,i4                 ;number of users using license
+        sys_err         ,i4                 ;system error
+        producer        ,D_PRODUCT_TYPE
+        application     ,D_PRODUCER_TYPE
+    endrecord
+
+.ifndef D_ENABLE_LM_DEBUGGING
+.nodebug ;disable debugging
+.endc ;D_ENABLE_LM_DEBUGGING
+
+proc
+
+    fstatus = LMSTS_NOCONFIG
+    clear users, sys_err
+    producer = a_producer
+    application = a_application
+
+.ifdef OS_VMS
+    begin
+        data alpos  ,i4 ,0  ;position of "Allocated" in "show license/usage" header
+        data pos    ,i4
+        data chan   ,i4
+        data bufr   ,a80
+
+;$ SHOW LICENSE/USAGE AXP-RUN9
+;
+;View of loaded licenses from node XXXXXX                DD-MMM-YYYY HH:MM:SS.SS
+;
+;------- Product ID --------   ---- Unit usage information ----
+;Product            Producer       Loaded  Allocated  Available
+;AXP-RUN9           SYNERGY            10          0         10
+;$
+        open(chan=%syn_freechn, I, '|SHOW LICENSE/USAGE '+%atrim(application))
+        repeat
+        begin
+            reads(chan, bufr, eof)
+            if(!bufr)
+                nextloop
+            if(!alpos)
+                alpos = %instr(1, bufr, 'Allocated')
+            if(bufr(1:%trim(application)+1) != application)
+                nextloop
+            pos = %trim(application) + 1
+            if(producer)
+            begin
+                while(bufr(pos:1) == ' ')
+                    pos += 1
+                if(bufr(pos:%trim(producer)+1) != producer)
+                    nextloop
+            end
+            pos = alpos
+            while(bufr(pos:1) == ' ' && pos < alpos+8)
+            pos += 1
+            users = bufr(pos,alpos+8)
+            fstatus = LMSTS_OK
+            exitloop
+        end
+eof,
+        close chan
+
+    end
+.else ;OS_VMS
+
+    begin
+        data dll_hdl    ,i4                 ;dll handle
+        data sts        ,i4                 ;status
+        data decodeLMU  ,boolean, FALSE     ;decode LMU output
+
+.ifdef OS_UNIX
+        decodeLMU = TRUE
+.endc ;OS_UNIX
+
+        if(decodeLMU == FALSE)
+        begin
+            try
+            begin
+                dll_hdl = %dll_open('syncli_api.dll')
+                if(dll_hdl > 0) then
+                begin
+.ifdef DBLNET
+                    data argArray       ,[#]@*
+
+                    argArray = new object[4]
+                    argArray[1] = (object)producer
+                    argArray[2] = (object)application
+                    argArray[3] = (object)^addr(users)
+                    argArray[4] = (object)^addr(sys_err)
+                    fstatus = %dll_netcall(dll_hdl,, 'win_lm_stat', argArray)
+.else ;DBLNET
+.ifdef SYN_VER ;from DBLDIR:dbl.def
+                    if(SYN_VER == '9.1.5b') then
+                        fstatus = %dll_call(dll_hdl, DLL_TYPE_C, 'win_lm_stat',
+&                           producer, application, ^addr(users), ^addr(sys_err))
+                    else
+.endc ;SYN_VER
+                    fstatus = %dll_call(dll_hdl,, 'win_lm_stat',
+&                       producer, application, ^addr(users), ^addr(sys_err))
+.endc ;DBLNET
+                end
+                else
+                begin
+                    sys_err = 528 ;DLLOPNERR
+                    fstatus = LM_OK - 1
+                end
+            end
+            catch (e)
+            begin
+                sys_err = %syserr
+                fstatus = LM_OK - 2
+            end
+            finally
+            begin
+                if(dll_hdl > 0)
+                begin
+                    sts = %dll_close(dll_hdl)
+                    clear dll_hdl
+                end
+                ;;DLL API error
+                if(fstatus < LM_OK || fstatus > LM_EXPDEMO)
+                decodeLMU = TRUE
+            end
+            endtry
+        end
+
+        if(decodeLMU == TRUE)
+        begin
+            fstatus = %decodeLMUoutput(producer, application, users)
+            if(fstatus < 0)
+            begin
+                sys_err = -fstatus
+                fstatus = LMSTS_NOCONFIG
+            end
+        end
+
+    end
+.endc ;OS_VMS
+
+    a_users = users
+    a_syserr = sys_err
+    freturn fstatus
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function decodeLMUoutput ,i
+    req in      a_producer      ,a          ;Synergex assigned producer code
+    req in      a_application   ,a          ;application code
+    req out     a_users         ,i          ;current users
+    endparams
+
+.align
+    record
+        fstatus             ,i4
+        pos                 ,i4
+        pos2                ,i4
+        chan                ,i4
+        inKeys              ,i4 ,0
+        bufr                ,a80
+
+.ifndef D_ENABLE_LM_DEBUGGING
+.nodebug ;disable debugging
+.endc ;D_ENABLE_LM_DEBUGGING
+
+proc
+
+    fstatus = LMSTS_NOCONFIG
+
+    ;;this prevents the LMU delay
+    xcall setlog('NO_LMUDELAY', '1', pos)
+
+    open(chan=%syn_freechn, I, '|lmu') [ERR=lmu_error]
+    repeat
+    begin
+        reads(chan, bufr, eof)
+        if(!bufr || bufr == '  *')
+            nextloop
+
+        if(!inKeys)
+        begin
+            if(%instr(1, bufr, 'Configured Products:'))
+                inKeys = 1
+            nextloop
+        end
+
+        pos = 1
+        while(pos < ^size(bufr) && bufr(pos:1) == ' ')
+            pos += 1
+        pos2 = pos+1
+        while(pos2 < ^size(bufr) && bufr(pos2:1) != ' ')
+            pos2 += 1
+        ;;concurrent users
+        a_users = bufr(pos,pos2-1)
+
+        pos = pos2
+        while(pos < ^size(bufr) && bufr(pos:1) == ' ')
+            pos += 1
+        pos2 = pos+1
+        while(pos2 < ^size(bufr) && bufr(pos2:1) != ' ')
+            pos2 += 1
+        ;producer_code = bufr(pos,pos2-1)
+
+        if(bufr(pos,pos2-1) .nes. a_producer)
+        begin
+            clear a_users
+            nextloop
+        end
+
+        pos = pos2
+        while(pos < ^size(bufr) && bufr(pos:1) == ' ')
+            pos += 1
+        pos2 = pos+1
+        while(pos2 < ^size(bufr) && bufr(pos2:1) != ' ')
+            pos2 += 1
+        ;application = bufr(pos,pos2-1)
+
+        if(bufr(pos,pos2-1) .nes. a_application)
+        begin
+            clear a_users
+            nextloop
+        end
+
+        ;pos = pos2
+        ;while(pos < ^size(bufr) && bufr(pos:1) == ' ')
+        ;    pos += 1
+        ;pos2 = pos+1
+        ;while(pos2 < ^size(bufr) && bufr(pos2:1) != ' ')
+        ;    pos2 += 1
+        ;licensed_users = bufr(pos,pos2-1)
+
+        ;pos = pos2
+        ;while(pos < ^size(bufr) && bufr(pos:1) == ' ')
+        ;    pos += 1
+        ;pos2 = pos+1
+        ;while(pos2 < ^size(bufr) && bufr(pos2:1) != ' ')
+        ;    pos2 += 1
+        ;installation_date = bufr(pos,pos2-1)
+
+        ;pos = pos2
+        ;while(pos < ^size(bufr) && bufr(pos:1) == ' ')
+        ;    pos += 1
+        ;pos2 = pos+1
+        ;while(pos2 < ^size(bufr) && bufr(pos2:1) != ' ')
+        ;    pos2 += 1
+        ;expiry_date = bufr(pos,pos2-1)
+
+        fstatus = LMSTS_OK
+        exitloop
+    end
+eof,
+    close chan
+
+    if(FALSE)
+    begin
+lmu_error,
+        fstatus = -%error
+    end
+
+    freturn fstatus
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

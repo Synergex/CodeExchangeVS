@@ -1,0 +1,78 @@
+;keydef.def
+
+.ifndef KEY_NUL
+
+.define KEY_NUL     ,0
+.define KEY_BS      ,8
+.define KEY_TAB     ,9
+.define KEY_LF      ,10
+.define KEY_CR      ,13
+.define KEY_CTRL_P  ,16
+.define KEY_CTRL_R  ,18
+.define KEY_ESC     ,27
+.define KEY_DEL     ,127
+
+.define KEY_SS3     ,143
+.define KEY_CSI     ,155
+
+                                ;VTxxx escape sequence
+.define KEY_PF1     ,256        ;($[P) or ($OP)
+.define KEY_PF2     ,257        ;($[Q) or ($OQ)
+.define KEY_PF3     ,258        ;($[R) or ($OR)
+.define KEY_PF4     ,259        ;($[S) or ($OS)
+
+.define KEY_KP0     ,260        ;($[p)
+.define KEY_KP1     ,261        ;($[q)
+.define KEY_KP2     ,262        ;($[r)
+.define KEY_KP3     ,263        ;($[s)
+.define KEY_KP4     ,264        ;($[t)
+.define KEY_KP5     ,265        ;($[u)
+.define KEY_KP6     ,266        ;($[v)
+.define KEY_KP7     ,267        ;($[w)
+.define KEY_KP8     ,268        ;($[x)
+.define KEY_KP9     ,269        ;($[y)
+.define KEY_KPENTER ,270        ;($[M)
+.define KEY_KPMINUS ,271        ;($[m)
+.define KEY_KPCOMMA ,272        ;($[l)
+.define KEY_KPSTOP  ,273        ;($[n)
+
+.define KEY_UP      ,274        ;($[A)
+.define KEY_DOWN    ,275        ;($[B)
+.define KEY_RIGHT   ,276        ;($[C)
+.define KEY_LEFT    ,277        ;($[D)
+
+.define KEY_F1      ,281        ;($[11~)
+.define KEY_F2      ,282        ;($[12~)
+.define KEY_F3      ,283        ;($[13~)
+.define KEY_F4      ,284        ;($[14~)
+.define KEY_F5      ,285        ;($[15~)
+.define KEY_F6      ,286        ;($[16~)
+.define KEY_F7      ,285        ;($[17~)
+.define KEY_F8      ,288        ;($[18~)
+.define KEY_F9      ,289        ;($[19~)
+.define KEY_F10     ,290        ;($[21~)
+.define KEY_F11     ,291        ;($[22~)
+.define KEY_F12     ,292        ;($[23~)
+.define KEY_F13     ,293        ;($[24~)
+.define KEY_F14     ,294        ;($[25~)
+.define KEY_F15     ,295        ;($[27~)
+.define KEY_F16     ,296        ;($[28~)
+.define KEY_F17     ,297        ;($[31~)
+.define KEY_F18     ,298        ;($[32~)
+.define KEY_F19     ,299        ;($[33~)
+.define KEY_F20     ,300        ;($[34~)
+
+.define KEY_FIND    ,311        ;($[1~)
+.define KEY_INS     ,312        ;($[2~)
+.define KEY_REM     ,313        ;($[3~)
+.define KEY_SEL     ,314        ;($[4~)
+.define KEY_PREV    ,315        ;($[5~)
+.define KEY_NEXT    ,316        ;($[6~)
+
+.define KEY_UNKNOWN ,511
+
+.define KEY_HELP    ,KEY_F15
+.define KEY_DO      ,KEY_F16
+
+.endc
+

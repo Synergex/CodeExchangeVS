@@ -1,0 +1,23 @@
+;; memProc.def
+
+;; main mem_proc logging isam file
+.define D_MP_FILE           'TMP:mem_proc_data.ism'
+
+;; sequential file containing copies of the mem_proc isam file records that
+;; try to allocate the same memory handle twice.  This usuallmy means that
+;; DM_FREE is not being used.
+.define D_MP_DUPSFILE       'TMP:mem_proc_dups.ddf'
+
+;; log file created from the two above files.
+.define D_MP_LOGFILE        'TMP:mem_proc.log'
+
+;; mem_proc isam file layout
+record mpLog
+    group key0      ,a
+      pid             ,d10
+      hdl             ,d10
+    endgroup
+    date_time       ,a20
+    alloc_data      ,[4]a40
+endrecord
+

@@ -1,0 +1,54 @@
+;iConvert.def
+
+.ifndef W_OLD
+
+.define W_OLD           ,1
+.define W_NEW           ,2
+
+.define W_SKIP_FIELD    ,"SKIP_"
+.endc
+
+; Field information for selected structures
+
+record fld_rec
+    fld_name            ,a30            ;name
+    fld_pos             ,d5             ;start position
+    fld_end             ,d5             ;end position
+    fld_type            ,a1             ;field type (Alpha/Decimal)
+    fld_prec            ,d2             ;field precision (Decimal fields)
+    fld_dim             ,4d4            ;field dimension(s)
+    fld_size            ,d5             ;field size
+    fld_group           ,d5             ;field is group, start position of group
+
+structure field_dets
+    field_rec           ,a ^size(fld_rec) ;field details within structure
+    field_info          ,a ^size(f_info)
+
+structure struct_names
+    struct              ,a30            ;structure name (structure list associated with file)
+
+structure str_dets
+    str_name            ,a30            ;structure name
+    str_len             ,i4             ;structure length
+    num_fields          ,i4             ;number of fields
+    fd_hdl              ,i4             ;field_dets handle
+
+    t_typ               ,i4             ;tag type
+    t_hdl               ,i4             ;tag handle
+    t_siz               ,i4             ;number of tags
+    c_hdl               ,i4             ;conv_fld handle
+
+; used by conversion subroutine (once you've decided which two structures to use)
+
+structure conv_fld
+    pos                 ,2i4            ;positions
+    siz                 ,2i4            ;field sizes
+    prc                 ,2i4            ;field precision
+    dim                 ,[2,4]i4        ;field dimensions
+    meth                ,a30            ;convertion method
+
+structure conv_tag
+    tag_info            ,a ^size(tg_info)   ;tag details for structure
+    tag_pos             ,i4             ;field position
+    tag_len             ,i4             ;field length
+

@@ -1,0 +1,31 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; test program to check logging
+
+.include 'INC:myApp.def'
+
+main
+structure buf
+    b                   ,a1
+record
+    hdl                 ,D_HANDLE
+    ttCh                ,i4
+proc
+    ttCh = %syn_freechn
+    open(ttCh,O,'TT:')
+
+    hdl = %mem_proc(DM_ALLOC+DM_STATIC, 100)
+    hdl = %mem_proc(DM_RESIZ, 200)
+    hdl = %mem_proc(DM_FREE, hdl)
+
+    hdl = %mem_proc(DM_ALLOC.bor.DM_STATIC.bor.DM_BLANK, 100)
+    ;hdl = %mem_proc(DM_FREE, hdl) ;leave memory allocated in log file
+
+    hdl = %mem_proc(DM_ALLOC.bor.DM_STATIC.bor.DM_BLANK, 100)
+    hdl = %mem_proc(DM_FREE, hdl)
+
+    close ttCh
+    stop D_EXIT_SUCCESS
+endmain
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

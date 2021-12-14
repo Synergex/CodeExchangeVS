@@ -1,0 +1,192 @@
+;----------------------------------------------------------------------
+;
+; Module:       IBcontrol.dbl
+;
+; Facility:     PERFORMANCE TESTS
+;
+; Description:  Opens the same ISAM file used by IsamBenchmark
+;               (Used simultaneously with this program).
+;
+; Date:         Apr 29, 1997 (Updated Oct 1, 2010)
+;
+;----------------------------------------------------------------------
+main
+
+.define MAX_ARGS 25
+
+literal
+        ibFile  ,a*     ,'DAT:ismbench.ism' ; ISAM benchmark file
+        lcFile  ,a*     ,'DAT:lock.ddf'     ; LOCK file
+
+record clr_i
+        num_args,i4                     ; number of command line arguments
+        arg_pos ,[MAX_ARGS]i4           ; cmdln argument position
+        arg_len ,[MAX_ARGS]i4           ; cmdln argument length
+        pos     ,i4                     ; loop counter
+        appSts  ,i4                     ; application exit status
+
+record clr
+        lockRec ,a25                    ; lock.ddf record
+        anyKey  ,a1                     ; any key to continue input buffer
+        name    ,a256                   ; ibFile filename
+        cmdlin  ,a1024                  ; command line
+
+record parameters
+        appMode ,i4                     ; application mode
+        unlockInterval  ,d4.1           ; unlock sleep time
+
+proc
+        clear clr, ^i(clr_i), parameters
+
+        xcall flags(7000000, 1)         ; no STOP message
+        open(15, o, 'tt:')
+
+        appSts = D_EXIT_SUCCESS
+        clear appMode
+        unlockInterval = 1.0
+
+        call decodeCommandLine
+
+        using appMode select
+        (0),
+            call OpenBenchmark
+        (1),
+            call CreateLock
+        (),
+            appSts = D_EXIT_FAILURE
+        endusing
+
+        close 15
+        stop appSts
+
+decodeCommandLine,
+
+        xcall cmdln(cmdlin, num_args, arg_pos, arg_len)
+
+        ; check for help option first (to pick up correct defaults)
+        clear pos
+        while(pos < num_args)
+          begin
+            pos += 1
+            using cmdlin(arg_pos[pos]:arg_len[pos]) select
+            ('-h ', '-? '),
+              begin
+                writes(15, 'dbr IBcontrol  [-b] [-c] [-i <x.x>]')
+                writes(15, '')
+                writes(15, ' -b       : Open benchmark file (default mode)')
+                writes(15, '')
+                writes(15, ' -c       : Create lock file '+lcFile)
+                writes(15, ' -i <x.x> : Lock file unlock interval (seconds)')
+                writes(15, '            Default='+%string(unlockInterval))
+                writes(15, '')
+                sleep 3
+                stop D_EXIT_SUCCESS
+              end
+            endusing
+          end
+
+        ;now do real checking
+        clear pos
+        while(pos < num_args)
+          begin
+            pos += 1
+            using cmdlin(arg_pos[pos]:arg_len[pos]) select
+            ('-b '),
+                appMode = 0
+            ('-c '),
+                appMode = 1
+            ('-i '),
+              begin
+                pos += 1
+                if(pos .gt. MAX_ARGS .or.
+                &  arg_pos[pos] .lt. 1 .or. arg_len[pos] .lt. 1 .or.
+                &  cmdlin(arg_pos[pos]:1) .eq. '-')
+                  begin
+                    writes(15, 'Missing -i parameter')
+                    appMode = -1
+                    exitloop
+                  end
+                onerror not_number
+                unlockInterval = cmdlin(arg_pos[pos]:arg_len[pos])
+                if(unlockInterval .lt. 0)
+                  begin
+not_number,
+                    offerror
+                    writes(15, 'Invalid -i parameter '+cmdlin(arg_pos[pos]:arg_len[pos]))
+                    appMode = -1
+                    exitloop
+                  end
+                offerror
+              end
+            endusing
+          end
+
+        return
+
+OpenBenchmark,
+
+        open(2, u:i, ibFile) [ERR=noFile]
+        xcall filnm(2, name)
+        writes(15, 'Opening ' + %atrim(name))
+        display(15, "Press RETURN to close")
+        accept(15, anyKey)
+        while(%ttsts)
+            accept(15, anyKey)
+        close 2
+
+        onerror delete_error
+        xcall delet(ibFile)
+        writes(15, 'Deleted '+%atrim(ibFile))
+        if(%false)
+          begin
+delete_error,
+            using %error select
+            (38),
+                writes(15, 'Did not delete '+%atrim(ibFile)+' - file in use')
+            (),
+                write(15, 'Error '+%string(%error)+' deleting '+%atrim(ibFile))
+            endusing
+          end
+        offerror
+
+        return
+
+noFile,
+        writes(15, "Cannot open "+ibFile+"  Error:"+%string(%error))
+        appSts = D_EXIT_FAILURE
+        return
+
+createLock,
+
+        display(15, 13, 10, 'Creating ', lcFile, 13, 10)
+        open(3, o, lcFile)
+        writes(3, lockRec)
+        close 3
+
+        open(3, u, lcFile)
+        repeat
+        begin
+            read(3, lockRec, ^FIRST)
+            display(15, 13, 10, 'Locked')
+            display(15, 13, 10, 'Press X to exit or ',
+            & 'RETURN to release lock for ',%string(unlockInterval),' seconds')
+            accept(15, anyKey)
+            using anyKey select
+            ('X', 'x'),
+                exitloop
+            (),
+                while(%ttsts)
+                    accept(15, anyKey)
+            endusing
+            unlock 3
+            display(15, 13, 10, 'Unlocked')
+            sleep unlockInterval
+        end
+        close 3
+
+        display(15, 13, 10, 'Deleting ', lcFile, 13, 10)
+        xcall delet(lcFile)
+
+        return
+
+end

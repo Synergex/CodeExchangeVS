@@ -1,0 +1,354 @@
+;;**********************************************************************
+;;
+;; Title:       IsHoliday.dbc
+;;
+;; Type:        Class
+;;
+;; Description: class containing a static method to determine if a date is a holiday.
+;;              Accepts the date in YYYYMMDD format.
+;;
+;; Author:      Richard C. Morris, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+;;
+;; Usage : if (SynPSG.DateFunctions.IsHoliday(20100101, SynPSG.CountryCode.EnglandAndWales))
+;;              ;;if TRUE, passed date is a holiday
+;;
+;; Example;
+;;      begin
+;;          data b,boolean
+;;          data d,d8,20100215
+;;          b=SynPSG.DateFunctions.IsHoliday(d, synpsg.CountryCode.UnitedStates)
+;;          ;;if b == true the day is a holiday.
+;;      end
+;;
+;;***********************************************************************************
+;;
+;; *** NOTES ***
+;;
+;; The routine currently does not work for US dates.  You need to determine the
+;; date types below and set the result flag accordingly.
+;;
+;;***********************************************************************************
+
+namespace SynPSG
+
+    ;;enumaertaion determining which country the check is made for
+    public enum CountryCode
+        Ireland
+        EnglandAndWales
+        Scotland
+        UnitedStates
+    endenum
+
+    public sealed class DateFunctions
+
+        ;;HTTP request timeout
+.define D_HTTP_TIMEOUT      10
+
+        ;;<summary>
+        ;;<IsHoliday returns TRUE if the passed date, for the passed country, is a public holiday>
+        ;;</summary>
+        ;;<param name="checkDate">pass in the required date, format YYYYMMDD></param>
+        ;;<param name="country">Pass in country enumeration></param>
+        public static method IsHoliday  ,boolean
+            in  req checkDate           ,d8             ;;format (YYYYMMDD)
+            in  req country             ,CountryCode    ;;which country to check
+            endparams
+            ;;end of argument list
+
+.include "DBLDIR:synxml.def"
+
+            record internalData
+                status                  ,i4
+                responseHandle          ,D_HANDLE
+                responseLength          ,i4
+                request                 ,a500
+                errTxt                  ,a500
+                result                  ,boolean
+                index                   ,i4
+                count                   ,i4
+                xmlHandle               ,D_HANDLE
+                xmlCounter              ,i4
+                parser                  ,XML_PARSER_TYPE
+                doc                     ,XML_DOC_TYPE
+                root                    ,XML_ELEM_TYPE
+                xmlString               ,XML_STRING_TYPE
+                root_children           ,XML_ELEMLIST_TYPE
+                countryString           ,a5
+
+                group inDate            ,d8
+                    year                ,d4
+                    month               ,d2
+                    day                 ,d2
+                endgroup
+
+                group serviceDate       ,a11
+                    day                 ,a2
+                    sep1                ,a1
+                    month               ,a3
+                    sep2                ,a1
+                    year                ,a4
+                endgroup
+
+                startPos                ,int
+                endPos                  ,int
+            endrecord
+
+            record
+                buildString             ,string
+            endrecord
+
+            structure responseString
+                fld                     ,a1
+            endstructure
+
+            structure responseData
+                tagName,                a50
+                elementData,            a100
+            endstructure
+
+        proc
+
+            ;;initialise internal data
+            init internalData
+            sep1 =  '-'
+            sep2 =  '-'
+
+            ;;work out the country code
+            using (country) select
+            (SynPSG.CountryCode.Ireland),   countryString="GBNIR"
+            (SynPSG.CountryCode.EnglandAndWales),   countryString="GBEAW"
+            (SynPSG.CountryCode.Scotland),  countryString="GBSCT"
+            (SynPSG.CountryCode.UnitedStates),  countryString="US"
+            endusing
+
+            ;;work out the passed date
+            inDate = checkDate
+
+            serviceDate.day = inDate.day    ,'XX'
+
+            using inDate.month select
+            (1), serviceDate.month="JAN"
+            (2), serviceDate.month="FEB"
+            (3), serviceDate.month="MAR"
+            (4), serviceDate.month="APR"
+            (5), serviceDate.month="MAY"
+            (6), serviceDate.month="JUN"
+            (7), serviceDate.month="JLY"
+            (8), serviceDate.month="AUG"
+            (9), serviceDate.month="SEP"
+            (10), serviceDate.month="OCT"
+            (11), serviceDate.month="NOV"
+            (12), serviceDate.month="DEC"
+            endusing
+
+            serviceDate.year=inDate.year    ,'XXXX'
+
+            ;;build web service request
+            s_bld(request,, "http://%a/%a/%a?countryCode=%a&startDate=%a&endDate=%a",
+&               'www.holidaywebservice.com/Holidays',
+&               'HolidayService.asmx',
+&               'GetHolidaysForDateRange',
+&               countryString,
+&               serviceDate,
+&               serviceDate)
+
+            result = false  ;;default to fail/not a holiday
+
+            ;;make the web service call
+            status = http_client_get(request, D_HTTP_TIMEOUT, responseHandle, responseLength, errTxt)
+
+            if (status)
+            begin
+                ;;call failed
+                mreturn result
+            end
+
+            ;;valid call, is the date a holiday?
+
+            startPos = instr(1, ^m(responseString(1:responseLength), responseHandle), '<NewDataSet xmlns="">')
+            endPos = instr(1, ^m(responseString(1:responseLength), responseHandle), '</NewDataSet>')
+
+            if (!startPos || !endPos)
+                mreturn result
+
+            buildString = '<?xml version="1.0" encoding="utf-8"?>' +
+&               ^m(responseString(startPos,endPos+12), responseHandle)
+
+            ;;create a parser
+            parser = xml_parser_create
+
+            ;create an XML string
+            xmlString = xml_string_create
+
+            ;;append our returned XML response handle
+            status = xml_string_append(xmlString, buildString)
+
+            ;;parser through the XML document
+            doc = xml_parser_parsestring(parser, xmlString)
+            root = xml_doc_getroot(doc)
+
+            ;;get the child elements of the root
+            root_children = xml_elem_children(root)
+
+            index = 1
+            expandXML(root_children, index, xmlHandle, xmlCounter)
+
+            ;;work through the generated list of tags/data values and extract the
+            ;;requried data.  We onlt need to check certain values
+
+            for count from 1 thru xmlCounter
+            begin
+                if (country == SynPSG.CountryCode.UnitedStates)
+                then
+                begin
+                    if (^m(responseData[count].tagName, xmlHandle) == "Key")
+                    begin
+                        ;;If US, need to check key value
+                        using (^m(responseData[count].elementData, xmlHandle)) select
+                        ("NEW_YEARS"),  result = true
+                        ("MLK"),    result = true
+                        ("PRESIDENTS_DAY"), result = true
+                        ("ABRAHAM_LINCOLN_BDAY"),   result = false
+                        ("VALENTINES"), result = false
+                        ("GEORGE_WASHINGTON_BDAY"), result = true
+                        ("GOOD_FRIDAY"),    result = true
+                        ("EASTER"), result = true
+                        ("ST_PATRICKS_DAY"),    result = false
+                        ("APRIL_FOOLS"),    result = false
+                        ("MOTHERS"),    result = false
+                        ("MEMORIAL"),   result = true
+                        ("CINCO_DE_MAYO"),  result = false
+                        ("FATHERS"),    result = false
+                        ("FLAG"),   result = false
+                        ("INDEPENDENCE"),   result = true
+                        ("LABOR"),  result = true
+                        ("COLUMBUS"),   result = true
+                        ("HALLOWEEN"),  result = false
+                        ("THANKSGIVING"),   result = true
+                        ("BLACK_FRIDAY"),   result = false
+                        ("VETERANS"),   result = true
+                        ("CHRISTMAS"),  result = true
+                        ("NEW_YEARS_EVE"),  result = false
+                        endusing
+                    end
+                end
+                else
+                begin
+                    if (^m(responseData[count].tagName, xmlHandle) == "Type")
+                    begin
+                        ;;if the type of day is "Bank Holiday" then it's a public holiday
+                        if (^m(responseData[count].elementData, xmlHandle) == "Bank Holiday")
+                        begin
+                            result = true
+                            exitloop
+                        end
+                    end
+                end
+            end
+
+            ;;return the result
+            mreturn result
+
+        endmethod
+
+        ;;
+        ;;This routine will parse out an XML document and extract each tag and associated
+        ;;data value.  These are then stored in a memory array
+        ;;
+        private static method expandXML ,void
+            inout req   childList       ,i      ;;child list
+            inout req   elementIndex    ,i      ;;which element index
+            inout req   memoryHandle    ,i      ;;expanded data memory handle
+            inout req   entryCount      ,i      ;;entry number in memory structure
+            endparams
+
+.include "DBLDIR:synxml.def"
+
+            structure responseData
+                tagName,                a50
+                elementData,            a100
+
+            stack record ivar
+                elementCount,           D_ADDR
+                counter,                D_ADDR
+
+            stack record xmlvar
+                element,                XML_ELEM_TYPE
+                elementList,            XML_ELEMLIST_TYPE
+
+        proc
+
+            clear ^i(ivar), ^i(xmlvar)
+
+            if (!memoryHandle)
+            then
+            begin
+                ;;this is the root element
+                ;;allocate memory
+                memoryHandle = mem_proc(DM_ALLOC+DM_STATIC+DM_BLANK,
+&                   ^size(responseData))
+
+                ;;set the passed root child list to the element list
+                elementList = childList
+            end
+            else
+            begin
+                ;;store the element details into memeory
+                element = xml_elemlist_item(childList, elementIndex)
+                incr entryCount
+                memoryHandle = mem_proc(DM_RESIZ+DM_STATIC+DM_BLANK,
+&                   ^size(responseData) * entryCount, memoryHandle)
+
+                xml_elem_getname(element,
+&                   ^m(responseData[entryCount].tagName, memoryHandle))
+
+                xml_elem_gettext(element,
+&                   ^m(responseData[entryCount].elementData, memoryHandle))
+
+                ;;see if this element has children
+                elementList = xml_elem_children(element)
+            end
+
+            ;;does this element have any children?
+            if (elementList)
+            begin
+                elementCount = xml_elemlist_count(elementList)
+                for counter from 1 thru elementCount
+                begin
+                    expandXML(elementList, counter, memoryHandle, entryCount)
+                end
+            end
+
+            mreturn
+
+        endmethod
+
+    endclass
+endnamespace
+
