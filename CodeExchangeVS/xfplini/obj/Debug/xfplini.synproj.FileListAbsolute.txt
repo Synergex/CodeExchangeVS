@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\xfplini\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\xfplini\bin\Debug\xfplini.exe
+C:\Development\CodeExchangeVS\xfplini\bin\Debug\xfplini.pdb
+C:\Development\CodeExchangeVS\xfplini\obj\Debug\xfplini.exe
+C:\Development\CodeExchangeVS\xfplini\obj\Debug\xfplini.pdb

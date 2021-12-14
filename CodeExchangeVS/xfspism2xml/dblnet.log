@@ -1,0 +1,151 @@
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(159):             status = %rx_debug_init(netid, dbgip, dbgport)
+%DBL-E-NETSUPRT, rx_debug_init not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(180):             status = %rx_debug_start(netid)
+%DBL-E-NETSUPRT, rx_debug_start not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(184):             xcall rx_shutdown_remote(netid)
+%DBL-E-NETSUPRT, rx_shutdown_remote not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(188):             status = %rx_start_remote(netid, ip, port)
+%DBL-E-NETSUPRT, rx_start_remote not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(189):             if(status != RX_SUCCESS) then
+%DBL-E-NFND, RX_SUCCESS not found
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(301):     rcbid = %rcb_create(7)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(303):     xcall rx_setrmtfnc(rcbid, netid, 'xfsp_ism2xml_init')
+%DBL-E-NETSUPRT, rx_setrmtfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(305):     xcall rcb_setarg(rcbid, filename, 1, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(306):     xcall rcb_setarg(rcbid, str_name, 2, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(307):     xcall rcb_setarg(rcbid, xml_type, 3, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(308):     xcall rcb_setarg(rcbid, key_num,  4, D_TYPE_D)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(309):     xcall rcb_setarg(rcbid, key_frst, 5, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(310):     xcall rcb_setarg(rcbid, key_last, 6, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(311):     xcall rcb_setarg(rcbid, rangevar, 7, D_TYPE_D)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(316):     status = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(322):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(344):     rcbid = %rcb_create(1)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(346):     xcall rx_setrmtfnc(rcbid, netid, 'xfsp_ism2xml_xsd')
+%DBL-E-NETSUPRT, rx_setrmtfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(348):     xcall rcb_setarg(rcbid, xml_hdl, 1, D_TYPE_I)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(355):     status = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(361):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(395):     rcbid = %rcb_create(2)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(397):     xcall rx_setrmtfnc(rcbid, netid, 'xfsp_ism2xml_data')
+%DBL-E-NETSUPRT, rx_setrmtfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(399):     xcall rcb_setarg(rcbid, max_recs, 1, D_TYPE_I)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(400):     xcall rcb_setarg(rcbid, num_recs, 2, D_TYPE_I)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(407):     status = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(413):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(438):     rcbid = %rcb_create(1)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(440):     xcall rx_setrmtfnc(rcbid, netid, 'xfsp_ism2xml_exit')
+%DBL-E-NETSUPRT, rx_setrmtfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(442):     xcall rcb_setarg(rcbid, xml_hdl, 1, D_TYPE_HANDLE)
+%DBL-E-NFND, D_TYPE_HANDLE not found
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(447):     status = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(453):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(487):     rcbid = %rcb_create(2)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(489):     xcall rx_setrmtfnc(rcbid, netid, 'get_error_text')
+%DBL-E-NETSUPRT, rx_setrmtfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(491):     xcall rcb_setarg(rcbid, status, 1, D_TYPE_I)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(492):     xcall rcb_setarg(rcbid, text, 2, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(497):     status2 = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(503):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(513):     xcall rx_get_errinfo(netid, rx_stderror)
+%DBL-E-NETSUPRT, rx_get_errinfo not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(531):     xcall rx_get_haltinfo(netid, rx_fatalerror)
+%DBL-E-NETSUPRT, rx_get_haltinfo not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(551):     rcbid = %rcb_create(7)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(555):     xcall rcb_setfnc(rcbid, 'init', 'xfspism2xml.elb')
+%DBL-E-NETSUPRT, rcb_setfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(557):     xcall rcb_setarg(rcbid, filename, 1, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(558):     xcall rcb_setarg(rcbid, str_name, 2, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(559):     xcall rcb_setarg(rcbid, xml_type, 3, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(560):     xcall rcb_setarg(rcbid, key_num,  4, D_TYPE_D)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(561):     xcall rcb_setarg(rcbid, key_frst, 5, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(562):     xcall rcb_setarg(rcbid, key_last, 6, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(563):     xcall rcb_setarg(rcbid, rangevar, 7, D_TYPE_D)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(565):     status = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(567):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(586):     rcbid = %rcb_create(1)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(588):     xcall rcb_setfnc(rcbid, 'xfsp_ism2xml_xsd', 'xfspism2xml.elb')
+%DBL-E-NETSUPRT, rcb_setfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(590):     xcall rcb_setarg(rcbid, xml_hdl, 1, D_TYPE_I)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(592):     status = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(594):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(624):     rcbid = %rcb_create(2)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(626):     xcall rcb_setfnc(rcbid, 'xfsp_ism2xml_data', 'xfspism2xml.elb')
+%DBL-E-NETSUPRT, rcb_setfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(628):     xcall rcb_setarg(rcbid, max_recs, 1, D_TYPE_I)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(629):     xcall rcb_setarg(rcbid, num_recs, 2, D_TYPE_I)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(633):     status = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(635):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(658):     rcbid = %rcb_create(1)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(660):     xcall rcb_setfnc(rcbid, 'xfsp_ism2xml_exit', 'xfspism2xml.elb')
+%DBL-E-NETSUPRT, rcb_setfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(662):     xcall rcb_setarg(rcbid, xml_hdl, 1, D_TYPE_I)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(664):     status = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(666):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(699):     rcbid = %rcb_create(2)
+%DBL-E-NETSUPRT, rcb_create not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(701):     xcall rcb_setfnc(rcbid, 'get_error_text', 'xfspism2xml.elb')
+%DBL-E-NETSUPRT, rcb_setfnc not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(703):     xcall rcb_setarg(rcbid, status, 1, D_TYPE_I)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(704):     xcall rcb_setarg(rcbid, text, 2, D_TYPE_A)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(706):     status2 = %rcb_call(rcbid)
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(708):     xcall rcb_delete(rcbid)
+%DBL-E-NETSUPRT, rcb_delete not supported in .NET
+%DBL-E-NOASM, No assembly file created
+
+Errors:        73
+
+

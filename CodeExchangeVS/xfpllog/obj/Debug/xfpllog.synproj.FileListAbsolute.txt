@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\xfpllog\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\xfpllog\bin\Debug\xfpllog.exe
+C:\Development\CodeExchangeVS\xfpllog\bin\Debug\xfpllog.pdb
+C:\Development\CodeExchangeVS\xfpllog\obj\Debug\xfpllog.exe
+C:\Development\CodeExchangeVS\xfpllog\obj\Debug\xfpllog.pdb

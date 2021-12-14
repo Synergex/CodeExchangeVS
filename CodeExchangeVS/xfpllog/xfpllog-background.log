@@ -1,0 +1,14 @@
+"C:\Development\CodeExchange\xfpllog\xfpl_log.dbl"(13): .include 'INC:xfpl_log.def'
+%DBL-E-OPENIN2, Cannot open:  INC:xfpl_log.def
+"C:\Development\CodeExchange\xfpllog\xfpl_log.dbl"(49): .include 'INC:xfpl_log.def'
+%DBL-E-OPENIN2, Cannot open:  INC:xfpl_log.def
+"C:\Development\CodeExchange\xfpllog\xfpl_log.dbl"(297): .include 'INC:xfpl_log.def'
+%DBL-E-OPENIN2, Cannot open:  INC:xfpl_log.def
+"C:\Development\CodeExchange\xfpllog\xfpl_log.dbl"(429): .include 'INC:xfpl_log.def'
+%DBL-E-OPENIN2, Cannot open:  INC:xfpl_log.def
+"C:\Development\CodeExchange\xfpllog\xfpl_log.dbl"(520): .include 'INC:xfpl_log.def'
+%DBL-E-OPENIN2, Cannot open:  INC:xfpl_log.def
+%DBL-E-NOASM, No assembly file created
+
+Errors:         5
+

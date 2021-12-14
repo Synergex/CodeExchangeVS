@@ -1,0 +1,38 @@
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(142): .include 'INC:xfspism2xml.def'
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.def
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(261): .include 'INC:xfspism2xml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.rec
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(1082): .include 'INC:xfspism2xml.rec'          ;field definitions
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.rec
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(1255): .include 'INC:xfspism2xml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.rec
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(1356): .include 'INC:xfspism2xml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.rec
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(1418): .include 'INC:xfspism2xml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.rec
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(1453): .include 'INC:xfspism2xml.rec'          ;field definitions
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.rec
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(2414): .include 'INC:xfspism2xml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.rec
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(2415): .include 'INC:xfspism2xml.def'
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.def
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xml.dbl"(2833): .include 'INC:xfspism2xml.rec'          ;field definitions
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.rec
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(76): .include 'INC:xfspism2xml.def'
+%DBL-E-OPENIN2, Cannot open:  INC:xfspism2xml.def
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(124):     xml_type            ,a D_XML_TYPES_SIZ  ;XML type
+%DBL-E-NFND, D_XML_TYPES_SIZ not found
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(131): literal
+%DBL-W-RECETY, Record is empty
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(132):     xml_types           ,D_XML_TYPES_NUM a D_XML_TYPES_SIZ
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(132):     &                       ,D_XML_TYPE_DFLT
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(132):     &                       ,D_XML_TYPE_ATTR
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(132):     &                       ,D_XML_TYPE_TAG
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(132):     &                       ,D_XML_TYPE_ADO
+"C:\Development\CodeExchange\xfspism2xml\xfspism2xmltest.dbl"(132):     &                       ,D_XML_TYPE_ISLE
+%DBL-E-NFND, D_XML_TYPES_NUM not found
+%DBL-E-NOASM, No assembly file created
+
+Warnings:       1
+Errors:        13
+

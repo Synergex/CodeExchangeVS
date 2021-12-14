@@ -1,0 +1,17 @@
+"C:\Development\CodeExchange\xfnl_synergy\xfnl_synergy.dbl"(68):     status = %rx_start_remote(a_netid, a_ip, a_port)
+%DBL-E-NETSUPRT, rx_start_remote not supported in .NET
+"C:\Development\CodeExchange\xfnl_synergy\xfnl_synergy.dbl"(69):     if(status.ne.RX_SUCCESS)
+%DBL-E-NFND, RX_SUCCESS not found
+"C:\Development\CodeExchange\xfnl_synergy\xfnl_synergy.dbl"(92):         xcall rx_shutdown_remote(a_netid)
+%DBL-E-NETSUPRT, rx_shutdown_remote not supported in .NET
+"C:\Development\CodeExchange\xfnl_synergy\xfnl_synergy.dbl"(139):         xcall rxsubr(a_netid, 'list_getrec', status, a_data, a_itemindex)
+%DBL-E-NETSUPRT, rxsubr not supported in .NET
+"C:\Development\CodeExchange\xfnl_synergy\xfnl_synergy.dbl"(147):             xcall rx_get_errinfo(a_netid, rx_stderror)
+%DBL-E-NETSUPRT, rx_get_errinfo not supported in .NET
+"C:\Development\CodeExchange\xfnl_synergy\xfnl_synergy.dbl"(193):     xcall rx_get_haltinfo(a_netid, rx_fatalerror)
+%DBL-E-NETSUPRT, rx_get_haltinfo not supported in .NET
+%DBL-E-NOASM, No assembly file created
+
+Errors:         6
+
+
