@@ -1,0 +1,75 @@
+;xfspism2xml.rec
+
+.ifdef INIT_GLOBAL
+global data section xfspism2xml ,init
+.else
+global data section xfspism2xml
+.endc
+
+record
+
+    ;data populated by _init arguments
+    rps_filename        ,a30                    ;Repository file name
+    rps_strname         ,a30                    ;Repository structure name
+    xml_type            ,a D_XML_TYPES_SIZ      ;XML style type
+    range_type          ,i4                     ;firstkey/lastkey parameter type (0=record, 1=key)
+    keyno               ,i4                     ;key number
+
+    ;static memory handles
+    s_hdl               ,i4                     ;structure details list handle
+    k_hdl               ,i4                     ;key handle (for range checking)
+
+    ;populated data
+    ism_filename        ,a255                   ;ISAM filename
+    reclen              ,i4                     ;record length
+    keyasc              ,i4                     ;key is ascending key
+    keylen              ,i4                     ;key length
+
+    chan                ,i4                     ;channel
+    num_structures      ,i4                     ;number of structures associated with file
+
+    parser_id           ,XML_PARSER_TYPE        ;XML parser
+    doc_id              ,XML_DOC_TYPE           ;document ID
+    root_node           ,XML_ELEM_TYPE          ;root node
+    file_node           ,XML_ELEM_TYPE          ;file node
+
+endglobal
+
+structure b
+    buff                ,a1
+
+structure str_info
+    name                ,a30                    ;structure name
+    info                ,a ^size(s_info)        ;structure info record
+    hdl_tags            ,i4                     ;tag_array handle
+    hdl_flds            ,i4                     ;fld_array handle
+
+structure tag_array
+    tag_name            ,a30                    ;tag name
+    tag_info            ,a ^size(tg_info)       ;tag details for structure
+    tag_pos             ,i4                     ;field position
+    tag_len             ,i4                     ;field length
+
+structure fld_array
+    fld_name            ,a30                    ;field names for structure
+    fld_pos             ,i4                     ;field position
+    fld_len             ,i4                     ;field length
+    fld_typ             ,a1                     ;field type
+    fld_dp              ,d2                     ;field decimal places
+    fld_ovrlay          ,d1                     ;field is an overlay field
+    fld_grp_st          ,d1                     ;field is first field in group
+    fld_grp_end         ,d1                     ;field is last field in group
+    fld_odbc_name       ,a30                    ;ODBC fieldname
+
+
+.ifndef M_STR_NAMES
+
+.define M_STR_NAMES(fld)    ^m(str_names[str_ctr].fld, sn_hdl)
+.define M_STR_INFO(fld)     ^m(str_info[str_ctr].fld, s_hdl)
+.define M_TAG_NAMES(fld)    ^m(tag_names[tag_ctr].fld, tn_hdl)
+.define M_TAG_ARRAY(fld)    ^m(tag_array[tag_ctr].fld, t_hdl)
+.define M_FLD_ARRAY(fld)    ^m(fld_array[fld_ctr].fld, f_hdl)
+.define M_A_FLD_ARRAY(fld)  ^m(fld_array[a_field_num].fld, a_f_hdl)
+
+.endc
+

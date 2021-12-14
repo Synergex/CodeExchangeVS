@@ -1,0 +1,742 @@
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.define D_HTTP_TIMEOUT 10
+
+;.define D_HTTP_LOG_FILE 'usps.log'
+
+;.define D_URL 'http://testing.shippingapis.com/ShippingAPITest.dll'
+.define D_URL 'http://production.shippingapis.com/ShippingAPI.dll'
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine validateUSaddress
+    req in      a_mode      ,n          ;0=validate address, 1-zipcode lookup
+    opt inout   a_firm      ,a
+    opt inout   a_address1  ,a
+    opt inout   a_address2  ,a
+    opt inout   a_city      ,a
+    opt inout   a_state     ,a
+    opt inout   a_zip5      ,a
+    opt inout   a_zip4      ,a
+    opt out     a_response  ,a          ;response or error text
+    endparams
+
+.include 'DBLDIR:synxml.def'
+
+    record clr_i
+        errnum          ,i4                     ;Error number
+
+        doc             ,XML_DOC_TYPE           ;XML document
+        xmlstr          ,XML_STRING_TYPE        ;XML string
+        parser          ,XML_PARSER_TYPE        ;XML parser
+        root            ,XML_ELEM_TYPE          ;XML Root element
+
+        rootcount       ,i4                     ;Loop counter
+        rootchildren    ,XML_ELEMLIST_TYPE      ;XML element list
+        rootchild       ,XML_ELEM_TYPE          ;XML element
+
+        count           ,i4                     ;Loop counter
+        children        ,XML_ELEMLIST_TYPE      ;XML element list
+        child           ,XML_ELEM_TYPE          ;XML Child element
+
+        errCount        ,i4                     ;Loop counter
+        errChildren     ,XML_ELEMLIST_TYPE      ;XML element list
+        errChild        ,XML_ELEM_TYPE          ;XML Child element
+
+        sh              ,D_HANDLE               ;Handle for send data
+        sl              ,i4                     ;Length of send data
+
+        rh              ,D_HANDLE               ;Handle for request/received data
+        rl              ,i4                     ;Length of request/received data
+
+    stack record clr
+        userID          ,a12                    ;USPS user ID
+        userPW          ,a12                    ;USPS user password
+        errtxt          ,a60                    ;error text
+        xmlText         ,a30000                 ;dummy xml text
+        elem_name       ,a256                   ;element name
+        attr_value      ,a2                     ;attribute value
+
+;; returned XML
+    stack record addressData
+        arrayCtr        ,d1                     ;array counter
+        firm            ,a38                    ;company name
+        addr1           ,a38                    ;address line 1
+        addr2           ,a38                    ;address line 2
+        city            ,a15                    ;city
+        state           ,a2                     ;state
+        zip5            ,a5                     ;zip
+        zip4            ,a4                     ;zip+4
+
+    stack record errorData
+        number          ,a20
+        source          ,a80
+        description     ,a200
+        helpFile        ,a40
+        helpContext     ,a40
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    clear addressData, errorData
+
+    xcall xml_option("ENCODE", SYNESCAPE_ESCAPE)
+
+    ;;get your USPS User Id
+    xcall getlog('USPS_USER', userID, sl)
+
+    using a_mode select
+    (1),
+    begin
+        data apiString       ,a* ,'?API=ZipCodeLookup&XML=%a'
+
+        call start_xml_zip
+        arrayCtr = 1
+        call add_xml_zip
+        call end_xml
+
+        sl = rl + ^size(apiString)
+        sh = %mem_proc(DM_ALLOC+DM_BLANK, sl)
+        xcall s_bld(^m(sh), sl, apiString, ^m(rh))
+        rh = %mem_proc(DM_FREE, rh)
+        clear rl
+    end
+    (),
+    begin
+        data apiString       ,a* ,'?API=Verify&XML=%a'
+
+        call start_xml_verify
+        arrayCtr = 1
+        call add_xml_verify
+        call end_xml
+
+        sl = rl + ^size(apiString)
+        sh = %mem_proc(DM_ALLOC+DM_BLANK, sl)
+        xcall s_bld(^m(sh), sl, apiString, ^m(rh))
+        rh = %mem_proc(DM_FREE, rh)
+        clear rl
+    end
+    endusing
+
+.ifdef D_HTTP_LOG_FILE
+    ;;Delete the last log file
+    xcall delet(D_HTTP_LOG_FILE)
+
+    ;;Call the web service (with logging)
+    errnum = %http_client_get(D_URL+^m(sh), D_HTTP_TIMEOUT, rh, rl, errtxt,, D_HTTP_LOG_FILE)
+    begin
+        ;;log unencoded URL
+        data chan ,i4
+        open(chan=%syn_freechn, A, D_HTTP_LOG_FILE)
+        writes(chan, ' ')
+        writes(chan, D_URL+^m(sh))
+        close chan
+    end
+.else
+    ;;Call the web service
+    errnum = %http_client_get(D_URL+^m(sh), D_HTTP_TIMEOUT, rh, rl, errtxt)
+.endc ;D_HTTP_LOG_FILE
+
+    ;;Did it work?
+    if (.not.errnum .and. rh .ne. 0 .and. rl .gt. 0) then
+        call process_results
+    else
+    begin
+        if(^passed(a_response))
+            a_response = 'HTTP GET error '+%string(errnum)
+    end
+
+    ;;Clean up
+    if (rh)
+        rh = %mem_proc(DM_FREE,rh)
+
+    xreturn
+
+;-----------------------------------------------------------------------------
+
+start_xml_verify,
+
+    doc = %xml_doc_create
+
+    ;;Name the root element and add attributes
+    root = %xml_doc_getroot(doc)
+    xcall xml_elem_setname(root, "AddressValidateRequest")
+    xcall xml_elem_setattribute(root, 'USERID', UserID)
+
+    return
+
+;-----------------------------------------------------------------------------
+
+add_xml_verify,
+
+    rootchild = %xml_elem_create
+    xcall xml_elem_setname(rootchild, "Address")
+    xcall xml_elem_setattribute(rootchild, 'ID', %string(arrayCtr-1))
+    xcall xml_elem_addchild(root, rootchild)
+
+    if(^passed(a_firm) && a_firm)
+    begin
+        child = %xml_elem_create
+        xcall xml_elem_setname(child, "FirmName")
+        xcall xml_elem_settext(child, %atrim(a_firm))
+        xcall xml_elem_addchild(rootchild, child)
+    end
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "Address1")
+    xcall xml_elem_settext(child, %atrim(a_address1))
+    xcall xml_elem_addchild(rootchild, child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "Address2")
+    xcall xml_elem_settext(child, %atrim(a_address2))
+    xcall xml_elem_addchild(rootchild, child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "City")
+    xcall xml_elem_settext(child, %atrim(a_city))
+    xcall xml_elem_addchild(rootchild, child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "State")
+    xcall xml_elem_settext(child, %atrim(a_state))
+    xcall xml_elem_addchild(rootchild, child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "Zip5")
+    xcall xml_elem_settext(child, %atrim(a_zip5))
+    xcall xml_elem_addchild(rootchild, child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "Zip4")
+    xcall xml_elem_settext(child, %atrim(a_zip4))
+    xcall xml_elem_addchild(rootchild, child)
+
+    return
+
+;-----------------------------------------------------------------------------
+
+start_xml_zip,
+
+    doc = %xml_doc_create
+
+    ;;Name the root element and add attributes
+    root = %xml_doc_getroot(doc)
+    xcall xml_elem_setname(root, "ZipCodeLookupRequest")
+    xcall xml_elem_setattribute(root, 'USERID', UserID)
+
+    return
+
+;-----------------------------------------------------------------------------
+
+add_xml_zip,
+
+    rootchild = %xml_elem_create
+    xcall xml_elem_setname(rootchild, "Address")
+    xcall xml_elem_setattribute(rootchild, 'ID', %string(arrayCtr-1))
+    xcall xml_elem_addchild(root, rootchild)
+
+    if(^passed(a_firm) && a_firm)
+    begin
+        child = %xml_elem_create
+        xcall xml_elem_setname(child, "FirmName")
+        xcall xml_elem_settext(child, %atrim(a_firm))
+        xcall xml_elem_addchild(rootchild, child)
+    end
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "Address1")
+    xcall xml_elem_settext(child, %atrim(a_address1))
+    xcall xml_elem_addchild(rootchild, child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "Address2")
+    xcall xml_elem_settext(child, %atrim(a_address2))
+    xcall xml_elem_addchild(rootchild, child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "City")
+    xcall xml_elem_settext(child, %atrim(a_city))
+    xcall xml_elem_addchild(rootchild, child)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "State")
+    xcall xml_elem_settext(child, %atrim(a_state))
+    xcall xml_elem_addchild(rootchild, child)
+
+    return
+
+;-----------------------------------------------------------------------------
+
+end_xml,
+
+    ;;Get the XML for the auth request into a handle
+    xmlstr = %xml_doc_tostring(doc)
+    xcall xml_doc_delete(doc)
+
+    rl = %xml_string_getsize(xmlstr)
+    rh = %mem_proc(DM_ALLOC+DM_BLANK, rl)
+    ^m(rh) = ^m(%xml_string_gethandle(xmlstr))
+    xcall xml_string_delete(xmlstr)
+
+    if(^m(rh) == "<?xml version='1.0'?>")
+    begin
+        ^m(rh) = ^m(rh) - "<?xml version='1.0'?>"
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+
+process_results,
+
+    xcall xml_option("ENCODE", SYNESCAPE_UNESCAPE)
+
+    xmlstr = %xml_string_create
+    xcall xml_string_appendhandle(xmlstr, rh, rl)
+
+    parser = %xml_parser_create
+    doc = %xml_parser_parsestring(parser, xmlstr)
+
+    xcall xml_string_delete(xmlstr)
+
+    if (doc) then
+    begin
+        xcall xml_parser_delete(parser)
+        call parse_results
+        xcall xml_doc_delete(doc)
+
+        if(^passed(a_firm))
+            a_firm = firm
+        if(^passed(a_address1))
+            a_address1 = addr1
+        if(^passed(a_address2))
+            a_address2 = addr2
+        if(^passed(a_city))
+            a_city = city
+        if(^passed(a_state))
+            a_state = state
+        if(^passed(a_zip5))
+            a_zip5 = zip5
+        if(^passed(a_zip4))
+            a_zip4 = zip4
+        if(^passed(a_response))
+            a_response = errorData
+    end
+    else
+    begin
+        xcall xml_parser_error(parser, errtxt)
+        xcall xml_parser_delete(parser)
+        if(^passed(a_response))
+            a_response = "Failed to parse response XML: " + errtxt
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+
+parse_results,
+
+    ;;Parse <AddressValidateResponse> or <ZipCodeLookupResponse> node
+    root = %xml_doc_getroot(doc)
+    xcall xml_elem_getname(root, elem_name)
+    if(elem_name == 'Error')
+    begin
+        xcall processErrorXML(root, errorData)
+        return
+    end
+
+    rootchildren = %xml_elem_children(root)
+    for rootcount from 1 thru %xml_elemlist_count(rootchildren)
+    begin
+        rootchild = %xml_elemlist_item(rootchildren, rootcount)
+        xcall xml_elem_getname(rootchild, elem_name)
+        using elem_name select
+        ("Address"),
+        begin
+            children = %xml_elem_children(rootchild)
+            for count from 1 thru %xml_elemlist_count(children)
+            begin
+                child = %xml_elemlist_item(children, count)
+                xcall xml_elem_getName(child, elem_name)
+                if(%xml_elem_getAttribute(child, 'ID', attr_value)) then
+                    arrayCtr = ^d(%atrim(attr_value)) + 1
+                else
+                    arrayCtr = 1
+                using elem_name select
+                ("Address1"),
+                    xcall xml_elem_gettext(child, addr1)
+                ("Address2"),
+                    xcall xml_elem_gettext(child, addr2)
+                ("City"),
+                    xcall xml_elem_gettext(child, city)
+                ("State"),
+                    xcall xml_elem_gettext(child, state)
+                ("Zip5"),
+                    xcall xml_elem_gettext(child, zip5)
+                ("Zip4"),
+                    xcall xml_elem_gettext(child, zip4)
+                ("ReturnText"),
+                    xcall xml_elem_gettext(child, errorData)
+
+                ("Error"),
+                begin
+                    xcall processErrorXML(child, errorData)
+                    exitloop
+                end
+                endusing
+            end
+        end
+        ('Error'),
+        begin
+            xcall processErrorXML(rootchild, errorData)
+            exitloop
+        end
+        endusing
+    end
+
+    return
+
+endsubroutine
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine lookupUSzipcode
+    req in      a_zip5      ,a
+    opt out     a_city      ,a
+    opt out     a_state     ,a
+    opt out     a_response  ,a          ;response or error text
+    endparams
+
+.include 'DBLDIR:synxml.def'
+
+    structure buff
+        b               ,a1
+
+    record clr_i
+        errnum          ,i4                     ;Error number
+
+        doc             ,XML_DOC_TYPE           ;XML document
+        xmlstr          ,XML_STRING_TYPE        ;XML string
+        parser          ,XML_PARSER_TYPE        ;XML parser
+        root            ,XML_ELEM_TYPE          ;XML Root element
+
+        rootcount       ,i4                     ;Loop counter
+        rootchildren    ,XML_ELEMLIST_TYPE      ;XML element list
+        rootchild       ,XML_ELEM_TYPE          ;XML element
+
+        count           ,i4                     ;Loop counter
+        children        ,XML_ELEMLIST_TYPE      ;XML element list
+        child           ,XML_ELEM_TYPE          ;XML Child element
+
+        errCount        ,i4                     ;Loop counter
+        errChildren     ,XML_ELEMLIST_TYPE      ;XML element list
+        errChild        ,XML_ELEM_TYPE          ;XML Child element
+
+        sh              ,D_HANDLE               ;Handle for send data
+        sl              ,i4                     ;Length of send data
+
+        rh              ,D_HANDLE               ;Handle for request/received data
+        rl              ,i4                     ;Length of request/received data
+
+    stack record clr
+        userID          ,a12                    ;USPS user ID
+        userPW          ,a12                    ;USPS user password
+        errtxt          ,a60                    ;error text
+        xmlText         ,a30000                 ;dummy xml text
+        elem_name       ,a256                   ;element name
+        attr_value      ,a2                     ;attribute value
+
+    stack record addressData
+        arrayCtr        ,d1                     ;array counter
+        city            ,a15                    ;city
+        state           ,a2                     ;state
+        zip5            ,a5                     ;zip
+
+    stack record errorData
+        number          ,a20
+        source          ,a80
+        description     ,a200
+        helpFile        ,a40
+        helpContext     ,a40
+
+    literal
+        apiString       ,a* ,'?API=CityStateLookup&XML=%a'
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    clear addressData, errorData
+
+    xcall xml_option("ENCODE", SYNESCAPE_ESCAPE)
+
+    ;;get your USPS User Id
+    xcall getlog('USPS_USER', userID, sl)
+
+    call start_xml
+
+    arrayCtr = 1
+    call add_xml
+
+    call end_xml
+
+    sl = rl + ^size(apiString)
+    sh = %mem_proc(DM_ALLOC+DM_BLANK, sl)
+    xcall s_bld(^m(sh), sl, apiString, ^m(rh))
+    rh = %mem_proc(DM_FREE, rh)
+    clear rl
+
+.ifdef D_HTTP_LOG_FILE
+    ;;Delete the last log file
+    xcall delet(D_HTTP_LOG_FILE)
+
+    ;;Call the web service (with logging)
+    errnum = %http_client_get(D_URL+^m(sh), D_HTTP_TIMEOUT, rh, rl, errtxt,, D_HTTP_LOG_FILE)
+    begin
+        ;;log unencoded URL
+        data chan,i4
+        open(chan=%syn_freechn, A, D_HTTP_LOG_FILE)
+        writes(chan, ' ')
+        writes(chan, D_URL+^m(sh))
+        close chan
+    end
+.else
+    ;;Call the web service
+    errnum = %http_client_get(D_URL+^m(sh), D_HTTP_TIMEOUT, rh, rl, errtxt)
+.endc ;D_HTTP_LOG_FILE
+
+    ;;Did it work?
+    if (.not.errnum .and. rh .ne. 0 .and. rl .gt. 0) then
+        call process_results
+    else
+    begin
+        if(^passed(a_response))
+            a_response = 'HTTP GET error '+%string(errnum)
+    end
+
+    ;;Clean up
+    if (rh)
+        rh = %mem_proc(DM_FREE,rh)
+
+    xreturn
+
+;-----------------------------------------------------------------------------
+
+start_xml,
+
+    doc = %xml_doc_create
+
+    ;;Name the root element and add attributes
+    root = %xml_doc_getroot(doc)
+    xcall xml_elem_setname(root, "CityStateLookupRequest")
+    xcall xml_elem_setattribute(root, 'USERID', UserID)
+
+    return
+
+;-----------------------------------------------------------------------------
+
+add_xml,
+
+    rootchild = %xml_elem_create
+    xcall xml_elem_setname(rootchild, "ZipCode")
+    xcall xml_elem_setattribute(rootchild, 'ID', %string(arrayCtr-1))
+    xcall xml_elem_addchild(root, rootchild)
+
+    child = %xml_elem_create
+    xcall xml_elem_setname(child, "Zip5")
+    xcall xml_elem_settext(child, %atrim(a_zip5))
+    xcall xml_elem_addchild(rootchild, child)
+
+    return
+
+;-----------------------------------------------------------------------------
+
+end_xml,
+
+    ;;Get the XML for the auth request into a handle
+    xmlstr = %xml_doc_tostring(doc)
+    xcall xml_doc_delete(doc)
+
+    rl = %xml_string_getsize(xmlstr)
+    rh = %mem_proc(DM_ALLOC+DM_BLANK, rl)
+    ^m(rh) = ^m(%xml_string_gethandle(xmlstr))
+    xcall xml_string_delete(xmlstr)
+
+    if(^m(rh) == "<?xml version='1.0'?>")
+    begin
+        ^m(rh) = ^m(rh) - "<?xml version='1.0'?>"
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+
+process_results,
+
+    xcall xml_option("ENCODE", SYNESCAPE_UNESCAPE)
+
+    xmlstr = %xml_string_create
+    xcall xml_string_appendhandle(xmlstr, rh, rl)
+
+    parser = %xml_parser_create
+    doc = %xml_parser_parsestring(parser, xmlstr)
+
+    xcall xml_string_delete(xmlstr)
+
+    if (doc) then
+    begin
+        xcall xml_parser_delete(parser)
+        call parse_results
+        xcall xml_doc_delete(doc)
+
+        if(^passed(a_city))
+            a_city = city
+        if(^passed(a_state))
+            a_state = state
+        if(^passed(a_response))
+            a_response = errorData
+    end
+    else
+    begin
+        xcall xml_parser_error(parser, errtxt)
+        xcall xml_parser_delete(parser)
+        if(^passed(a_response))
+            a_response = "Failed to parse response XML: " + errtxt
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+
+parse_results,
+
+    ;;Parse <CityStateLookupResponse>
+    root = %xml_doc_getroot(doc)
+    xcall xml_elem_getname(root, elem_name)
+    if(elem_name == 'Error')
+    begin
+        child = root
+        call process_error_xml
+        return
+    end
+
+    rootchildren = %xml_elem_children(root)
+    for rootcount from 1 thru %xml_elemlist_count(rootchildren)
+    begin
+        rootchild = %xml_elemlist_item(rootchildren, rootcount)
+        xcall xml_elem_getname(rootchild, elem_name)
+        using elem_name select
+        ("ZipCode"),
+        begin
+            children = %xml_elem_children(rootchild)
+            for count from 1 thru %xml_elemlist_count(children)
+            begin
+                child = %xml_elemlist_item(children, count)
+                xcall xml_elem_getName(child, elem_name)
+                if(%xml_elem_getAttribute(child, 'ID', attr_value)) then
+                    arrayCtr = ^d(%atrim(attr_value)) + 1
+                else
+                    arrayCtr = 1
+                using elem_name select
+                ("City"),
+                    xcall xml_elem_gettext(child, city)
+                ("State"),
+                    xcall xml_elem_gettext(child, state)
+                ("Zip5"),
+                    xcall xml_elem_gettext(child, zip5)
+                ("ReturnText"),
+                    xcall xml_elem_gettext(child, errorData)
+
+                ('Error'),
+                begin
+                    call process_error_xml
+                    exitloop
+                end
+                endusing
+            end
+        end
+        ("Error"),
+        begin
+            child = rootchild
+            call process_error_xml
+            exitloop
+        end
+        endusing
+    end
+
+    return
+
+;-----------------------------------------------------------------------------
+
+process_error_xml,
+
+    errChildren = %xml_elem_children(child)
+    for errCount from 1 thru %xml_elemlist_count(errChildren)
+    begin
+        errChild = %xml_elemlist_item(errChildren, errCount)
+        xcall xml_elem_getName(errChild, elem_name)
+        using elem_name select
+        ("Number"),
+            xcall xml_elem_gettext(errChild, errorData.Number)
+        ("Source"),
+            xcall xml_elem_gettext(errChild, errorData.source)
+        ("Description"),
+            xcall xml_elem_gettext(errChild, errorData.description)
+        ("HelpFile"),
+            xcall xml_elem_gettext(errChild, errorData.helpFile)
+        ("HelpContext"),
+            xcall xml_elem_gettext(errChild, errorData.helpContext)
+        endusing
+    end
+
+    return
+
+endsubroutine
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine processErrorXML
+    req in      aXMLnode    ,XML_ELEM_TYPE      ;XML node to process
+    req out     aErrorData  ,a                  ;error structure
+    endparams
+    stack record errorData
+        number          ,a20
+        source          ,a80
+        description     ,a200
+        helpFile        ,a40
+        helpContext     ,a40
+    endrecord
+    record
+        errCount        ,i4                     ;Loop counter
+        errChildren     ,XML_ELEMLIST_TYPE      ;XML element list
+        errChild        ,XML_ELEM_TYPE          ;XML Child element
+        elem_name       ,a40                    ;XML element name
+    endrecord
+proc
+    clear errorData
+    errChildren = %xml_elem_children(aXMLnode)
+    for errCount from 1 thru %xml_elemlist_count(errChildren)
+    begin
+        errChild = %xml_elemlist_item(errChildren, errCount)
+        xcall xml_elem_getName(errChild, elem_name)
+        using elem_name select
+        ("Number"),
+            xcall xml_elem_gettext(errChild, errorData.Number)
+        ("Source"),
+            xcall xml_elem_gettext(errChild, errorData.source)
+        ("Description"),
+            xcall xml_elem_gettext(errChild, errorData.description)
+        ("HelpFile"),
+            xcall xml_elem_gettext(errChild, errorData.helpFile)
+        ("HelpContext"),
+            xcall xml_elem_gettext(errChild, errorData.helpContext)
+        endusing
+    end
+    aErrorData = errorData
+    xreturn
+endsubroutine
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

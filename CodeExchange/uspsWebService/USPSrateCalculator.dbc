@@ -1,0 +1,742 @@
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.define D_HTTP_TIMEOUT 10
+
+;.define D_HTTP_LOG_FILE 'usps.log'
+
+;.define D_URL 'http://testing.shippingapis.com/ShippingAPITest.dll'
+.define D_URL 'http://production.shippingapis.com/ShippingAPI.dll'
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+import System.Collections
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+namespace SynPSG.Utilities.USPS
+
+    public enum ServiceType
+        All     ,0
+        FirstClass
+        Priority
+        PriorityCommercial
+        Express
+        ExpressCommercial
+        ExpressSH
+        ExpressSHCommercial
+        ExpressHFP
+        ExpressHFPCommercial
+        BPM
+        Parcel
+        Media
+        Library
+        Online
+    endenum
+
+    public enum FirstClassType
+        None    ,0
+        Letter
+        Flat
+        Parcel
+    endenum
+
+    public enum ContainerType
+        None    ,0
+        FlatRateEnvelope
+        FlatRateBox
+        SmFlatRateBox
+        MdFlatRateBox
+        LgFlatRateBox
+        Variable
+        Rectangular
+        Nonrectangular
+    endenum
+
+    public enum SizeType
+        None    ,0
+        Regular             ;width+length+height+girth <= 84 inches
+        Large               ;84 > w+l+h+g <= 108 inches
+        Oversize            ;108 > w+l+h+g <= 130 inches
+    endenum
+
+    public enum ShipOption
+        None    ,0
+        EMSH
+        HFP
+    endenum
+
+    public class USPS
+
+        private record
+            mUserID     ,string
+            mRespText   ,string
+        endrecord
+
+        ;;;<summary>
+        ;;;Default constructor
+        ;;;</summary>
+        public method USPS
+            endparams
+            record
+                userID  ,a20
+                len     ,i4
+            endrecord
+        proc
+            xcall getlog('USPS_USER', userID, len)
+            if(len) then
+                mUserID = userID(1:len)
+            else
+                mUserID = ""
+            mRespText = ""
+            mreturn
+        endmethod
+        
+        ;;;<summary>
+        ;;;Constructor
+        ;;;</summary>
+        public method USPS
+            req in userID   ,string
+            endparams
+        proc
+            mUserID = userID
+            mRespText = ""
+            mreturn
+        endmethod
+
+        public property RespText ,string
+            method get
+            proc
+                mreturn mRespText
+            endmethod
+        endproperty
+        
+        ;;;<summary>
+        ;;;calulate USPS rate  1=Response Text(ok), 0=No Response Text(ok), -1=Error Text
+        ;;;</summary>
+        public method calculatePostage ,integer
+            req out     a_data      ,@ArrayList
+            req in      a_service   ,SynPSG.Utilities.USPS.ServiceType
+            req in      a_firstClass,SynPSG.Utilities.USPS.FirstClassType
+            req in      a_fromZip   ,string
+            req in      a_toZip     ,string
+            req in      a_pounds    ,integer
+            req in      a_ounces    ,decimal
+            req in      a_container ,SynPSG.Utilities.USPS.ContainerType
+            req in      a_size      ,SynPSG.Utilities.USPS.SizeType
+            req in      a_width     ,decimal
+            req in      a_length    ,decimal
+            req in      a_height    ,decimal
+            req in      a_girth     ,decimal
+            req in      a_machinable,boolean
+            req in      a_shipDate  ,integer ;yyyymmdd
+            req in      a_shipOption,SynPSG.Utilities.USPS.ShipOption
+            req in      a_returnLoc ,boolean
+            endparams
+
+.include 'DBLDIR:synxml.def'
+            
+            ;;A_DATA arraylist format
+            stack record resultData
+                zone            ,a2                     ;USPS zone
+                serviceClass    ,a2                     ;service class #
+                serviceType     ,a25                    ;service class text
+                serviceRate     ,d10.2                  ;rate
+            endrecord
+            
+            ;;Error string format
+            stack record errorData
+                number          ,a20
+                source          ,a80
+                description     ,a200
+                helpFile        ,a40
+                helpContext     ,a40
+            endrecord
+
+            literal
+                apiString       ,a* ,'?API=RateV3&XML=%a'
+            endliteral
+
+            record clr_i
+                rStatus         ,i4                     ;method return status
+                errnum          ,i4                     ;Error number
+
+                doc             ,XML_DOC_TYPE           ;XML document
+                xmlstr          ,XML_STRING_TYPE        ;XML string
+                parser          ,XML_PARSER_TYPE        ;XML parser
+                root            ,XML_ELEM_TYPE          ;XML Root element
+
+                rootcount       ,i4                     ;Loop counter
+                rootchildren    ,XML_ELEMLIST_TYPE      ;XML element list
+                rootchild       ,XML_ELEM_TYPE          ;XML element
+
+                count           ,i4                     ;Loop counter
+                children        ,XML_ELEMLIST_TYPE      ;XML element list
+                child           ,XML_ELEM_TYPE          ;XML Child element
+
+                postageCount    ,i4                     ;Loop counter
+                postageChildren ,XML_ELEMLIST_TYPE      ;XML element list
+                postageChild    ,XML_ELEM_TYPE          ;XML Child element
+
+                sh              ,D_HANDLE               ;Handle for send data
+                sl              ,i4                     ;Length of send data
+
+                rh              ,D_HANDLE               ;Handle for request/received data
+                rl              ,i4                     ;Length of request/received data
+            endrecord
+
+            stack record clr
+                errtxt          ,a60                    ;error text
+                xmlText         ,a30000                 ;dummy xml text
+                elem_name       ,a256                   ;element name
+                elem_value      ,a256                   ;element value
+                attr_value      ,a4                     ;attribute value
+            endrecord
+
+            ;;returned XML data
+            stack record rateData
+                arrayCtr        ,d1                     ;array counter
+                service         ,a25
+                firstClass      ,a10
+                fromZip         ,a5
+                toZip           ,a5
+                pounds          ,d2
+                ounces          ,d10.1
+                container       ,a20
+                size            ,a10
+                width           ,d10.1
+                length          ,d10.1
+                height          ,d10.1
+                girth           ,d10.1
+                machinable      ,boolean
+                shipDate        ,a11                    ;dd-mmm-yyyy
+                shipOption      ,a5
+                returnLoc       ,boolean
+            endrecord
+
+        proc
+
+            clear clr, ^i(clr_i)
+            mRespText = ""
+
+            clear rateData, errorData
+
+            xcall xml_option("ENCODE", SYNESCAPE_ESCAPE)
+
+            call start_xml
+            arrayCtr = 1
+            call add_xml
+            call end_xml
+
+            sl = rl + ^size(apiString)
+            sh = %mem_proc(DM_ALLOC+DM_BLANK, sl)
+            xcall s_bld(^m(sh), sl, apiString, ^m(rh))
+            rh = %mem_proc(DM_FREE, rh)
+            clear rl
+
+.ifdef D_HTTP_LOG_FILE
+            ;;Delete the last log file
+            xcall delet(D_HTTP_LOG_FILE)
+
+            ;;Call the web service (with logging)
+            errnum = %http_client_get(D_URL+^m(sh), D_HTTP_TIMEOUT, rh, rl, errtxt,, D_HTTP_LOG_FILE)
+            begin
+                ;;log unencoded URL
+                data chan ,i4
+                open(chan=%syn_freechn, A, D_HTTP_LOG_FILE)
+                writes(chan, ' ')
+                writes(chan, D_URL+^m(sh))
+                close chan
+            end
+.else
+            ;;Call the web service
+            errnum = %http_client_get(D_URL+^m(sh), D_HTTP_TIMEOUT, rh, rl, errtxt)
+.endc ;D_HTTP_LOG_FILE
+
+            ;;Did it work?
+            if (.not.errnum .and. rh .ne. 0 .and. rl .gt. 0) then
+                call process_results
+            else
+            begin
+                rStatus = -1
+                clear errorData
+                errorData.description = 'HTTP GET error '+%string(errnum)
+                mRespText = errorData
+            end
+
+            ;Clean up
+            if (rh)
+                rh = %mem_proc(DM_FREE,rh)
+
+            mreturn rStatus
+
+            ;-----------------------------------------------------------------------------
+
+        start_xml,
+
+            doc = %xml_doc_create
+
+            ;;Name the root element and add attributes
+            root = %xml_doc_getroot(doc)
+            xcall xml_elem_setname(root, "RateV3Request")
+            xcall xml_elem_setattribute(root, 'USERID', mUserID)
+
+            return
+
+            ;-----------------------------------------------------------------------------
+
+        add_xml,
+
+            rootchild = %xml_elem_create
+            xcall xml_elem_setname(rootchild, "Package")
+            using arrayCtr select
+            (1),
+                xcall xml_elem_setattribute(rootchild, 'ID', '1ST')
+            (2),
+                xcall xml_elem_setattribute(rootchild, 'ID', '2ND')
+            (3),
+                xcall xml_elem_setattribute(rootchild, 'ID', '3RD')
+            endusing
+            xcall xml_elem_addchild(root, rootchild)
+
+            child = %xml_elem_create
+            xcall xml_elem_setname(child, "Service")
+            xcall xml_elem_settext(child, getServiceText(a_service))
+            xcall xml_elem_addchild(rootchild, child)
+
+            child = %xml_elem_create
+            xcall xml_elem_setname(child, "FirstClassMailType")
+            xcall xml_elem_settext(child, getFirstClassTypeText(a_firstClass))
+            xcall xml_elem_addchild(rootchild, child)
+
+            child = %xml_elem_create
+            xcall xml_elem_setname(child, "ZipOrigination")
+            xcall xml_elem_settext(child, a_fromZip)
+            xcall xml_elem_addchild(rootchild, child)
+
+            child = %xml_elem_create
+            xcall xml_elem_setname(child, "ZipDestination")
+            xcall xml_elem_settext(child, a_toZip)
+            xcall xml_elem_addchild(rootchild, child)
+
+            child = %xml_elem_create
+            xcall xml_elem_setname(child, "Pounds")
+            xcall xml_elem_settext(child, %string(a_pounds))
+            xcall xml_elem_addchild(rootchild, child)
+
+            child = %xml_elem_create
+            xcall xml_elem_setname(child, "Ounces")
+            xcall xml_elem_settext(child, dec2string(a_ounces))
+            xcall xml_elem_addchild(rootchild, child)
+
+            if(a_container != SynPSG.Utilities.USPS.ContainerType.None)
+            begin
+                child = %xml_elem_create
+                xcall xml_elem_setname(child, "Container")
+                xcall xml_elem_settext(child, getContainerTypeText(a_container))
+                xcall xml_elem_addchild(rootchild, child)
+            end
+
+            child = %xml_elem_create
+            xcall xml_elem_setname(child, "Size")
+            xcall xml_elem_settext(child, getSizeTypeText(a_size))
+            xcall xml_elem_addchild(rootchild, child)
+
+            if(a_width)
+            begin
+                child = %xml_elem_create
+                xcall xml_elem_setname(child, "Width")
+                xcall xml_elem_settext(child, dec2string(a_width))
+                xcall xml_elem_addchild(rootchild, child)
+            end
+
+            if(a_length)
+            begin
+                child = %xml_elem_create
+                xcall xml_elem_setname(child, "Length")
+                xcall xml_elem_settext(child, dec2string(a_length))
+                xcall xml_elem_addchild(rootchild, child)
+            end
+
+            if(a_height)
+            begin
+                child = %xml_elem_create
+                xcall xml_elem_setname(child, "Height")
+                xcall xml_elem_settext(child, dec2string(a_height))
+                xcall xml_elem_addchild(rootchild, child)
+            end
+
+            if(a_girth)
+            begin
+                child = %xml_elem_create
+                xcall xml_elem_setname(child, "Girth")
+                xcall xml_elem_settext(child, dec2string(a_girth))
+                xcall xml_elem_addchild(rootchild, child)
+            end
+
+            child = %xml_elem_create
+            xcall xml_elem_setname(child, "Machinable")
+            if(a_machinable == TRUE) then
+                xcall xml_elem_settext(child, 'TRUE')
+            else
+                xcall xml_elem_settext(child, 'FALSE')
+            xcall xml_elem_addchild(rootchild, child)
+
+            if(a_shipDate > 19000100)
+            begin
+                child = %xml_elem_create
+                xcall xml_elem_setname(child, "ShipDate")
+                elem_value = %date(%jperiod(a_shipDate))
+                locase elem_value
+                xcall xml_elem_settext(child, %atrim(elem_value))
+
+                if(a_shipOption != SynPSG.Utilities.USPS.ShipOption.None)
+                    xcall xml_elem_setattribute(child, 'Option', getShipOptionText(a_shipOption))
+
+                xcall xml_elem_addchild(rootchild, child)
+
+                child = %xml_elem_create
+                xcall xml_elem_setname(child, "ReturnLocations")
+                if(a_returnLoc == TRUE) then
+                    xcall xml_elem_settext(child, 'TRUE')
+                else
+                    xcall xml_elem_settext(child, 'FALSE')
+                xcall xml_elem_addchild(rootchild, child)
+            end
+
+            return
+
+            ;-----------------------------------------------------------------------------
+
+        end_xml,
+
+            ;;Get the XML for the auth request into a handle
+            xmlstr = %xml_doc_tostring(doc)
+            xcall xml_doc_delete(doc)
+
+            rl = %xml_string_getsize(xmlstr)
+            rh = %mem_proc(DM_ALLOC+DM_BLANK, rl)
+            ^m(rh) = ^m(%xml_string_gethandle(xmlstr))
+            xcall xml_string_delete(xmlstr)
+
+            if(^m(rh) == "<?xml version='1.0'?>")
+            begin
+                ^m(rh) = ^m(rh) - "<?xml version='1.0'?>"
+            end
+
+            return
+
+            ;-----------------------------------------------------------------------------
+
+        process_results,
+
+            xcall xml_option("ENCODE", SYNESCAPE_UNESCAPE)
+
+            xmlstr = %xml_string_create
+            xcall xml_string_appendhandle(xmlstr, rh, rl)
+
+            parser = %xml_parser_create
+            doc = %xml_parser_parsestring(parser, xmlstr)
+
+            xcall xml_string_delete(xmlstr)
+
+            if (doc) then
+            begin
+                xcall xml_parser_delete(parser)
+                call parse_results
+                xcall xml_doc_delete(doc)
+            end
+            else
+            begin
+                xcall xml_parser_error(parser, errtxt)
+                xcall xml_parser_delete(parser)
+                rStatus = -1
+                clear errorData
+                errorData.description = "Failed to parse response XML: " + errtxt
+                mRespText = errorData
+            end
+
+            return
+
+            ;-----------------------------------------------------------------------------
+
+        parse_results,
+
+            ;;Parse <RateV3Response>
+            root = %xml_doc_getroot(doc)
+            xcall xml_elem_getname(root, elem_name)
+            if(elem_name == "Error")
+            begin
+                processErrorXML(root)
+                rStatus = -1
+                return
+            end
+
+            rootchildren = %xml_elem_children(root)
+            for rootcount from 1 thru %xml_elemlist_count(rootchildren)
+            begin
+                rootchild = %xml_elemlist_item(rootchildren, rootcount)
+                xcall xml_elem_getname(rootchild, elem_name)
+                using elem_name select
+                ("Package"),
+                begin
+                    clear resultData
+                    children = %xml_elem_children(rootchild)
+                    for count from 1 thru %xml_elemlist_count(children)
+                    begin
+                        child = %xml_elemlist_item(children, count)
+                        xcall xml_elem_getName(child, elem_name)
+                        if(%xml_elem_getAttribute(child, 'ID', attr_value)) then
+                            arrayCtr = ^d(%atrim(attr_value)) + 1
+                        else
+                            arrayCtr = 1
+
+                        using elem_name select
+                        ("ZipOrigination"),
+                            xcall xml_elem_gettext(child, fromZip)
+                        ("ZipDestination"),
+                            xcall xml_elem_gettext(child, toZip)
+                        ("Pounds"),
+                        begin
+                            xcall xml_elem_gettext(child, elem_value)
+                            pounds = ^d(%atrim(elem_value))
+                        end
+                        ("Ounces"),
+                        begin
+                            xcall xml_elem_gettext(child, elem_value)
+                            ounces = ^d(%atrim(elem_value))
+                        end
+                        ("FirstClassMailType"),
+                            xcall xml_elem_gettext(child, firstClass)
+                        ("Size"),
+                            xcall xml_elem_gettext(child, size)
+                        ("Machinable"),
+                        begin
+                            xcall xml_elem_gettext(child, elem_value)
+                            if(elem_value == 'true') then
+                                machinable = true
+                            else
+                                machinable = false
+                        end
+
+                        ("Zone"),
+                            xcall xml_elem_gettext(child, zone)
+                        ("Postage"),
+                        begin
+                            xcall xml_elem_getAttribute(child, 'CLASSID', ServiceClass)
+                            postagechildren = %xml_elem_children(child)
+                            for postagecount from 1 thru %xml_elemlist_count(postagechildren)
+                            begin
+                                postagechild = %xml_elemlist_item(postagechildren, postagecount)
+                                xcall xml_elem_getName(postagechild, elem_name)
+                                using elem_name select
+                                ("MailService"),
+                                    xcall xml_elem_gettext(postagechild, ServiceType)
+                                ("Rate"),
+                                begin
+                                    xcall xml_elem_gettext(postagechild, elem_value)
+                                    ServiceRate = %atrim(elem_value)
+                                end
+                                ("Error"),
+                                begin
+                                    processErrorXML(postagechild)
+                                    rStatus = -1
+                                    exitloop
+                                end
+                                endusing
+                            end
+                            if(a_data == ^NULL)
+                                a_data = new ArrayList(1)
+                            a_data.Add((@a)resultData)
+                        end
+                        ("ReturnText"),
+                        begin
+                            xcall xml_elem_gettext(child, errorData)
+                            mRespText = errorData
+                            rStatus = 1
+                        end
+                        ("Error"),
+                        begin
+                            processErrorXML(child)
+                            rStatus = -1
+                            exitloop
+                        end
+                        endusing
+                    end
+                end
+                ("Error"),
+                begin
+                    processErrorXML(rootchild)
+                    rStatus = -1
+                    exitloop
+                end
+                endusing
+            end
+
+            return
+
+        endmethod
+
+        public method getServiceText ,string
+            req in  aServiceType    ,SynPSG.Utilities.USPS.ServiceType
+            endparams
+        proc
+            using aServiceType select
+            (SynPSG.Utilities.USPS.ServiceType.All),
+                mreturn 'ALL'
+            (SynPSG.Utilities.USPS.ServiceType.FirstClass),
+                mreturn 'FIRST CLASS'
+            (SynPSG.Utilities.USPS.ServiceType.Priority),
+                mreturn 'PRIORITY'
+            (SynPSG.Utilities.USPS.ServiceType.PriorityCommercial),
+                mreturn 'PRIORITY COMMERCIAL'
+            (SynPSG.Utilities.USPS.ServiceType.Express),
+                mreturn 'EXPRESS'
+            (SynPSG.Utilities.USPS.ServiceType.ExpressCommercial),
+                mreturn 'EXPRESS COMMERCIAL'
+            (SynPSG.Utilities.USPS.ServiceType.ExpressSH),
+                mreturn 'EXPRESS SH'
+            (SynPSG.Utilities.USPS.ServiceType.ExpressSHCommercial),
+                mreturn 'EXPRESS SH COMMERCIAL'
+            (SynPSG.Utilities.USPS.ServiceType.ExpressHFP),
+                mreturn 'EXPRESS HFP'
+            (SynPSG.Utilities.USPS.ServiceType.ExpressHFPCommercial),
+                mreturn 'EXPRESS HFP COMMERCIAL'
+            (SynPSG.Utilities.USPS.ServiceType.BPM),
+                mreturn 'BPN'
+            (SynPSG.Utilities.USPS.ServiceType.Parcel),
+                mreturn 'PARCEL'
+            (SynPSG.Utilities.USPS.ServiceType.Media),
+                mreturn 'MEDIA'
+            (SynPSG.Utilities.USPS.ServiceType.Library),
+                mreturn 'LIBRARY'
+            (SynPSG.Utilities.USPS.ServiceType.Online),
+                mreturn 'ONLINE'
+            endusing
+            mreturn ''
+        endmethod
+
+        public method getFirstClassTypeText ,string
+            req in  aServiceType    ,SynPSG.Utilities.USPS.FirstClassType
+            endparams
+        proc
+            using aServiceType select
+            (SynPSG.Utilities.USPS.FirstClassType.Letter),
+                mreturn 'LETTER'
+            (SynPSG.Utilities.USPS.FirstClassType.Flat),
+                mreturn 'FLAT'
+            (SynPSG.Utilities.USPS.FirstClassType.Parcel),
+                mreturn 'PARCEL'
+            endusing
+            mreturn ''
+        endmethod
+
+        public method getContainerTypeText ,string
+            req in  aServiceType    ,SynPSG.Utilities.USPS.ContainerType
+            endparams
+        proc
+            using aServiceType select
+            (SynPSG.Utilities.USPS.ContainerType.FlatRateEnvelope),
+                mreturn 'FLAT RATE ENVELOPE'
+            (SynPSG.Utilities.USPS.ContainerType.FlatRateBox),
+                mreturn 'FLAT RATE BOX'
+            (SynPSG.Utilities.USPS.ContainerType.SmFlatRateBox),
+                mreturn 'SM FLAT RATE BOX'
+            (SynPSG.Utilities.USPS.ContainerType.MdFlatRateBox),
+                mreturn 'MD FLAT RATE BOX'
+            (SynPSG.Utilities.USPS.ContainerType.LgFlatRateBox),
+                mreturn 'LG FLAT RATE BOX'
+            (SynPSG.Utilities.USPS.ContainerType.Variable),
+                mreturn 'VARIABLE'
+            (SynPSG.Utilities.USPS.ContainerType.Rectangular),
+                mreturn 'RECTANGULAR'
+            (SynPSG.Utilities.USPS.ContainerType.Nonrectangular),
+                mreturn 'NONRECTANGULAR'
+            endusing
+            mreturn ''
+        endmethod
+
+        public method getSizeTypeText ,string
+            req in  aServiceType    ,SynPSG.Utilities.USPS.SizeType
+            endparams
+        proc
+            using aServiceType select
+            (SynPSG.Utilities.USPS.SizeType.Regular),
+                mreturn 'REGULAR'
+            (SynPSG.Utilities.USPS.SizeType.Large),
+                mreturn 'LARGE'
+            (SynPSG.Utilities.USPS.SizeType.Oversize),
+                mreturn 'OVERSIZE'
+            endusing
+            mreturn ''
+        endmethod
+
+        public method getShipOptionText ,string
+            req in  aServiceType    ,SynPSG.Utilities.USPS.ShipOption
+            endparams
+        proc
+            using aServiceType select
+            (SynPSG.Utilities.USPS.ShipOption.EMSH),
+                mreturn 'EMSH'
+            (SynPSG.Utilities.USPS.ShipOption.HFP),
+                mreturn 'HFP'
+            endusing
+            mreturn ''
+        endmethod
+
+        private method processErrorXML ,void
+            req in      aXMLnode    ,XML_ELEM_TYPE      ;XML node to process
+            endparams
+            stack record errorData
+                number          ,a20
+                source          ,a80
+                description     ,a200
+                helpFile        ,a40
+                helpContext     ,a40
+            endrecord
+            record
+                errCount        ,i4                     ;Loop counter
+                errChildren     ,XML_ELEMLIST_TYPE      ;XML element list
+                errChild        ,XML_ELEM_TYPE          ;XML Child element
+                elem_name       ,a40                    ;XML element name
+            endrecord
+        proc
+            clear errorData
+            errChildren = %xml_elem_children(aXMLnode)
+            for errCount from 1 thru %xml_elemlist_count(errChildren)
+            begin
+                errChild = %xml_elemlist_item(errChildren, errCount)
+                xcall xml_elem_getName(errChild, elem_name)
+                using elem_name select
+                ("Number"),
+                    xcall xml_elem_gettext(errChild, errorData.Number)
+                ("Source"),
+                    xcall xml_elem_gettext(errChild, errorData.source)
+                ("Description"),
+                    xcall xml_elem_gettext(errChild, errorData.description)
+                ("HelpFile"),
+                    xcall xml_elem_gettext(errChild, errorData.helpFile)
+                ("HelpContext"),
+                    xcall xml_elem_gettext(errChild, errorData.helpContext)
+                endusing
+            end
+            mRespText = errorData
+            mreturn
+        endmethod
+
+        private method dec2string ,a
+            req in aDecimal ,decimal
+            endparams
+            record
+                d10_1       ,d10.1
+                outString   ,a12
+            endrecord
+        proc
+            d10_1 = aDecimal
+            outString = d10_1, 'ZZZZZZZZX.X' [LEFT]
+            mreturn outString(1:%trim(outString))
+        endmethod
+
+    endclass
+
+endnamespace
+

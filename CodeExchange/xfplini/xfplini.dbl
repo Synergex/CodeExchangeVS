@@ -1,0 +1,1307 @@
+;******************************************************************************
+;
+; Title:        xfplini.dbl
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         22nd September 2005
+;
+; Description:  A utility program used to create and manage xfServerPlus
+;               settings in the xfpl.ini file.
+;
+; Platforms:    All platforms
+;
+; Versions:     Synergy/DE V7.5.1 and higher
+;
+; $Log: /Development/CodeExchange/xfplini/xfplini.dbl $
+;;
+;; Revision: 1   Date: 2010-04-14 00:07:18Z   User: William Hawkins
+;
+;   Rev 1.2   Sep 29 2005 21:44:44   stevei
+;Bug fix to allow spaces between the = sign and the parameter values.
+;
+;   Rev 1.1   Sep 29 2005 16:14:02   stevei
+;Fixed a bug when the Synergy version had a patch letter.
+;
+;   Rev 1.0   Sep 26 2005 14:17:08   stevei
+;Initial Revision
+;
+;******************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;******************************************************************************
+.ifdef XFPLINI_DATA ;START OF SHARED DATA
+;******************************************************************************
+.undefine XFPLINI_DATA
+
+.include "WND:tools.def"
+.include "WND:windows.def"
+.include "WND:inpctl.def"
+
+.ifndef XFPLINI_DEFINES
+.define XFPLINI_DEFINES
+
+.define APP_TITLE       "xfServerPlus Settings"
+
+.ifdef DBLV83
+.define D_MB_WARNING    D_MOK+D_MICONEXCLAM+D_MCENTER
+.define D_MB_YESNO_YES  D_MYESNO+D_MICONQUESTION+D_MCENTER
+.define D_MB_YESNO_NO   D_MYESNO+D_MICONQUESTION+D_MDEFBUTTON2+D_MCENTER
+.define D_GF_OPEN       D_OFN_CENTER
+.define D_GF_SAVEAS     D_OFN_SAVEAS|D_OFN_CENTER
+.define D_SHELL_OPT     D_NOWINDOW|D_NOWAIT
+.else
+.define D_MB_WARNING    D_MOK+D_MICONEXCLAM
+.define D_MB_YESNO_YES  D_MYESNO+D_MICONQUESTION
+.define D_MB_YESNO_NO   D_MYESNO+D_MICONQUESTION+D_MDEFBUTTON2
+.define D_GF_OPEN
+.define D_GF_SAVEAS     D_OFN_SAVEAS
+.define D_SHELL_OPT     D_NOCONSOLE|D_NOWAIT
+.endc ;DBLV83
+
+.ifdef D_GUI
+.define D_KEY_ADDEV     F62_KEY
+.define D_KEY_REMEV     F63_KEY
+.else
+.define D_KEY_ADDEV     F42_KEY
+.define D_KEY_REMEV     F43_KEY
+.endc ;D_GUI
+
+.define REPORT_ERROR(x) xcall u_msgbox(x,D_MB_WARNING,"Error",selcol)
+.define YESNO_YES(x,y)  %u_msgbox(x,D_MB_YESNO_YES,y,selcol)
+.define YESNO_NO(x,y)   %u_msgbox(x,D_MB_YESNO_NO,y,selcol)
+
+.endc ;XFPLINI_DEFINES
+
+structure evar
+    name                ,a80
+    text                ,a80
+
+.ifdef XFPLINI_INIT
+global data section XFPLINI, init
+.undefine XFPLINI_INIT
+.else
+    global data section XFPLINI
+.endc
+
+.align
+        record
+
+            ;Menu columns
+            filecol             ,i4     ;File menu column ID
+            editcol             ,i4     ;Edit menu column ID
+            viewcol             ,i4     ;View menu column ID
+            toolcol             ,i4     ;Tools menu column ID
+            inpcol              ,i4     ;Input column ID
+            selcol              ,i4     ;Select column ID
+            lstcol              ,i4     ;List column ID
+
+            ;Input windows
+            inpid               ,i4     ;Input window ID
+            lstinpid            ,i4     ;List input window ID
+            evinpid             ,i4     ;Environment variable input window ID
+
+            ;Tabsets
+            tabset              ,i4     ;Tabset ID
+
+            ;List classes
+            lstclass            ,i4     ;List class ID
+
+            ;Lists
+            lstid               ,i4     ;List ID
+
+            ;Window events
+            closebox            ,i4     ;Window events
+
+            ;Counters
+            evcount             ,i4     ;Number of environment variable definitions
+
+            ;Runtime version information
+            version             ,a10    ;UI Toolkit runtime version (X.Y.Z)
+            ver_major           ,d2     ; - Major version X
+            ver_minor           ,d2     ; - Minor version Y
+            ver_revision        ,d2     ; - Revision Z
+
+.align
+        record inidata                  ;Record containing settings from INI file
+
+            log_file            ,a256   ;Value of XFPL_LOGFILE
+
+            log_enabled         ,d1     ;Value of XFPL_LOG
+            ;   0 = OFF, 1 = ON
+
+            single_log          ,d1     ;Value of XFPL_SINGLELOGFILE
+            ;   0 = OFF, 1 = ON
+
+            compression         ,d1     ;Value of XFPL_COMPRESS
+            ;   0 = OFF, 1 = ON
+
+            session_log_level   ,d1     ;Value of XFPL_SESS_INFO
+            ;   0 = NONE, 1 = CRITICAL, 2 = ALL
+
+            function_log_level  ,d1     ;Value of XFPL_FUNC_INFO
+            ;   0 = NONE, 1 = CRITICAL, 2 = ALL
+
+            debug_log_level     ,d1     ;Value of XFPL_DEBUG
+            ;   0 = OFF, 1 = ON, 2 = DBG_ALL
+
+            base_channel        ,d3     ;Value of XFPL_BASECHAN
+
+.align
+        record envvar                   ;Data for an environment variable
+            ;This is the non-window data for the EV list
+            ,a^size(evar)
+
+    endglobal
+
+;******************************************************************************
+.else ;END OF SHARED DATA, START OF PROGRAM CODE
+;******************************************************************************
+.main xfplini
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.define XFPLINI_INIT
+.define XFPLINI_DATA
+.include "INC:xfplini.dbl"
+
+.align
+        record avars
+            buffer              ,a256   ;Input buffer
+            param_name          ,a80    ;Parameter name (data to left of =)
+            param_value         ,a80    ;Parameter value (data to right of =)
+            param_logical       ,a80    ;Logical name from XFPL_LOGICAL=
+
+.align
+        record ivars
+            eqpos               ,i4     ;Position of = in input buffer
+            copos               ,i4     ;Position of : in XFPL_LOGICAL=
+            count               ,i4     ;Local loop counter
+            exitapp             ,i4     ;Exit from application
+
+.align
+        record
+            inichn              ,i4     ;Channel number of open INI file
+            req                 ,i4     ;List processor request flag
+            nofind              ,i4     ;List item not found
+            evchanged           ,i4     ;Environment variables have changed
+            evcreate            ,i4     ;Environment variable create mode?
+            inicreate           ,i4     ;INI file create mode
+            file_name           ,a256   ;Name of file being maintained
+
+            tmpenvvar           ,a^size(evar)
+            savinidata          ,a^size(inidata)
+            new_file_name       ,a^size(inidata)
+
+    .proc
+
+        xcall u_start(,1,0,,,,,,,,"xfplini_setup")
+
+        do
+        begin
+            xcall m_process
+
+            using g_entnam select
+            ("NEW"),
+                call new_file
+            ("OPEN"),
+                call open_file
+            ("EXIT"),
+                exitloop
+            endusing
+
+        end
+        until exitapp
+
+        xcall u_finish
+        freturn D_EXIT_SUCCESS
+
+;------------------------------------------------------------------------------
+;Prepare to gather settings for a new INI ifle
+;
+    new_file,
+
+        clear inidata, file_name
+        session_log_level = 1
+
+        inicreate = TRUE
+        call process_tabset
+
+        return
+
+;------------------------------------------------------------------------------
+;Open an existing INI file
+;
+    open_file,
+
+        if (%u_getfilename(file_name,"Open xfpl.ini",1,
+&           "xfServerPlus INI files (xfpl.ini)","xfpl.ini",,"ini",
+&           inpcol,selcol,lstcol,,D_GF_OPEN))
+        begin
+            open(inichn=%syn_freechn,"i:s",file_name) [ERR=opnerr]
+            call parse_file
+            close inichn
+
+            inicreate = FALSE
+            call process_tabset
+            exit
+
+    opnerr, REPORT_ERROR("Failed to open file.")
+            exit
+        end
+
+        return
+
+;------------------------------------------------------------------------------
+;Parse the contents of an INI file
+;
+    parse_file,
+
+        clear avars, ^i(ivars), inidata, evcount
+        xcall l_restart(lstid)
+
+        repeat
+        begin
+            reads(inichn,buffer,eof)
+
+            ;Skip blank lines and comments
+            if ((!buffer) || (buffer=="#"))
+                nextloop
+
+            ;All INI file records should have an = in them
+            if (!(eqpos = %instr(1,buffer,"=")))
+            begin
+                REPORT_ERROR("Invalid record: "+%atrim(buffer))
+                nextloop
+            end
+
+            ;Extract setting name and value
+            param_name = buffer(1,eqpos-1)
+            param_value = buffer(eqpos+1,%trim(buffer))
+
+            ;Trim leading spaces from param_value
+            if (param_value && !param_value(1:1))
+            begin
+                repeat
+                begin
+                    if (param_value(1:1))
+                        exitloop
+                    param_value = param_value - " "
+                end
+            end
+
+            ;If it an XFPL_LOGICAL then exreact the logical name
+            if (copos=%instr(1,param_name,":"))
+            begin
+                param_logical = param_name(copos+1,%trim(param_name))
+                param_name = param_name(1,copos-1)
+            end
+
+            upcase param_name
+
+            using param_name select
+
+            ;Environment variable
+            ("XFPL_LOGICAL"),
+            begin
+                ;Append a new line to the environment variable list
+                xcall l_process(lstid,req=D_LAPPEND,envvar)
+                ;Add the environment variable to the list
+                ^m(evar.name,envvar) = param_logical
+                ^m(evar.text,envvar) = param_value
+                xcall i_display(lstinpid,,envvar)
+                xcall l_process(lstid,req=D_LNOP,envvar)
+                evcount += 1
+            end
+
+            ;Name of log file
+            ("XFPL_LOGFILE"),
+                log_file = param_value
+
+            ;Logging on or off
+            ("XFPL_LOG"),
+            begin
+                upcase param_value
+                using param_value select
+                ("OFF"),
+                    nop
+                ("ON"),
+                    log_enabled = 1
+                (),
+                    REPORT_ERROR("Invalid XFPL_LOG value. Set to OFF.")
+                endusing
+            end
+
+            ;Session logging level
+            ("XFPL_SESS_INFO"),
+            begin
+                upcase param_value
+                using param_value select
+                ("NONE"),
+                    nop
+                ("CRITICAL"),
+                    session_log_level = 1
+                ("ALL"),
+                    session_log_level = 2
+                (),
+                    REPORT_ERROR("Invalid XFPL_SESS_INFO value. Set to NONE.")
+                endusing
+            end
+
+            ;Function logging level
+            ("XFPL_FUNC_INFO"),
+            begin
+                upcase param_value
+                using param_value select
+                ("NONE"),
+                    nop
+                ("CRITICAL"),
+                    function_log_level = 1
+                ("ALL"),
+                    function_log_level = 2
+                (),
+                    REPORT_ERROR("Invalid XFPL_FUNC_INFO value. Set to NONE.")
+                endusing
+            end
+
+            ;Debug logging level
+            ("XFPL_DEBUG"),
+            begin
+                upcase param_value
+                using param_value select
+                ("OFF"),
+                    nop
+                ("ON"),
+                    debug_log_level = 1
+                ("DBG_ALL"),
+                    debug_log_level = 2
+                (),
+                    REPORT_ERROR("Invalid XFPL_DEBUG value. Set to OFF.")
+                endusing
+            end
+
+            ;Base channel number - only expected on V7.1.1 and higher
+            ("XFPL_BASECHAN"),
+            begin
+                onerror bad_value
+                base_channel = %atrim(param_value)
+                offerror
+                exit
+    bad_value,  offerror
+                REPORT_ERROR("Invalid XFPL_BASECHAN value: "+%atrim(param_value))
+            end
+
+            ;Data compression - only expected on V8.1.5 and higher
+            ("XFPL_COMPRESS"),
+            begin
+                if (  (ver_major>=8) && ((ver_major>=9) || (ver_minor>1)
+&                   || ((ver_minor==1)&&(ver_revision>=5)))  ) then
+                begin
+                    upcase param_value
+                    using param_value select
+                    ("OFF"),
+                        nop
+                    ("ON"),
+                        compression = 1
+                    (),
+                        REPORT_ERROR("Invalid XFPL_COMPRESS value. Set to OFF.")
+                    endusing
+                end
+                else
+                    REPORT_ERROR("XFPL_COMPRESS is not supported on this version.")
+            end
+
+            ;Single log file - only expected on V8.3 or higher
+            ("XFPL_SINGLELOGFILE"),
+            begin
+                if ((ver_major>=8)&&((ver_major>=9)||(ver_minor>=3))) then
+                begin
+                    upcase param_value
+                    using param_value select
+                    ("OFF"),
+                        nop
+                    ("ON"),
+                        single_log = 1
+                    (),
+                        REPORT_ERROR("Invalid XFPL_SINGLELOGFILE value. Set to OFF.")
+                    endusing
+                end
+                else
+                    REPORT_ERROR("XFPL_SINGLELOGFILE is not supported on this version.")
+            end
+
+            ;Something we didn't expect
+            (),
+            begin
+                ;Report the error and ignore it.  Whatever it is, it won't be
+                ;saved to the INI file if the user subsequently saves the file!
+                REPORT_ERROR("Invalid xfpl.ini record: "+%atrim(buffer))
+                nextloop
+            end
+
+            endusing
+
+        end
+    eof,
+
+        ;Go to the top of the environment variable list
+        if (evcount)
+            xcall l_process(lstid,req=D_LTOP,envvar)
+
+        return
+
+;------------------------------------------------------------------------------
+;Allow the user to view and modify the INI file settings
+;
+    process_tabset,
+
+        xcall e_enter
+
+        ;Setup the UI for view/amend
+        xcall m_disable(D_LIST,filecol,"CLOSED")
+        xcall m_enable(D_LIST,filecol,"OPEN")
+
+        ;Set the tabset title
+        if (inicreate) then
+            xcall w_brdr(tabset,WB_TITLE,"New File (not saved)")
+        else
+            xcall w_brdr(tabset,WB_TITLE,%atrim(file_name))
+
+        ;Put the data into the settings form
+        xcall i_display(inpid,,inidata)
+        xcall i_next(inpid,,"*FRST*")
+
+        ;Start on the settings tab, and place the tabset
+        xcall ts_tabset(dts_active,tabset,1)
+        xcall u_window(D_PLACE,tabset,3,2)
+
+        ;Save the initial data so we can later detect if it has changed
+        savinidata = inidata
+        clear evchanged
+
+        ;Process the tabset
+        repeat
+        begin
+
+            xcall ts_process(tabset)
+
+            using g_entnam select
+
+            ;Save the data to a different INI file
+            ("SAVEAS"),
+            begin
+                inicreate = TRUE
+                call save_file
+            end
+
+            ;Save the data to the INI file
+            ("SAVE"),
+                call save_file
+
+            ;Cancel out
+            ("CLOSE","EXIT"),
+            begin
+
+                ;Has the data changed?
+                if ((inidata == savinidata) && (!evchanged))
+                begin
+                    ;No, we're out of here!
+                    if (g_entnam == "EXIT")
+                        exitapp = TRUE
+                    exitloop
+                end
+
+                ;Yes, the data has changed.  Ask the user if they want to save it
+                if (YESNO_YES("Save changes?","Settings have changed")==D_MIDYES)
+                    call save_file
+
+                ;If the user picked exit from the menu, make sure we back them
+                ;all the way put of the program
+                if (g_entnam == "EXIT")
+                    exitapp = TRUE
+
+                exitloop
+            end
+
+            ;Add a new environment variable
+            ("ADD"),
+            begin
+                clear tmpenvvar
+                call edit_envvar
+            end
+
+            ;Edit an environment variable
+            ("EDIT"),
+            begin
+                tmpenvvar = envvar
+                call edit_envvar
+            end
+
+            ;Remove an environment variable
+            ("REMOVE"),
+            begin
+                xcall s_bld(buffer,,"Remove environment variable %a?",
+&                   ^m(evar.name,envvar))
+                if (YESNO_NO(%atrim(buffer),"Confirm")==D_MIDYES)
+                begin
+                    xcall l_process(lstid,req=D_LDELITEM,envvar)
+                    evchanged = TRUE
+                    evcount -= 1
+                end
+            end
+
+            ;Move an environment variable up one row
+            ("MOVE_UP"),
+            begin
+                xcall l_process(lstid,req=D_LMOVEUP,envvar)
+                evchanged = TRUE
+            end
+
+            ;Move an environment variable down one row
+            ("MOVE_DN"),
+            begin
+                xcall l_process(lstid,req=D_LMOVEDN,envvar)
+                evchanged = TRUE
+            end
+
+            endusing
+        end
+
+        xcall e_exit
+        return
+
+;------------------------------------------------------------------------------
+;Edit an environment variable
+;
+    edit_envvar,
+
+        xcall e_enter
+        xcall i_init(evinpid)
+
+        ;Are we editing an existing one, or adding a new one?
+        if (tmpenvvar) then
+        begin
+            evcreate = FALSE                            ;Existing one
+            xcall i_display(evinpid,,tmpenvvar)
+            xcall i_next(evinpid,,"*FRST*")
+        end
+        else
+            evcreate=TRUE                               ;New one
+
+        ;Process the wnvironment variable form
+        xcall u_window(D_PLACE,evinpid,8,5)
+        repeat
+        begin
+            xcall i_input(evinpid,,tmpenvvar,inpcol,selcol,,D_NOTERM)
+
+            if (g_select) then
+            begin
+                using g_entnam select
+                ("CLOSE"),
+                    exitloop
+                endusing
+            end
+            else
+            begin
+                ;Input complete
+                call save_envvar
+                exitloop
+            end
+        end
+
+        xcall e_exit
+
+        return
+
+;------------------------------------------------------------------------------
+;Save an environment variable to the environment variable list
+;
+    save_envvar,
+
+        ;Are we creating a new one?
+        if (evcreate)
+        begin
+            ;Yes, append a new item to the environment variable list
+            xcall l_queue(lstid,D_LBOTTOM)
+            xcall l_process(lstid,req=D_LAPPEND,envvar)
+            evcount += 1
+        end
+
+        ;Put the environment variable into the list
+        envvar = tmpenvvar
+        xcall i_display(lstinpid,,envvar)
+        xcall l_process(lstid,req=D_LNOP,envvar)
+
+        ;Record that data has changed, to prompt for a save if the user cancels
+        evchanged = TRUE
+
+        return
+
+;------------------------------------------------------------------------------
+;Save the data to an INI file
+;
+    save_file,
+
+        ;Are we creating a new file?
+        if (inicreate)
+        begin
+            ;Yes, get the location to save the file in
+            repeat
+            begin
+                if (!%u_getfilename(file_name,"Save As...",1,
+&                   "xfServerPlus INI files (xfpl.ini)","xfpl.ini","xfpl.ini",
+&                   "ini",inpcol,selcol,lstcol,,D_GF_SAVEAS))
+                    return
+
+                ;See if the file already exists
+                open(inichn=%syn_freechn,"i:s",file_name) [ERR=notexist]
+                close inichn
+
+                ;Yes, ask if they want to overwrite it
+                if (YESNO_NO("Replace existing file?","Confirm")==D_MIDYES)
+                    exitloop
+
+                nextloop
+
+    notexist,   exitloop
+            end
+        end
+
+        ;Save the settings to the file
+
+        open(inichn=%syn_freechn,"o:s",file_name)
+
+        if (log_file)
+            writes(inichn,"XFPL_LOGFILE=" + %atrim(log_file))
+
+.ifndef D_VMS
+        if ((ver_major>=8) && ((ver_major>=9) || (ver_minor>=3)))
+        begin
+            using single_log select
+            (0),    writes(inichn,"XFPL_SINGLELOGFILE=OFF")
+            (1),    writes(inichn,"XFPL_SINGLELOGFILE=ON")
+            endusing
+        end
+.endc
+
+        using log_enabled select
+        (0),    writes(inichn,"XFPL_LOG=OFF")
+        (1),    writes(inichn,"XFPL_LOG=ON")
+        endusing
+
+        using session_log_level select
+        (0),    writes(inichn,"XFPL_SESS_INFO=NONE")
+        (1),    writes(inichn,"XFPL_SESS_INFO=CRITICAL")
+        (2),    writes(inichn,"XFPL_SESS_INFO=ALL")
+        endusing
+
+        using function_log_level select
+        (0),    writes(inichn,"XFPL_FUNC_INFO=NONE")
+        (1),    writes(inichn,"XFPL_FUNC_INFO=CRITICAL")
+        (2),    writes(inichn,"XFPL_FUNC_INFO=ALL")
+        endusing
+
+        using debug_log_level select
+        (0),    writes(inichn,"XFPL_DEBUG=OFF")
+        (1),    writes(inichn,"XFPL_DEBUG=ON")
+        (2),    writes(inichn,"XFPL_DEBUG=DBG_ALL")
+        endusing
+
+        if (ver_major>=8)
+        begin
+            if ((ver_major>=9)
+&               || (ver_minor>1)
+&               || ((ver_minor==1)&&(ver_revision>=5)))
+            begin
+                using compression select
+                (0),    writes(inichn,"XFPL_COMPRESS=OFF")
+                (1),    writes(inichn,"XFPL_COMPRESS=ON")
+                endusing
+            end
+        end
+
+        if (base_channel)
+            if (ver_major>=7)
+                writes(inichn,"XFPL_BASECHAN=" + %string(base_channel))
+
+        ;Save the environment variables to the file
+        if (evcount)
+        begin
+            req = D_LFIRST
+            for count from 1 thru evcount
+            begin
+                ;Retrieve list item data
+                xcall l_data(lstid,req,lstinpid,tmpenvvar,,nofind)
+
+                if (nofind)
+                begin
+                    REPORT_ERROR("Environment variable count out of step!")
+                    exitloop
+                end
+
+                ;Add the environment variable to the INI file.
+                xcall s_bld(buffer,,"XFPL_LOGICAL:%a=%a",
+&                   ^m(evar.name,tmpenvvar),^m(evar.text,tmpenvvar))
+                writes(inichn,%atrim(buffer))
+                req = D_LNEXT
+            end
+
+            ;Restore list context (otherwise the list window data will be
+            ;screwed up the next time we process the list.
+            xcall l_process(lstid,req=D_LRESTORE,envvar)
+
+        end
+
+        close inichn
+
+        ;Update the tabset title
+        xcall w_brdr(tabset,WB_TITLE,%atrim(file_name))
+
+        ;Make the saved data match the current data, so we won't prompt to
+        ;save on cancel unless the data changes again
+        savinidata = inidata
+        clear evchanged, inicreate
+
+        return
+
+    .end
+
+;==============================================================================
+;Process the settings input window
+;
+    .subroutine xfplini_edit_settings
+
+        a_inpid         ,n          ;Input window ID
+
+.define XFPLINI_DATA
+.include "INC:xfplini.dbl"
+
+    .proc
+
+        xcall e_enter
+        xcall m_enable(D_ENTRY,viewcol,"TS_TAB2")
+
+.ifdef D_GUI
+        xcall m_enable(D_LIST,editcol,"INPUT")
+        xcall ts_tabset(DTS_BUTTONSET,tabset,,,DSB_END,"SAVE")
+.endc
+
+        repeat
+        begin
+            xcall i_input(a_inpid,,inidata,inpcol,selcol,,D_NOTERM)
+            if (g_select) then
+                exitloop
+            else
+                xcall i_next(a_inpid,,"*FRST*")
+        end
+
+        xcall e_exit
+
+        xreturn
+
+    .end
+
+;==============================================================================
+;Process the environment variables list
+;
+    .subroutine xfplini_edit_environment
+
+        a_lstid         ,n          ;List ID
+
+.define XFPLINI_DATA
+.include "INC:xfplini.dbl"
+
+        stack record
+            req             ,i4     ;List processor request flag
+
+    .proc
+
+        xcall e_enter
+
+        xcall m_enable(D_LIST,editcol,"LIST")
+        xcall m_enable(D_ENTRY,viewcol,"TS_TAB1")
+
+.ifdef D_GUI
+        xcall ts_tabset(DTS_BUTTONSET,tabset,,,DSB_END,"EDIT")
+        xcall b_enable(tabset,"ADD")
+        if (evcount)
+        begin
+            xcall b_enable(tabset,"EDIT")
+            xcall b_enable(tabset,"REMOVE")
+        end
+.endc
+
+        ;Process the list
+        req=D_LNOP
+        repeat
+        begin
+            xcall l_select(a_lstid,req,envvar,,,,,,lstcol)
+            if (!g_select)
+                xcall m_signal("EDIT")
+            exitloop
+        end
+
+.ifdef D_GUI
+        ;Disable the buttons again
+        xcall b_disable(tabset,"ADD")
+        xcall b_disable(tabset,"EDIT")
+        xcall b_disable(tabset,"REMOVE")
+.endc
+
+        xcall e_exit
+
+        xreturn
+
+    .end
+
+;==============================================================================
+;List load method - nothing to do here as environment variables are loaded
+;into the list manually as the INI file is parsed
+;
+    .subroutine xfplini_list_load ,stack
+
+        a_listid    ,n          ; List id
+        a_req       ,n          ; Request flag
+        a_data      ,a          ; Item data
+        a_inpid     ,n          ; Input window id
+        a_disable   ,n          ; (Optional) Disable flag
+        a_index     ,n          ; Loading index
+
+.define XFPLINI_DATA
+.include "INC:xfplini.dbl"
+
+    .proc
+
+        a_req = D_LEOF
+        xreturn
+
+    .end
+
+;==============================================================================
+;Setup the Toolkit environment and create UI objects
+;
+    .subroutine xfplini_setup
+
+.define XFPLINI_DATA
+.include "INC:xfplini.dbl"
+
+.ifdef D_GUI
+.include "DBLDIR:activex.def"
+.align
+        record
+            axctrl              ,i4     ;ActiveX control ID
+.endc
+
+.align
+        record
+            bldid               ,i4     ;Input window build ID
+            start               ,i4     ;Start position in a string
+            pos                 ,i4     ;Position in a string
+            count               ,i4     ;Loop counter
+            mbuff               ,a1024  ;Menu build buffer
+            rb_oca              ,[3]a8, "None","Critical","All"
+            rb_debug            ,[3]a8, "None","Basic","Extended"
+
+    .proc
+
+        ;Setup title and other environment options
+        xcall e_sect(APP_TITLE,D_HEADER,D_CENTER)
+        xcall e_state(D_ON,D_RETURNBTN,D_VALSTCHG)
+        xcall e_method(D_METH_ENTRST,"xfplini_entrst_method",
+&           D_METH_UTILS, "xfplini_eutils")
+
+        xcall u_version(version)
+        ;Remove any trailing patch letter from the version number
+        if ((%decml(version(%trim(version):1))<48)
+&           || (%decml(version(%trim(version):1))>57))
+            version(%trim(version):1) = " "
+
+        pos = %instr(start=1,version,".")
+        ver_major = version(start,pos-1)
+        start = pos+1
+        pos = %instr(start,version,".")
+        ver_minor = version(start,pos-1)
+        start = pos + 1
+        ver_revision = version(start,%trim(version))
+
+.ifdef D_GUI
+        closebox = %u_wndevents(D_CREATE,,D_EVENT_CLOSE,"xfplini_close_box")
+.endc
+
+        ;Build file menu column
+        xcall mb_column(mbuff,"FILE","File",D_GLOBAL,,,,"F")
+        xcall mb_entry(mbuff,"NEW","New...")
+        xcall mb_entry(mbuff,"OPEN","Open...",CTRL_O_KEY)
+        xcall mb_entry(mbuff,"CLOSE","Close",F3_KEY,,,,1)
+        xcall mb_line(mbuff)
+        xcall mb_entry(mbuff,"SAVE","Save",CTRL_S_KEY,,,,1)
+        xcall mb_entry(mbuff,"SAVEAS","Save As...",,,,,1)
+        xcall mb_line(mbuff)
+        xcall mb_entry(mbuff,"U_ABOUT","About...")
+        xcall mb_line(mbuff)
+        xcall mb_entry(mbuff,"EXIT","Exit",F4_KEY)
+        xcall mb_list(mbuff,"CLOSED",2,"NEW","OPEN")
+        xcall mb_list(mbuff,"OPEN",3,"CLOSE","SAVE","SAVEAS")
+        xcall mb_end(mbuff,filecol)
+
+        ;Build edit menu column
+        xcall mb_column(mbuff,"EDIT","Edit",D_GLOBAL,,,,"E")
+        xcall mb_entry(mbuff,"ADD","Add new environment variable",D_KEY_ADDEV,,,,1)
+        xcall mb_entry(mbuff,"REMOVE","Remove environment variable",D_KEY_REMEV,,,,1)
+        xcall mb_entry(mbuff,"EDIT","Edit environment variable",,,,,1)
+        xcall mb_line(mbuff)
+        xcall mb_entry(mbuff,"MOVE_UP","Move environment variable up",F37_KEY,,,,1)
+        xcall mb_entry(mbuff,"MOVE_DN","Move environment variable down",F38_KEY,,,,1)
+.ifdef D_GUI
+        xcall mb_line(mbuff)
+        xcall mb_entry(mbuff,"E_CUT","Cut",CTRL_X_KEY,,"T",,1)
+        xcall mb_entry(mbuff,"E_COPY","Copy",CTRL_C_KEY,,"C",,1)
+        xcall mb_entry(mbuff,"E_PASTE","Paste",CTRL_V_KEY,,"P",,1)
+        xcall mb_list(mbuff,"INPUT",3,"E_CUT","E_COPY","E_PASTE")
+.endc
+        xcall mb_list(mbuff,"LIST",5,"ADD","EDIT","REMOVE","MOVE_UP","MOVE_DN")
+        xcall mb_end(mbuff,editcol)
+
+        ;Build view menu column
+        xcall mb_column(mbuff,"VIEW","View",D_GLOBAL,,,,"V")
+        xcall mb_entry(mbuff,"TS_TAB1","Settings",F7_KEY,,,,1)
+        xcall mb_entry(mbuff,"TS_TAB2","Environment",F8_KEY,,,,1)
+        xcall mb_list(mbuff,"VIEW_ITEMS",2,"TS_TAB1","TS_TAB2")
+        xcall mb_end(mbuff,viewcol)
+
+        ;Build tools menu column
+        xcall mb_column(mbuff,"TOOLS","Tools",D_GLOBAL,,,,"T")
+        xcall mb_entry(mbuff,"U_MDU","Method Definistion Utility",F9_KEY)
+.ifdef D_GUI
+        xcall mb_entry(mbuff,"U_SYNCONF","Synergy Configuration Utility",F10_KEY)
+.endc
+        xcall mb_end(mbuff,toolcol)
+
+        ;Build input menu column
+        xcall mb_column(mbuff,"INPCOL","Input",,D_NOPLC,,,"I")
+        xcall mb_entry(mbuff,"I_PREV","Previous field",UP_KEY)
+        xcall mb_entry(mbuff,"I_NEXT","Next field",DOWN_KEY)
+        xcall mb_end(mbuff,inpcol)
+
+        ;Build selection menu column
+        xcall mb_column(mbuff,"SELCOL","Select",,D_NOPLC,,,"S")
+        xcall mb_entry(mbuff,"S_UP","Up",UP_KEY)
+        xcall mb_entry(mbuff,"S_DOWN","Down",DOWN_KEY)
+        xcall mb_entry(mbuff,"S_LEFT","Left",LEFT_KEY)
+        xcall mb_entry(mbuff,"S_RIGHT","Right",RIGHT_KEY)
+        xcall mb_end(mbuff,selcol)
+
+        ;Build list menu column
+        xcall mb_column(mbuff,"LSTCOL","List",,D_NOPLC,,,"L")
+        xcall mb_entry(mbuff,"S_UP","Previous entry",UP_KEY)
+        xcall mb_entry(mbuff,"S_DOWN","Next entry",DOWN_KEY)
+        xcall mb_end(mbuff,lstcol)
+
+        ;No default pulled-down column on Windows
+.ifdef D_GUI
+        xcall m_defcol(0)
+.endc
+
+        ;Build the settings input window
+        xcall ib_input(bldid,"INIWND",15,75)
+        xcall ib_field(bldid,"LOG_FILE",
+&           D_FLD_TYPE,      D_ALPHA,
+&           D_FLD_SIZE,      256,
+&           D_FLD_PROMPT,    "Log file",
+&           D_FLD_POS,       2,4,
+&           D_FLD_FPOS,      3,4,
+&           D_FLD_VIEWLEN,   68)
+        xcall ib_field(bldid,"LOG_ENABLED",
+&           D_FLD_TYPE,      D_DECIMAL,
+&           D_FLD_SIZE,      1,
+&           D_FLD_PROMPT,    "Enable logging",
+&           D_FLD_FPOS,      5,4,
+&           D_FLD_CHECKBOX)
+        xcall ib_field(bldid,"SINGLE_LOG",
+&           D_FLD_TYPE,      D_DECIMAL,
+&           D_FLD_SIZE,      1,
+&           D_FLD_PROMPT,    "Single log file",
+&           D_FLD_FPOS,      5,28,
+&           D_FLD_CHECKBOX,
+&           D_FLD_CHANGE,    "xfplini_single_log_warning",
+&           D_FLD_DISABLED)
+        xcall ib_field(bldid,"COMPRESSION",
+&           D_FLD_TYPE,      D_DECIMAL,
+&           D_FLD_SIZE,      1,
+&           D_FLD_PROMPT,    "Enable data compression",
+&           D_FLD_FPOS,      5,50,
+&           D_FLD_CHECKBOX)
+        xcall ib_field(bldid,"SESSION_LOG_LEVEL",
+&           D_FLD_TYPE,      D_DECIMAL,
+&           D_FLD_SIZE,      1,
+&           D_FLD_PROMPT,    "Session logging",
+&           D_FLD_POS,       7,4,
+&           D_FLD_FPOS,      8,4,
+&           D_FLD_RADIO,
+&           D_FLD_ENUM,      8,0,1,
+&           D_FLD_SELECT,    1,1,3,,3,rb_oca)
+        xcall ib_field(bldid,"FUNCTION_LOG_LEVEL",
+&           D_FLD_TYPE,      D_DECIMAL,
+&           D_FLD_SIZE,      1,
+&           D_FLD_PROMPT,    "Function logging",
+&           D_FLD_POS,       7,28,
+&           D_FLD_FPOS,      8,28,
+&           D_FLD_RADIO,
+&           D_FLD_ENUM,      8,0,1,
+&           D_FLD_SELECT,    1,1,3,,3,rb_oca)
+        xcall ib_field(bldid,"DEBUG_LOG_LEVEL",
+&           D_FLD_TYPE,      D_DECIMAL,
+&           D_FLD_SIZE,      1,
+&           D_FLD_PROMPT,    "Debug logging",
+&           D_FLD_POS,       7,50,
+&           D_FLD_FPOS,      8,50,
+&           D_FLD_RADIO,
+&           D_FLD_ENUM,      8,0,1,
+&           D_FLD_SELECT,    1,1,3,,3,rb_debug)
+        xcall ib_field(bldid,"BASE_CHANNEL",
+&           D_FLD_TYPE,      D_DECIMAL,
+&           D_FLD_SIZE,      3,
+&           D_FLD_PROMPT,    "Base channel",
+&           D_FLD_POS,       12,4,
+&           D_FLD_FPOS,      12,17,
+&           D_FLD_BZRO)
+        xcall ib_end(bldid,inpid)
+        xcall w_brdr(inpid,WB_TITLE,"Settings")
+
+        ;Only enable single log file option on V8.3 and higher Windows & UNIX
+.ifndef D_VMS
+        if (ver_major>=8)
+            if (ver_major>=9) || (ver_minor>=3)
+                xcall i_enable(D_FLDS,inpid,"SINGLE_LOG")
+.endc
+
+        ;Build the environment list input window
+        xcall ib_input(bldid,"LSTWND",1,75)
+        xcall ib_field(bldid,"NAME",
+&           D_FLD_TYPE,      D_ALPHA,
+&           D_FLD_SIZE,      80,
+&           D_FLD_FPOS,      1,1,
+&           D_FLD_VIEWLEN,   25)
+        xcall ib_field(bldid,"TEXT",
+&           D_FLD_TYPE,      D_ALPHA,
+&           D_FLD_SIZE,      80,
+&           D_FLD_FPOS,      1,25,
+&           D_FLD_VIEWLEN,   40)
+        xcall ib_end(bldid,lstinpid)
+
+        ;Build environment variable maintenance input window
+        xcall ib_input(bldid,"EVWND",5,70)
+        xcall ib_field(bldid,"NAME",
+&           D_FLD_TYPE,      D_ALPHA,
+&           D_FLD_SIZE,      80,
+&           D_FLD_PROMPT,    "Name",
+&           D_FLD_POS,       2,2,
+&           D_FLD_FPOS,      2,8,
+&           D_FLD_VIEWLEN,   62,
+&           D_FLD_REQUIRED)
+        xcall ib_field(bldid,"TEXT",
+&           D_FLD_TYPE,      D_ALPHA,
+&           D_FLD_SIZE,      80,
+&           D_FLD_PROMPT,    "Value",
+&           D_FLD_POS,       4,2,
+&           D_FLD_FPOS,      4,8,
+&           D_FLD_VIEWLEN,   62,
+&           D_FLD_REQUIRED)
+.ifdef D_GUI
+        xcall ib_button(bldid,"I_OK",DSB_TEXT,"OK",,,"O")
+        xcall ib_button(bldid,"CLOSE",DSB_TEXT,"Cancel",,,"C")
+        xcall ib_buttonset(bldid,,,DSB_END,"I_OK")
+.endc
+        xcall ib_end(bldid,evinpid)
+
+.ifdef D_GUI
+        xcall u_wndevents(d_assign,closebox,evinpid)
+.else
+        xcall w_brdr(evinpid,WB_ON,WB_TATTR,ATTR_SET+ATTR_RVRS,
+&           WB_TPOS,WBT_TOP,WBT_CENTER)
+.endc
+
+        xcall w_brdr(evinpid,WB_TITLE,"Environment Variable")
+
+        ;Build the environment variables list
+        xcall l_class(lstclass,"LSTCLASS",,,10,1,,,,,,"xfplini_list_load","ACTIVEX")
+        xcall l_create(lstid,lstinpid,envvar,,"LSTCLASS",,,D_NOPLC)
+        xcall l_sect(lstid,"Environment",D_TITLE)
+
+.ifdef D_GUI
+.ifndef DBLNET
+        xcall l_status(lstid,D_LAXCTRL,axctrl)
+        xcall ax_set(axctrl,"RowMode",1)
+.endc ;DBLNET
+        xcall l_sect(lstid,"Name|Value|",D_HEADER)
+.else
+        xcall l_sect(lstid,"Name                    Value",D_HEADER)
+.endc
+
+        ;Create the tabset
+        tabset = %ts_tabset(DTS_CREATE,"TABSET",15,75)
+        xcall ts_tabset(DTS_WINDOW,tabset,inpid,"xfplini_edit_settings")
+        xcall ts_tabset(DTS_LIST,tabset,lstid,"xfplini_edit_environment")
+
+        ;Add and configure tabset buttons
+.ifdef D_GUI
+        xcall ts_tabset(DTS_BUTTON,tabset,"ADD",DSB_TEXT,"Add",,,"A")
+        xcall ts_tabset(DTS_BUTTON,tabset,"EDIT",DSB_TEXT,"Edit",,,"E")
+        xcall ts_tabset(DTS_BUTTON,tabset,"REMOVE",DSB_TEXT,"Remove",,,"R")
+        xcall ts_tabset(DTS_BUTTON,tabset,"SAVE",DSB_TEXT,"Save",,,"S")
+        xcall ts_tabset(DTS_BUTTON,tabset,"CLOSE",DSB_TEXT,"Close",,,"C")
+        xcall ts_tabset(DTS_BUTTONSET,tabset,,,DSB_END)
+        xcall b_disable(tabset,"ADD")
+        xcall b_disable(tabset,"EDIT")
+        xcall b_disable(tabset,"REMOVE")
+        xcall u_wndevents(d_assign,closebox,tabset)
+.else
+        xcall w_brdr(tabset, WB_ON,WB_TATTR,ATTR_SET+ATTR_RVRS,
+&           WB_TPOS,WBT_TOP,WBT_CENTER)
+.endc
+
+        xreturn
+
+    .end
+
+;==============================================================================
+;Preserve field contents when unterminated fields lose focus
+;
+    .subroutine xfplini_entrst_method
+
+        a_nomod     ,n      ;field is not modified
+        a_reset     ,n      ;field does not need resetting
+
+.define XFPLINI_DATA
+.include "INC:xfplini.dbl"
+
+    .proc
+
+        if (!a_nomod)
+            a_reset = FALSE
+
+        xreturn
+
+    .end
+
+;==============================================================================
+;If the user clicks a windows close box simulate a close (cancel)
+;
+    .subroutine xfplini_close_box
+
+.define XFPLINI_DATA
+.include "INC:xfplini.dbl"
+
+    .proc
+
+        xcall m_signal("CLOSE")
+        xreturn
+
+    .end
+
+;==============================================================================
+;Warn about degraded performance due to single log file use
+;
+.ifndef D_VMS
+    .function xfplini_single_log_warning ,^val ,reentrant
+
+        ;Arguments
+        a_data_entered      ,a      ;Data as entered by the user.
+        a_data_stored       ,a      ;Data as stroed in variable
+        a_pending_status    ,n      ;Result of Toolkit's field validations.
+.include "WND:inpinf.def"   ;Input information structure
+        a_inprec            ,a      ;Input data area
+        ;Method data
+        ;End of arguments
+
+.define XFPLINI_DATA
+.include "INC:xfplini.dbl"
+
+.define D_MESSAGE       "Using a single log degrades performance.  Continue?"
+
+.align
+        stack record
+            status              ,i4
+
+    .proc
+
+        status = D_OK
+
+        if (^d(a_data_stored))
+        begin
+            if (YESNO_NO(D_MESSAGE,"Warning")==D_MIDNO)
+                status = D_EMITTEDERR
+        end
+
+        freturn status
+
+    .end
+.endc ;D_VMS
+
+;==============================================================================
+;Utility processing
+;
+    .subroutine xfplini_eutils
+
+.define XFPLINI_DATA
+.include "INC:xfplini.dbl"
+
+    .proc
+
+        using g_entnam select
+
+        ;Display "About" dialog
+        ("U_ABOUT"),
+            xcall u_about(APP_TITLE, version, %datecompiled)
+
+        ;Synergy Configuration Utility
+        ("U_SYNCONF"),
+            xcall shell(,"synconfig.exe",D_SHELL_OPT)
+
+        ("U_MDU"),
+            xcall shell(,"dbr DBLDIR:mdu.dbr",D_SHELL_OPT)
+
+        endusing
+
+        clear g_select
+
+        xreturn
+
+    .end
+
+;******************************************************************************
+.endc ;END OF PROGRAM CODE
+;******************************************************************************
+

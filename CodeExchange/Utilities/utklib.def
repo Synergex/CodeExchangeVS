@@ -1,0 +1,29 @@
+; UTL:utklib.def
+
+    first_channel       ,i4             ;first channel
+    last_channel        ,i4             ;last channel
+    env_hdl             ,i4             ;environment handle
+
+    maxchn              ,i4             ;upper channel in use
+    group io            ,[D_MAXCHN]a
+      filename            ,a D_FILENAME_SIZE
+                                        ;filename
+      mode                ,a D_MODE_SIZE
+                                        ;i/o mode
+      environment         ,i4           ;environment level
+                                        ; -1=global
+    endgroup
+    group months        ,a
+      mths                ,[12]a5       ;month descriptions (can't use g_months from WND:gblctl.def as it's not an array)
+    endgroup
+    date_delim          ,a1             ;date delimiter
+    ampm                ,[2]a3          ;AM. / PM.
+    time_delim          ,a1             ;time delimiter
+
+.ifdef g_state_save
+
+structure env
+    state               ,a ^size(g_state_save)
+                                        ;state (see WND:gblctl.def)
+.endc ;g_state_save
+

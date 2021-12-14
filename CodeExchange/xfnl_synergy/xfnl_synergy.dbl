@@ -1,0 +1,393 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Example of a list load method using xfNetLink Synergy Edition
+;
+; There are five subroutines in this example
+;
+; START_SERVER, STOP_SERVER, LIST_LOAD_METHOD are built into the
+; client Synergy/DE application.
+;
+; LIST_GETREC is built into the server Synergy/DE application, and
+; must be defined in the SMC.
+;
+; LIST_LOAD_METHOD_OLD is the list load method before adding the
+; xfServerPlus logic. This is provided for comparison purposes only.
+;
+; Implementation Notes:
+; -- In the example code (below) the network ID is passed as a data
+; argument, but an alternate mechanism for a mass change would be to
+; use global data to store a netid variable.
+;
+; -- The example code will work in both xfServerPlus mode and
+; non-xfServerPlus mode, depending upon whether the network id
+; variable is populated.
+;
+; -- Remember that the getrec routine is running on the server, and
+; therefore it does not know about the file channels that you have
+; open on the client.  In the sample code, there is a static record
+; that contains the channel number(s).  The first thing the routine
+; does is to check to see if the file is open, and if not, open the
+; file.  You also need a way of releasing the channel when you are
+; done with the list.  This has been implemented by putting a destructor
+; mechanism into the getrec routine.  If you do no do this, the channel
+; will remain open for the duration of the xfServerPlus session.
+;
+; -- If you are using Synergy/DE UI Toolkit to manage channels, you will
+; need to write a "startup" routine that does an "xcall u_start".  Then
+; call this routine after initializing the xfServerPlus session, but
+; before the load method is called.
+;
+; -- The load method uses an "xcall xsubr(method_address)" to avoid linking
+; errors when the xfServerPlus ELB is not directly linked to the main
+; line executable, and you require the ability to execute the routine
+; in a non-xfServerPlus mode.
+;
+; -- Don't forget that the getrec routine must be UI-free, and must report
+; all errors back to the load method via the function API.
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; This routine establishes the connection between the Synergy/DE
+; client and the Synergy/DE (xfServerPlus) server.
+
+.subroutine start_server
+    a_netid             ,n              ;REQUIRED RETURNED network ID
+    a_ip                ,a              ;REQUIRED server IP address (or DNS name)
+    a_port              ,n              ;REQUIRED xfServerPlus port
+
+    record
+.include 'DBLDIR:rxerr.def'
+
+.include 'DBLDIR:rxapi.def'
+
+.align
+    record
+        status              ,i4             ;return status
+
+.proc
+
+    ;start xfServerPlus
+    status = %rx_start_remote(a_netid, a_ip, a_port)
+    if(status.ne.RX_SUCCESS)
+    begin
+        xcall u_message("Cannot start xfServerPlus status="+%string(status))
+        clear a_netid
+    end
+
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; This routine releases the connection between the Synergy/DE client
+; and the Synergy (xfServerPlus) server.  If you do not do this, the
+; server resources (& licenses) are not released for re-use.
+
+.subroutine stop_server
+    a_netid             ,n              ;REQUIRED RETURNED network ID
+
+.proc
+
+    ;stop xfServerPlus (if it has actually been started)
+    if(a_netid)
+    begin
+        xcall rx_shutdown_remote(a_netid)
+        clear a_netid
+    end
+
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; This is the Synergy/DE UI Toolkit load method
+
+.subroutine list_load_method
+    a_listid            ,n              ;REQUIRED list ID
+    a_request           ,n              ;REQUIRED list request
+    a_data              ,a              ;REQUIRED list data
+    a_inpid             ,n              ;REQUIRED input window ID
+    a_disabled          ,n              ;OPTIONAL list item is disabled
+    a_itemindex         ,n              ;REQUIRED list item index number
+
+    a_netid             ,n              ;OPTIONAL network ID
+
+.include 'WND:tools.def'
+
+    record
+.include 'DBLDIR:rxerr.def'
+
+.include 'DBLDIR:rxapi.def'
+
+.align
+    static record
+        method_addr         ,i4             ;method address
+
+.align
+    record clr_i
+        error               ,i4             ;error executing method
+        status              ,i4             ;method return status
+
+.proc
+
+    clear ^i(clr_i)
+
+    ;if running in xfServerPlus mode
+    if(^passed(a_netid).and.a_netid) then
+    begin
+        ;assume method will fail to run
+        error = 1
+        onerror ($ERR_XFHALT) halt_error, rxsubr_error
+        xcall rxsubr(a_netid, 'list_getrec', status, a_data, a_itemindex)
+        clear error
+rxsubr_error,
+        offerror
+
+        ;failed xfServerPlus xcall
+        if(error)
+        begin
+            xcall rx_get_errinfo(a_netid, rx_stderror)
+            xcall u_message("LIST_GETREC  Error:"+%string(rx_stderror.error_num)
+&               +" "+%atrim(clarifying_desc))
+            ;force logical error condition
+            status = 1
+        end
+    end
+    else
+xsubr,  begin
+        if(.not.method_addr)
+        begin
+            ;get the address of the method
+            method_addr = %xaddr('list_getrec', 'ELB_NAME', error)
+
+            ;failed xcall
+            if(error)
+            begin
+                ;force logical error condition
+                status = 1
+                exit xsubr
+            end
+        end
+        xcall xsubr(method_addr, status, a_data, a_itemindex)
+    end
+
+
+continue,
+
+    ;got record - so display it into the list
+    if(.not.status) then
+    begin
+        xcall i_display(a_inpid,, a_data)
+    end
+    else
+    begin
+        clear a_data
+        a_request = D_LEOF
+    end
+
+    xreturn
+
+;--------------------------------------------------------------------
+
+halt_error,
+
+    offerror
+    xcall rx_get_haltinfo(a_netid, rx_fatalerror)
+    xcall u_message("Fatal Error calling LIST_GETREC\n"
+&       +" Error:"+%string(rx_fatalerror.error_num)
+&       +" @line:"+%string(error_line_number)+"\n"
+&       +" System Error:"+%string(sys_error_number)
+&       +" in program:"+%atrim(prog_name)+" "+%atrim(error_text))
+
+    ;force logical error condition
+    status = 1
+    goto continue
+
+.end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; This routine services the load method, and gets the next valid data
+; record.  It is actually executed on the Synergy/DE Server, and
+; should be built into a ELB for use by xfServerPlus.
+; This routine must be defined in the Synergy Method Catalog (SMC).
+;
+; Notice that all references to UI Toolkit have been removed.  This
+; is because there is u_start call to start the Synergy/DE UI Toolkit
+; on the server.  You could put a u_start in the start_server
+; subroutine and link with TKLIB.ELB. But linking against TKLIB.ELB
+; may allow programmer to "forget" to remove some UI code as the
+; linker would not report errors.
+
+.subroutine list_getrec
+
+    a_status            ,n              ;REQUIRED RETURNED status
+    ; if passed in as -1,
+    ; will close any open channels and return
+    ; RETURNED as 0=OK, else synergex error
+    a_data              ,a              ;REQUIRED RETURNED data record
+    a_itemindex         ,n              ;REQUIRED list item number
+
+.align
+    static record
+        chan                ,i4             ;file channel
+
+.align
+    record clr_i
+        status              ,i4             ;return status
+        ok                  ,i4             ;record is ok to put into list
+
+.proc
+
+    clear ^i(clr_i)
+
+    ;routine destructor
+    if(a_status.eq.-1)
+    begin
+        if(chan)
+        begin
+            close chan
+            clear chan
+        end
+        clear a_status
+        xreturn
+    end
+
+    ;channel not open - so open it
+    if(.not.chan)
+    begin
+        ;find an unused channel
+        if(chan = %syn_freechn()) then
+        begin
+            ;assume $ERR_FNF
+            status = 18
+            open(chan, I:I, 'LOGICAL:filename') [ERR=no_file]
+            clear status
+no_file,
+            ;get real error
+            if (status)
+                status = %error
+        end
+        else
+        begin
+            ;no free channels - signal $ERR_CHNEXC
+            status = 33
+        end
+    end
+
+    ;first item to be added to list - position at start of data
+    if(.not.status.and.a_itemindex.eq.1)
+    begin
+        ;assume $ERR_EOF
+        status = 1
+        find(chan, a_data, ^FIRST) [ERR=no_find]
+        clear status
+no_find,
+    end
+
+    ;no error has occurred
+    if(.not.status)
+    begin
+        ;assume we do want any records
+        clear ok
+        do  begin
+            ;assume $ERR_EOF
+            status = 1
+            reads(chan, a_data) [ERR=no_read]
+            ;read record ok
+            clear status
+
+            ;Add validation logic here
+
+            ;if record is actually required, set OK to TRUE
+            ok = 1
+
+no_read,
+        end
+        until(status.or.ok)
+    end
+
+    ;return status
+    a_status = status
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; This is the Synergy/DE UI Toolkit load method pre-xfServerPlus
+
+.subroutine list_load_method_old
+    a_listid            ,n              ;REQUIRED list ID
+    a_request           ,n              ;REQUIRED list request
+    a_data              ,a              ;REQUIRED list data
+    a_inpid             ,n              ;REQUIRED input window ID
+    a_disabled          ,n              ;OPTIONAL list item is disabled
+    a_itemindex         ,n              ;REQUIRED list item index number
+
+.include 'WND:tools.def'
+
+.align
+    static record
+        chan                ,i4             ;file channel
+
+.align
+    record clr_i
+        status              ,i4             ;return status
+        ok                  ,i4             ;record is ok to put into list
+
+.proc
+
+    clear ^i(clr_i)
+
+    ;channel not open - so open it
+    if(.not.chan)
+    begin
+        xcall u_open(chan, 'I:I', 'LOGICAL:filename',,, status)
+    end
+
+    ;first item to be added to list - position at start of data
+    if(.not.status.and.a_itemindex.eq.1)
+    begin
+        ;assume $ERR_EOF
+        status = 1
+        find(chan, a_data, ^FIRST) [ERR=no_find]
+        clear status
+no_find,
+    end
+
+    ;no error has occurred
+    if(.not.status)
+    begin
+        ;assume we do want any records
+        clear ok
+        do  begin
+            ;assume $ERR_EOF
+            status = 1
+            reads(chan, a_data) [ERR=no_read]
+            ;read record ok
+            clear status
+
+            ;Add validation logic here
+
+            ;if record is actually required, set OK to TRUE
+            ok = 1
+
+no_read,
+        end
+        until(status.or.ok)
+    end
+
+    ;got record - so display it into the list
+    if(.not.status) then
+    begin
+        xcall i_display(a_inpid,, a_data)
+    end
+    else
+    begin
+        clear a_data
+        a_request = D_LEOF
+    end
+
+    xreturn
+
+.end
+
+

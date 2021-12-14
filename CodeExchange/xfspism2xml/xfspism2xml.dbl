@@ -1,0 +1,4005 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; XFSPISM2XML.DBL
+;
+; This routine uses the Synergy/DE Repository to export isam data in XML format
+; and returns the xml string
+;
+; Requires with Synergy/DE version 8.1 or later
+;
+; Version :
+;
+.define D_APP       ,"XFSPISM2XML"
+.define D_VERSION   ,"1.2.0"
+;
+; Date : 22nd April 2003
+;
+; Notes:
+;
+;  If the filename contains a colon, it is assumed to be a physical filename,
+;  and the structure name MUST be provided. You cannot specify a filename in
+;  the current directory without using a logical
+;
+;  If the filename does not contains a colon, it must contain a Repository
+;  filename, and the structure name is optional.  If the structure name is
+;  provided, all records will use the provided structure.  If the structure
+;  name is not provided, each record is checked against any Repository tags,
+;  and the appropriate structure is used.
+;
+;
+;  How to use these routines:
+;
+;
+;
+;  If you want to display progress information:
+;
+;    call xfsp_ism2xml_init(...)
+;
+;    do
+;
+;      display progress info
+;
+;      status = %xfsp_ism2xml_data(20, numrecs)
+;
+;    until(status == DE_NOMOREDATA)
+;
+;    call xfsp_ism2xml_exit(xml_string)
+;
+;    process xml string
+;
+;
+;
+;  If you do not want to display progress information:
+;
+;    call xfsp_ism2xml_init(...)
+;
+;    call xfsp_ism2xml_data
+;
+;    call xfsp_ism2xml_exit(xml_string)
+;
+;    process xml string
+;
+;
+;
+;
+;  If you want an XML schema file to match the XML beging generated:
+;
+;    call xfsp_ism2xml_xsd(xsd_string)
+;
+;  between the xfsp_ism2xml_init routine and the xfsp_ism2xml_exit routine
+;
+;
+;
+;
+; XFPL.INI
+;
+; XFPL_LOG=ON
+; XFPL_SESS_INFO=NONE
+; XFPL_FUNC_INFO=NONE
+; XFPL_DEBUG=NONE
+; XFPL_LOGICAL:RPSLIB=C:\Program Files\Synergex\SynergyDE\RPS\lib
+; XFPL_LOGICAL:WND=C:\Program Files\Synergex\SynergyDE\Toolkit
+; XFPL_LOGICAL:EXE=C:\Source
+; XFPL_LOGICAL:TMP=C:\Source
+; XFPL_LOGICAL:RPSMFIL=C:\Source\RPS\rpsmain.ism
+; XFPL_LOGICAL:RPSTFIL=C:\Source\RPS\rpstext.ism
+;
+;
+; Synergy Method Catalog descriptions
+;
+; <method name="xfsp_ism2xml_init" id="xfsp_ism2xml_init" elb="EXE:xfspism2xml">
+;   <methodresult type="value" size="4"/>
+;   <param name="filename" type="alpha" size="255"/>
+;   <param name="structurename" type="alpha" size="30" required="no"/>
+;   <param name="xml_type" type="alpha" size="25" required="no"/>
+;   <param name="keynumber" type="decimal" size="3" required="no"/>
+;   <param name="first_key" type="alpha" size="80" required="no"/>
+;   <param name="last_key" type="alpha" size="80" required="no"/>
+;   <param name="keyrangetype" type="decimal" size="1" required="no"/>
+; </method>
+;
+; <method name="xfsp_ism2xml_data" id="xfsp_ism2xml_data" elb="EXE:xfspism2xml">
+;   <methodresult type="value" size="4"/>
+;   <param name="max_records" type="integer" size="4" required="no"/>
+;   <param name="number_of_records" type="integer" size="4" required="no" dir="out"/>
+; </method>
+;
+; <method name="xfsp_ism2xml_exit" id="xfsp_ism2xml_exit" elb="EXE:xfspism2xml">
+;   <methodresult type="value" size="4"/>
+;   <param name="xml_handle" type="handle" dir="out"/>
+; </method>
+;
+; <method name="xfsp_ism2xml_xsd" id="xfsp_ism2xml_xsd" elb="EXE:xfspism2xml">
+;   <methodresult type="value" size="4"/>
+;   <param name="xsd_handle" type="handle" dir="out"/>
+; </method>
+;
+; <method name="get_error_text" id="get_error_text" elb="EXE:xfspism2xml">
+;   <methodresult type="value" size="4"/>
+;   <param name="errornumber" type="integer" size="4" required="no"/>
+;   <param name="errortext" type="alpha" size="80" required="no" dir="out"/>
+; </method>
+;
+;
+; The xmlstring parameter is coded as a numeric, but will work if passed as alpha.
+;
+; Synergy Method Catalog descriptions (alternate)
+;
+; <method name="xfsp_ism2xml_exit" id="xfsp_ism2xml_exit" elb="EXE:xfspism2xml">
+;   <methodresult type="value" size="4"/>
+;   <param name="xmlstring" type="alpha" size="65535" dir="out"/>
+; </method>
+;
+; <method name="xfsp_ism2xml_xsd" id="xfsp_ism2xml_xsd" elb="EXE:xfspism2xml">
+;   <methodresult type="value" size="4"/>
+;   <param name="xsdstring" type="alpha" size="65535" dir="out"/>
+; </method>
+;
+; N.B. first_key and last_key may need to be adjusted to allow for larger keys/records.
+
+; Log filename
+.define D_XFSPISM2XML_LOGFILE ,'TMP:xfspism2xml.log'
+
+.include 'INC:xfspism2xml.def'
+
+; Example XML formats
+;
+;<?xml version='1.0'?>
+;<xfspism2xml XMLtype="nameTAG value=">
+;  <file name="CUSTOMER">
+;    <CUSTOMER keynum="0">
+;      <cust_id value="999"/>
+;      <cust_name value="Synergex International Corporation"/>
+;      <cust_adr1 value="2330 Gold Meadow Way"/>
+;      <cust_adr2 value=""/>
+;      <cust_city value="Gold River"/>
+;      <cust_state value="CA"/>
+;      <cust_zip value="95670"/>
+;      <cust_phone value=" + 1 (916) 635 7300"/>
+;    </CUSTOMER>
+;  </file>
+;</xfspism2xml>
+;
+;<?xml version='1.0'?>
+;<xfspism2xml XMLtype="TAG name= value=">
+;  <file name="CUSTOMER">
+;    <structure name="CUSTOMER" keynum="0">
+;      <field name="cust_id" value="999"/>
+;      <field name="cust_name" value="Synergex International Corporation"/>
+;      <field name="cust_adr1" value="2330 Gold Meadow Way"/>
+;      <field name="cust_adr2" value=""/>
+;      <field name="cust_city" value="Gold River"/>
+;      <field name="cust_state" value="CA"/>
+;      <field name="cust_zip" value="95670"/>
+;      <field name="cust_phone" value=" + 1 (916) 635 7300"/>
+;    </structure>
+;  </file>
+;</xfspism2xml>
+;
+;<?xml version='1.0'?>
+;<xfspism2xml XMLtype="nameTAG DATA nameENDTAG">
+;  <file name="CUSTOMER">
+;    <CUSTOMER keynum="0">
+;      <cust_id>999</cust_id>
+;      <cust_name>Synergex International Corporation</cust_name>
+;      <cust_adr1>2330 Gold Meadow Way</cust_adr1>
+;      <cust_adr2/>
+;      <cust_city>Gold River</cust_city>
+;      <cust_state>CA</cust_state>
+;      <cust_zip>95670</cust_zip>
+;      <cust_phone> + 1 (916) 635 7300</cust_phone>
+;    </CUSTOMER>
+;  </file>
+;</xfspism2xml>
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; export isam to xml for specific file
+
+.function XFSP_ISM2XML_INIT ,^val
+    a_filename      ,a                  ;REQUIRED Filename
+    a_strname       ,a                  ;OPTIONAL Structure name
+    a_xml_type      ,a                  ;OPTIONAL XML type
+    a_keynum        ,n                  ;OPTIONAL Key number
+    a_first         ,a                  ;OPTIONAL First record / key
+    a_last          ,a                  ;OPTIONAL Last record / key
+    a_rangetype     ,n                  ;OPTIONAL first/last are 0=records, 1=keys
+
+.define TOOLS_INIT
+.include 'WND:tools.def'
+;.undefine TOOLS_INIT
+
+external function
+    init            ,^val
+
+.align
+record clr_i
+    fstatus         ,i4                 ;function return status
+
+.proc
+
+    onerror error_exit
+
+    xcall openelb('DBLDIR:synxml')
+
+    xcall openelb('RPSLIB:ddlib')
+
+    xcall openelb('WND:tklib')
+
+    ;start toolkit, ignoring channels used by xfServerPlus
+    xcall xsubr('U_START',,,,,,,,,, 240)
+
+    fstatus = %init(a_filename, a_strname, a_xml_type,
+    &       a_keynum, a_first, a_last, a_rangetype)
+
+    offerror
+
+    freturn fstatus
+
+error_exit,
+    offerror
+
+    freturn %error
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; export isam to xml for specific file
+
+.function init ,^val
+    a_filename      ,a                  ;REQUIRED Filename
+    a_strname       ,a                  ;OPTIONAL Structure name
+    a_xml_type      ,a                  ;OPTIONAL XML type
+    a_keynum        ,n                  ;OPTIONAL Key number
+    a_first         ,a                  ;OPTIONAL First record / key
+    a_last          ,a                  ;OPTIONAL Last record / key
+    a_rangetype     ,n                  ;OPTIONAL first/last are 0=records, 1=keys
+
+.include 'DBLDIR:synxml.def'
+.include 'RPSLIB:ddinfo.def'
+
+.define INIT_GLOBAL
+
+.include 'INC:xfspism2xml.rec'
+
+.undefine INIT_GLOBAL
+
+external function
+    rps2xsd                 ,^val
+.ifndef DBLNET
+    xml_doc_create          ,^val
+    xml_doc_setcomment      ,^val
+    xml_doc_setdeclaration  ,^val
+    xml_doc_setroot         ,^val
+    xml_elem_addchild       ,^val
+    xml_elem_create         ,^val
+    xml_elem_setattribute   ,^val
+    xml_elem_setname        ,^val
+    xml_parser_create       ,^val
+.endc ;DBLNET
+
+structure str_names
+    str_name        ,a30                ;structure names
+
+structure tag_names
+    tag_name        ,a30                ;tag names
+
+.align
+record clr_i
+    fstatus         ,i4                 ;function return status
+    err             ,i4                 ;error
+    fld_ctr         ,i4                 ;field array pointer
+    field_pos       ,i4                 ;field position in structure/group
+    field_num       ,i4                 ;field number
+    tag_ctr         ,i4                 ;tag number
+    str_ctr         ,i4                 ;structure array counter
+    status          ,i4                 ;status
+    ke_hdl          ,D_HANDLE           ;key handle (for range checking)
+    sn_hdl          ,D_HANDLE           ;structure list handle
+    tn_hdl          ,D_HANDLE           ;tag names list handle
+    f_hdl           ,D_HANDLE           ;field handle
+    t_hdl           ,D_HANDLE           ;tag details list handle
+
+.proc
+
+    clear ^i(clr_i)
+
+    ;set XML type
+    if (^passed(a_xml_type)) then
+        xml_type = a_xml_type
+    else
+        clear xml_type
+
+    ;set isam key number to use
+    if (^passed(a_keynum)) then
+        keyno = a_keynum
+    else
+        clear keyno
+
+    ;set isam reange type
+    if (^passed(a_rangetype)) then
+        begin
+        using a_rangetype select
+        (D_RANGE_KEY, D_RANGE_REC),
+            range_type = a_rangetype
+        (),
+            clear range_type
+        endusing
+        end
+    else
+        clear range_type
+
+    ;start Repository
+    xcall dd_init(dcs)
+
+    using dcs.error select
+    (E_OK),
+        begin
+        fstatus = DE_NOERROR
+
+        clear fl_info, s_info
+
+        call validate_params
+
+        if (fstatus == DE_NOERROR)
+            call get_rps_data       ;get Repository data
+
+        xcall dd_exit(dcs)
+
+        if (fstatus == DE_NOERROR)
+            call export_data        ;create xml doc header
+
+        if (fstatus == DE_NOERROR)
+            call process_isam       ;open isam file, position at first record, set ranges
+
+        end
+    (E_NOFIND),
+        begin
+        fstatus = DE_RPS_ERROR
+        xcall log_error(fstatus, "DD_INIT Record not found")
+        end
+    (E_OPNERR),
+        begin
+        fstatus = DE_RPS_ERROR
+        xcall log_error(fstatus, "DD_INIT Cannot open RPS")
+        end
+    (E_INVFNC),
+        begin
+        fstatus = DE_RPS_ERROR
+        xcall log_error(fstatus, "DD_INIT Invalid Function")
+        end
+    (E_OPNERRM),
+        begin
+        fstatus = DE_RPS_ERROR
+        xcall log_error(fstatus, "DD_INIT Cannot open RPS main file")
+        end
+    (E_OPNERRT),
+        begin
+        fstatus = DE_RPS_ERROR
+        xcall log_error(fstatus, "DD_INIT Cannot open RPS text file")
+        end
+    (E_BADVERS),
+        begin
+        fstatus = DE_RPS_ERROR
+        xcall log_error(fstatus, "DD_INIT Incompatible Repository version")
+        end
+    (),
+        begin
+        fstatus = DE_RPS_ERROR
+        xcall log_error(fstatus, "DD_INIT Unknown error")
+        end
+    endusing
+
+    if (fstatus != DE_NOERROR)
+        begin
+        ;release allocated resources
+        xcall exit
+        end
+
+    freturn fstatus
+
+;----------------------------------------------------------------------------
+
+validate_params,
+
+    ;physical filename (if contains colon) or RPS filename
+    if (%instr(1, a_filename, ':')) then
+        begin
+        ;make sure file exists
+        chan = %syn_freechn()
+        open(chan, I:I, a_filename) [ERR=open_error]
+        close chan
+        if (0)
+            begin
+open_error,
+            fstatus = %error
+            xcall log_error(fstatus, "File: Cannot open ISAM file - " + %atrim(a_filename))
+            return
+            end
+
+        ;make sure structure name is in Repository
+        if (^passed(a_strname) && a_strname) then
+            begin
+            xcall dd_struct(dcs, DDS_INFO, a_strname, s_info)
+            if (dcs.error)
+                begin
+                fstatus = DE_FIL_STR_ERR
+                xcall log_error(DE_RPS_ERROR, "Structure:" + %atrim(a_strname) + " not defined")
+                return
+                end
+            end
+        else
+            begin
+            fstatus = DE_FIL_STR_NONE
+            xcall log_error(fstatus, "Structure: No structure name provided")
+            return
+            end
+
+        ;set filename and number of structures (to 1)
+        rps_filename = a_strname
+        ism_filename = a_filename
+        num_structures = 1
+        end
+    else
+        begin
+        ;make sure file name is in Repository
+        xcall dd_file(dcs, DDL_INFO, a_filename, fl_info)
+        if (dcs.error)
+            begin
+            fstatus = DE_FIL_NO_FILE
+            xcall log_error(DE_RPS_ERROR, "File:" + %atrim(a_filename) + " not defined")
+            return
+            end
+        if (fli_nmstructs < 1)
+            begin
+            fstatus = DE_FIL_NO_STR
+            xcall log_error(fstatus, "File:" + %atrim(a_filename) + " has no structures assigned")
+            return
+            end
+
+        rps_filename = flname
+        num_structures = fli_nmstructs
+        ism_filename = fli_fname
+
+        ;make sure structure name is in Repository
+        if (^passed(a_strname) && a_strname) then
+            begin
+            xcall dd_struct(dcs, DDS_INFO, a_strname, s_info)
+            if (dcs.error) then
+                begin
+                fstatus = DE_STR_ERROR
+                xcall log_error(DE_RPS_ERROR, "Structure:" + %atrim(a_strname) + " not defined")
+                return
+                end
+            else
+                begin
+                ;force the use of only one structure
+                num_structures = 1
+                end
+            end
+        else
+            begin
+            ;only one structure - populate dcs by getting info
+            if (num_structures == 1)
+                begin
+                xcall dd_struct(dcs, DDS_INFO, fli_struct, s_info)
+                if (dcs.error)
+                    begin
+                    fstatus = DE_STR_ERROR2
+                    xcall log_error(DE_RPS_ERROR, "Structure:" + %atrim(fli_struct) + " not defined")
+                    return
+                    end
+                end
+            end
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+; get all the field information from Repository
+
+get_rps_data,
+
+;----------------------------------------------------------------------------
+; get structure names and ODBC names from Repository
+; and store them in dynamic memory arrays
+
+    sn_hdl = %mem_proc(DM_ALLOC, num_structures * ^size(str_names))
+
+    if (num_structures > 1) then
+        begin
+        xcall dd_file(dcs, DDL_STRS, num_structures, ^m(str_names, sn_hdl))
+        if (dcs.error)
+            begin
+            sn_hdl = %mem_proc(DM_FREE, sn_hdl)
+            fstatus = DE_NO_STRUCTS
+            xcall log_error(DE_RPS_ERROR, "No structures for file " + %atrim(flname))
+            return
+            end
+        end
+    else
+        begin
+        ;use structure already read by DD_STRUCT
+        str_ctr = 1
+        M_STR_NAMES(str_name) = dcs.sname
+        end
+
+    s_hdl = %mem_proc(DM_ALLOC + DM_STATIC, num_structures * ^size(str_info))
+
+    for str_ctr from 1 thru num_structures
+        begin
+        xcall dd_struct(dcs, DDS_INFO, M_STR_NAMES(str_name), s_info)
+        if (dcs.error) then
+            begin
+            sn_hdl = %mem_proc(DM_FREE, sn_hdl)
+            fstatus = DE_RPS_ERROR
+            xcall log_error(DE_RPS_ERROR, "Structure:" + %atrim(M_STR_NAMES(str_name)))
+            return
+            end
+        else
+            begin
+            M_STR_INFO(name) = M_STR_NAMES(str_name)
+            M_STR_INFO(info) = s_info
+
+            ;create field details array
+            f_hdl = %mem_proc(DM_ALLOC + DM_STATIC, s_info.si_nmflds * ^size(fld_array))
+
+            ;get properties for all fields from repository
+            clear field_num, field_pos
+            xcall get_all_fields(dcs, f_hdl, s_info.si_nmflds, field_num, field_pos)
+
+            ;list of fields for this structure
+            M_STR_INFO(hdl_flds) = f_hdl
+
+            ;are there any repository structure tags
+            if (s_info.si_nmtags && num_structures > 1) then
+                begin
+                ;get tag details for this structure
+                call get_rps_tags
+                if (fstatus != DE_NOERROR)
+                    begin
+                    sn_hdl = %mem_proc(DM_FREE, sn_hdl)
+                    return
+                    end
+                end
+            else
+                clear M_STR_INFO(hdl_tags)
+            end
+        end
+
+    sn_hdl = %mem_proc(DM_FREE, sn_hdl)
+
+    return
+
+;----------------------------------------------------------------------------
+; get all the tags for this structure out of repository
+
+get_rps_tags,
+
+    ;allocate tag names memory
+    tn_hdl = %mem_proc(DM_ALLOC, s_info.si_nmtags * ^size(tag_names))
+
+    ;get a list of tags
+    xcall dd_tag(dcs, DDTG_LIST, s_info.si_nmtags, ^m(tag_names, tn_hdl))
+    if (dcs.error) then
+        begin
+        fstatus = DE_RPS_ERROR
+        xcall log_error(DE_RPS_ERROR, "Structure:" + %atrim(sname) + " Tag list")
+        clear s_info.si_nmtags
+
+        ;populate structure info record
+        clear M_STR_INFO(hdl_tags)
+        end
+    else
+        begin
+        ;allocate tag details memory
+        t_hdl = %mem_proc(DM_ALLOC + DM_STATIC, s_info.si_nmtags * ^size(tag_array))
+
+        ;populate structure info record
+        M_STR_INFO(hdl_tags) = t_hdl
+
+        ;get details for each tag
+        for tag_ctr from 1 thru s_info.si_nmtags
+            begin
+            xcall dd_tag(dcs, DDTG_INFO, M_TAG_NAMES(tag_name), M_TAG_ARRAY(tag_info))
+            M_TAG_ARRAY(tag_name) = M_TAG_NAMES(tag_name)
+            clear M_TAG_ARRAY(tag_pos), M_TAG_ARRAY(tag_len)
+            end
+        end
+
+    ;release tag names memory
+    tn_hdl = %mem_proc(DM_FREE, tn_hdl)
+
+    ;are we determining tag type by field
+    if (s_info.si_nmtags && s_info.si_tagtyp == TAGFLD)
+        begin
+        for tag_ctr from 1 thru s_info.si_nmtags
+            begin
+            tg_info = M_TAG_ARRAY(tag_info)
+            locase tgi_tagfld
+
+            fld_ctr = 1
+            while(fld_ctr <= s_info.si_nmflds)
+                begin
+                if (M_FLD_ARRAY(fld_name) == tgi_tagfld)
+                    begin
+                    ;found the matching field - save tag positions
+                    M_TAG_ARRAY(tag_pos) = M_FLD_ARRAY(fld_pos)
+                    M_TAG_ARRAY(tag_len) = M_FLD_ARRAY(fld_len)
+                    exitloop
+                    end
+                fld_ctr += 1
+                end
+            end
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+
+process_isam,
+
+    ;open isam file
+    xcall u_open(chan, 'I:I', ism_filename,,, status)
+    if (!status) then
+        begin
+        onerror badkey
+        reclen = %isinfo(chan, 'SIZE')
+        keyasc = %isinfo(chan, 'ASCEND', keyno)
+        keylen = %isinfo(chan, 'KEYLENGTH', keyno)
+        offerror
+
+        if (0)
+            begin
+badkey,
+            offerror
+            fstatus = DE_XML_INVKEY
+            xcall log_error(fstatus, "Invalid Key number specified [" + %string(keyno) + "]")
+            return
+            end
+        end
+    else
+        begin
+        fstatus = %error
+        xcall log_error(fstatus, "Cannot open ISAM file - " + %atrim(ism_filename))
+        clear chan
+        return
+        end
+
+    call build_key_ranges
+    if (fstatus != DE_NOERROR)
+        return
+
+
+    return
+
+;----------------------------------------------------------------------------
+
+build_key_ranges,
+
+
+    ;create dummy key, used to read data from isam file
+    k_hdl = %mem_proc(DM_ALLOC + DM_STATIC, keylen)
+
+    ;position at correct record of selected key number
+    if (^passed(a_first) && range_type) then
+        begin
+        using range_type select
+        (D_RANGE_KEY),
+            ^m(buff(1,keylen), k_hdl) = a_first
+        (D_RANGE_REC),
+            ^m(buff(1,keylen), k_hdl) = %keyval(chan, a_first, keyno)
+        endusing
+
+        ;no partial keys allowed!
+        find(chan,, ^m(buff(1,keylen), k_hdl), KEYNUM:keyno) [EOF=eof, ERR=next]
+        end
+    else
+        begin
+        ;create dummy value for first key
+        if (keyasc) then
+            clear ^m(buff(1,keylen), k_hdl)
+        else
+            xcall fill('~', ^m(buff(1,keylen), k_hdl))
+        find(chan,, ^FIRST, KEYNUM:keyno) [EOF=eof, ERR=next]
+        end
+
+    if (0)
+        begin
+eof,
+        fstatus = DE_NO_DATA
+        xcall log_error(fstatus, "End of File occured finding first record")
+        return
+        end
+next,
+    ;if we have an last key  - use it
+    if (^passed(a_last) && range_type) then
+        begin
+        ;create dummy key, used to read data from isam file
+        ke_hdl = %mem_proc(DM_ALLOC, keylen)
+        ;create dummy value for last key
+        if (keyasc) then
+            xcall fill('~', ^m(buff(1,keylen), ke_hdl))
+        else
+            clear ^m(buff(1,keylen), ke_hdl)
+
+        ;make sure that last key is "after" first key,
+        ; and not the last possible key on file
+        if (keyasc) then
+            begin
+            if (a_last >= ^m(buff(1,keylen), k_hdl) &&
+            &   a_last != ^m(buff(1,keylen), ke_hdl)) then
+                begin
+                using range_type select
+                (D_RANGE_KEY),
+                    ^m(buff(1,keylen), k_hdl) = a_last
+                (D_RANGE_REC),
+                    ^m(buff(1,keylen), k_hdl) = %keyval(chan, a_last, keyno)
+                endusing
+                end
+            else
+                ;invalid last key , so release memory
+                k_hdl = %mem_proc(DM_FREE, k_hdl)
+            end
+        else
+            begin
+            if (a_last <= ^m(buff(1,keylen), k_hdl) &&
+            &   a_last != ^m(buff(1,keylen), ke_hdl)) then
+                begin
+                using range_type select
+                (D_RANGE_KEY),
+                    ^m(buff(1,keylen), k_hdl) = a_last
+                (D_RANGE_REC),
+                    ^m(buff(1,keylen), k_hdl) = %keyval(chan, a_last, keyno)
+                endusing
+                end
+            else
+                ;invalid last key , so release memory
+                k_hdl = %mem_proc(DM_FREE, k_hdl)
+            end
+
+        ;release memory
+        ke_hdl = %mem_proc(DM_FREE, ke_hdl)
+        end
+    else
+        begin
+        ;no last key , so release memory
+        k_hdl = %mem_proc(DM_FREE, k_hdl)
+        end
+
+    ; at this point, the memory area represented by the handle k_hdl
+    ; will either be set to the last key required,
+    ; or deallocated (meaning no check required).
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_data,
+
+    clear parser_id, doc_id
+    if (parser_id = %xml_parser_create) then
+        begin
+        doc_id = %xml_doc_create
+        if (doc_id && %xml_doc_setdeclaration(doc_id, "<?xml version='1.0'?>") == XML_SUCCESS) then
+            begin
+            call add_comment
+            call create_root_node
+            if (fstatus != DE_NOERROR)
+                return
+            end
+        else
+            begin
+            fstatus = DE_DOC_ERROR
+            xcall log_error(fstatus, "Cannot add document declaration")
+            clear doc_id
+            return
+            end
+        end
+    else
+        begin
+        fstatus = DE_PARSER_ERROR
+        xcall log_error(fstatus, "Cannot create document parser")
+        return
+        end
+
+    using xml_type select
+    (D_XML_TYPE_TAG), ;tag data
+        begin
+        ;set XMLTYPE attribute of root node
+        if (%xml_elem_setattribute(root_node, D_XML_TYPE, xml_type) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_TYPEATTR
+            xcall log_error(fstatus, "Error setting xmltype attribute on root")
+            return
+            end
+
+        ;add file node to XML document
+        call raw_file_tag
+        if (fstatus != DE_NOERROR)
+            return
+        end
+    (D_XML_TYPE_ATTR),
+        begin
+        ;set XMLTYPE attribute of root node
+        if (%xml_elem_setattribute(root_node, D_XML_TYPE, xml_type) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_TYPEATTR
+            xcall log_error(fstatus, "Error setting xmltype attribute on root")
+            return
+            end
+
+        ;add file node to XML document
+        call raw_file_tag
+        end
+    (D_XML_TYPE_ADO),
+        begin
+        if (num_structures > 1)
+            begin
+            fstatus = DE_XML_TOOMANY
+            xcall log_error(fstatus, "Error too many structures for file with ADO XML (file node)")
+            return
+            end
+
+        ; do not rename label, as logic is duplicated (see add_ado_root_attributes in rps2xsd)
+        call add_ado_root_attributes
+        if (fstatus != DE_NOERROR)
+            return
+        end
+    (D_XML_TYPE_ISLE),
+        begin
+        if (num_structures > 1)
+            begin
+            fstatus = DE_XML_TOOMANY
+            xcall log_error(fstatus, "Error too many structures for file with Data Island XML (file node)")
+            return
+            end
+
+        call add_di_root_attributes
+        if (fstatus != DE_NOERROR)
+            return
+        end
+    (),
+        begin
+        ;set XMLTYPE attribute of root node
+        if (%xml_elem_setattribute(root_node, D_XML_TYPE, xml_type) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_TYPEATTR
+            xcall log_error(fstatus, "Error setting xmltype attribute on root")
+            return
+            end
+
+        ;add file node to XML document
+        call raw_file_tag
+        if (fstatus != DE_NOERROR)
+            return
+        end
+    endusing
+
+
+    return
+
+;----------------------------------------------------------------------------
+
+add_comment,
+
+    if(%xml_doc_setcomment(doc_id, "Created by "+D_APP+" v"+D_VERSION+" on "+%datetime) != XML_SUCCESS)
+        begin
+        xcall log_error(fstatus, "Error adding document comment")
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+
+create_root_node,
+
+    ;create root node
+    root_node = %xml_elem_create
+    if (!root_node)
+        begin
+        fstatus = DE_ROOT_NODE
+        xcall log_error(fstatus, "Error creating root element")
+        return
+        end
+    ;set document root node
+    if (%xml_doc_setroot(doc_id, root_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_ROOT_SETROOT
+        xcall log_error(fstatus, "Error setting document root node")
+        return
+        end
+    ;set name of root element
+    if (%xml_elem_setname(root_node, D_XML_ROOT) != XML_SUCCESS)
+        begin
+        fstatus = DE_ROOT_SETNAME
+        xcall log_error(fstatus, "Error setting root element name")
+        return
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+; export FILE tag
+
+raw_file_tag,
+
+    ;create file node
+    file_node = %xml_elem_create
+    if (!file_node)
+        begin
+        fstatus = DE_XML_CRE_ELE
+        xcall log_error(fstatus, "Error creating XML element")
+        return
+        end
+    ;add file node as child of root node
+    if (%xml_elem_addchild(root_node, file_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ADDCHILD
+        xcall log_error(fstatus, "Error adding child node (file node)")
+        return
+        end
+    ;set name of file node
+    if (%xml_elem_setname(file_node, D_XML_FILE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ELENAME
+        xcall log_error(fstatus, "Error setting element name (file node)")
+        return
+        end
+    ;set NAME attribute of file node
+    if (%xml_elem_setattribute(file_node, D_XML_NAME, rps_filename) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting name '" + %atrim(rps_filename) + "'attribute (file node)")
+        return
+        end
+    ;set KEYNO attribute of structure node
+    if (%xml_elem_setattribute(file_node, D_XML_KEYNUM, %string(keyno)) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_KEYATTR
+        xcall log_error(fstatus, "Error setting keynum attribute (file node)")
+        return
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+
+add_ado_root_attributes,
+
+; duplicated logic (see add_ado_root_attributes in rps2xsd)
+
+    ;set NAMESPACE attributes of root node
+    if (%xml_elem_setattribute(root_node, D_XMLNS + D_XSDNS_XS, 'uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14482') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_TYPEATTR
+        xcall log_error(fstatus, "Error setting namespace 'xs' attribute on root")
+        return
+        end
+
+    if (%xml_elem_setattribute(root_node, D_XMLNS + D_XSDNS_DT, 'uuid:C2F41010-65B3-11d1-A29F-00AA00C14482') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_TYPEATTR
+        xcall log_error(fstatus, "Error setting namespace 'dt' attribute on root")
+        return
+        end
+
+    if (%xml_elem_setattribute(root_node, D_XMLNS + D_XSDNS_RS, 'urn:schemas-microsoft-com:rowset') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_TYPEATTR
+        xcall log_error(fstatus, "Error setting namespace 'rs' attribute on root")
+        return
+        end
+
+    if (%xml_elem_setattribute(root_node, D_XMLNS + D_XSDNS_XR, '#' + D_XSD_ROWSETSCHEMA) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_TYPEATTR
+        xcall log_error(fstatus, "Error setting namespace xr attribute on root")
+        return
+        end
+
+; end of duplicated logic
+
+    fstatus = %rps2xsd(root_node)
+    if (fstatus != DE_NOERROR)
+        return
+
+    ;create file node
+    file_node = %xml_elem_create
+    if (!file_node)
+        begin
+        fstatus = DE_XML_CRE_ELE
+        xcall log_error(fstatus, "Error creating XML element")
+        return
+        end
+    ;add file node as child of root node
+    if (%xml_elem_addchild(root_node, file_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ADDCHILD
+        xcall log_error(fstatus, "Error adding child node (file node)")
+        return
+        end
+    ;set name of file node
+    if (%xml_elem_setname(file_node, D_XSDNS_RS + ':' + D_XSD_DATA) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SN_FIL
+        xcall log_error(fstatus, "Error setting name 'rs:data' (file node)")
+        return
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+
+add_di_root_attributes,
+
+    ;create file node
+    file_node = %xml_elem_create
+    if (!file_node)
+        begin
+        fstatus = DE_XML_CRE_ELE
+        xcall log_error(fstatus, "Error creating XML element")
+        return
+        end
+    ;add file node as child of root node
+    if (%xml_elem_addchild(root_node, file_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ADDCHILD
+        xcall log_error(fstatus, "Error adding child node (file node)")
+        return
+        end
+    ;set name of file node
+    if (%xml_elem_setname(file_node, rps_strname) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SN_FIL
+        xcall log_error(fstatus, "Error setting name 'rs:data' (file node)")
+        return
+        end
+    ;set namespace attribute of root node
+    if (%xml_elem_setattribute(file_node, D_XSDNS, 'x-schema:' + %atrim(rps_filename) + '.xml') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_TYPEATTR
+        xcall log_error(fstatus, "Error setting x-schema attribute (file node)")
+        return
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine get_all_fields, reentrant, stack
+
+    a_dcs           ,a                  ;REQUIRED RPS DCS
+    a_f_hdl         ,n                  ;REQUIRED file detail array handle
+    a_si_nmflds     ,n                  ;REQUIRED number of fields in structure
+    a_field_num     ,n                  ;REQUIRED current field number
+    a_fi_pos        ,n                  ;REQUIRED current field position (in structure)
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:xfspism2xml.rec'          ;field definitions
+
+.define MAX_FLDS    ,500
+
+.align
+record clr_i
+    num_flds    ,d4                     ;number of fields in DDF_SLIST
+    fld_ctr     ,i4                     ;field counter
+
+.align
+record clr
+    field_names ,MAX_FLDS a30           ;DDF_SLIST array of field names
+    field_name  ,a30                    ;field name
+    start       ,a30                    ;start field name (for DDF_SLIST)
+    strname     ,a30                    ;structure name
+    old_struct  ,a30                    ;old structure
+    old_dcs     ,a30                    ;old DCS
+
+.proc
+
+    clear clr, ^i(clr_i)
+
+    dcs = a_dcs
+
+again,
+    xcall dd_field(dcs, DDF_SLIST, MAX_FLDS, field_names, start, num_flds)
+    if (dcs.error)
+        begin
+        xcall log_error(DE_RPS_ERROR, "Structure:" + %atrim(sname) + " List of fields error")
+        xreturn
+        end
+
+    for fld_ctr from 1 thru num_flds
+        begin
+        ;second time thru, ignore first field
+        if (fld_ctr == 1 && start && field_names(1) == start)
+            nextloop
+
+        ;get the field information
+        xcall dd_field(dcs, DDF_INFO, field_names(fld_ctr), f_info)
+        if (dcs.error)
+            begin
+            xcall log_error(DE_RPS_ERROR, "Structure:" + %atrim(sname)
+            &               + " Field:" + %atrim(field_names(fld_ctr)))
+            nextloop
+            end
+
+        if (fi_odbcnm) then
+            begin
+            ;get the ODBC fieldname
+            xcall dd_field(dcs, DDF_TEXT, fi_odbcnm, field_name)
+            if (dcs.error)
+                begin
+                xcall log_error(DE_RPS_ERROR, "Structure:" + %atrim(sname)
+                &               + " Field:" + %atrim(field_names(fld_ctr)) + " no ODBC name")
+                field_name = field_names(fld_ctr)
+                end
+            end
+        else
+            field_name = field_names(fld_ctr)
+
+        a_field_num += 1
+
+        ;update field details array
+        M_A_FLD_ARRAY(fld_name) = field_names(fld_ctr)
+        M_A_FLD_ARRAY(fld_odbc_name) = field_name
+
+        ;force lowercase, so that field name comparison will always work
+        locase M_A_FLD_ARRAY(fld_name)
+        locase M_A_FLD_ARRAY(fld_odbc_name)
+
+        M_A_FLD_ARRAY(fld_pos) = a_fi_pos + fi_pos
+        M_A_FLD_ARRAY(fld_len) = fi_size * (fi_dim(1) + fi_dim(2) + fi_dim(3) + fi_dim(4))
+        using fi_type select
+        (T_DEC),
+            begin
+            M_A_FLD_ARRAY(fld_typ) = D_FLDTYP_DEC
+            M_A_FLD_ARRAY(fld_dp) = fi_prec
+            end
+        (T_INT),
+            begin
+            M_A_FLD_ARRAY(fld_typ) = D_FLDTYP_INT
+            M_A_FLD_ARRAY(fld_dp) = 0
+            end
+        (),
+            begin
+            M_A_FLD_ARRAY(fld_typ) = D_FLDTYP_ALPHA
+            M_A_FLD_ARRAY(fld_dp) = 0
+            end
+        endusing
+        ;is this field is an overlay field
+        M_A_FLD_ARRAY(fld_ovrlay) = (fi_ovrfld != ' ')
+
+        ;is this field a group
+        if (fi_group == F_GROUPFLD) then
+            begin
+
+            ;is this an implicit group
+            if (fi_struct) then
+                begin
+                ;start of implicit group
+                M_A_FLD_ARRAY(fld_grp_st) = 2
+                old_struct = sname
+                old_dcs = dcs
+                ;get structure name
+                xcall dd_field(dcs, DDF_TEXT, fi_struct, strname)
+                if (!dcs.error)
+                    begin
+                    ;reset to new structure
+                    xcall dd_struct(dcs, DDS_INFO, strname, s_info)
+                    end
+                end
+            else
+                begin
+                ;start of explicit group
+                M_A_FLD_ARRAY(fld_grp_st) = 1
+                clear old_struct, old_dcs
+                ;start explicit group
+                xcall dd_field(dcs, DDF_GROUP, field_names(fld_ctr))
+                end
+
+            if (dcs.error) then
+                begin
+                xcall log_error(DE_RPS_ERROR, "Structure:" + %atrim(sname)
+                &       + " Group Field:" + %atrim(field_names(fld_ctr)))
+                end
+            else
+                xcall get_all_fields(dcs, a_f_hdl, a_si_nmflds, a_field_num, fi_pos-1)
+
+            ;last field in a group
+            M_A_FLD_ARRAY(fld_grp_end) += 1
+
+            if (old_struct) then
+                begin
+                dcs = old_dcs
+                sname = old_struct
+                end
+            else
+                begin
+                ;end explicit group
+                xcall dd_field(dcs, DDF_ENDGROUP)
+                end
+            end
+        else
+            begin
+            ;not the start of end of a group
+            M_A_FLD_ARRAY(fld_grp_st) = 0
+            M_A_FLD_ARRAY(fld_grp_end) = 0
+            end
+
+        end
+
+    ;see if there are more fields
+    if (num_flds == MAX_FLDS && field_names(MAX_FLDS))
+        begin
+        start = field_names(MAX_FLDS)
+        goto again
+        end
+
+    a_dcs = dcs
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; export isam to xml for specific file
+
+.function XFSP_ISM2XML_EXIT ,^val
+    a_xmlstring     ,i                  ;REQUIRED RETURNED XML string handle
+
+.include 'DBLDIR:synxml.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:xfspism2xml.rec'
+
+external function
+    exit            ,^val
+.ifndef DBLNET
+    xml_doc_tostring        ,^val
+    xml_string_delete       ,^val
+    xml_string_gethandle    ,^val
+    xml_string_getsize      ,^val
+.endc ;DBLNET
+
+.align
+record clr_i
+    fstatus         ,i4                 ;function return status
+    err             ,i4                 ;error status
+
+    xmlstring_id    ,XML_STRING_TYPE    ;xml string id
+    string_hdl      ,D_HANDLE           ;xml string handle
+    string_len      ,i4                 ;xml striung length
+    max_len         ,i4                 ;max length of variable
+    pos             ,i4                 ;position in xml string
+    len             ,i4                 ;length of xml string
+    os_code         ,i4                 ;operating system code
+    system_code     ,i4                 ;synergy system code
+
+.proc
+
+    fstatus = DE_NOERROR
+
+    onerror error_exit
+
+    ;get XML string
+    xmlstring_id = %xml_doc_tostring(doc_id)
+    ;convert XML string to handle
+    string_hdl = %xml_string_gethandle(xmlstring_id)
+    ;get length of string
+    string_len = %xml_string_getsize(xmlstring_id)
+
+    ;return data
+    if (^datatype(1) == D_TYPE_A) then
+        begin
+        ;strings cannot be larger than 64k bytes
+        if (string_len > 65535)
+            begin
+            fstatus = DE_XML_TOO_LONG
+            xcall log_error(fstatus, "Warning: XML string is too long."
+            &                +  "  [" + %string(string_len) + " bytes]")
+            end
+        ^a(a_xmlstring) = ^m(buff(1,string_len), string_hdl)
+        end
+    else
+        begin
+        ;resize memory area
+        a_xmlstring = %mem_proc(DM_RESIZ, string_len, a_xmlstring)
+        ;determine maximum length of a memory pointer
+        xcall envrn(os_code, system_code)
+        using system_code select
+        (021, 301 thru 399),
+            max_len = 4294967295
+        (),
+            max_len = 65535
+        endusing
+        ;copy data to memory area (in chunks)
+        pos = 1
+        len = string_len
+        while(len > max_len)
+            begin
+            ^m(buff(pos:max_len), a_xmlstring) = ^m(buff(pos:max_len), string_hdl)
+            pos += max_len
+            len -= max_len
+            end
+        if(len)
+            ^m(buff(pos:len), a_xmlstring) = ^m(buff(pos:len), string_hdl)
+        end
+
+    ;delete XML string
+    err = %xml_string_delete(xmlstring_id)
+
+    ;clean up
+    err = %exit
+
+    xcall xsubr('u_finish')
+
+    offerror
+
+    freturn fstatus
+
+error_exit,
+    offerror
+
+    freturn %error
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; export isam to xml for specific file
+
+.function exit ,^val
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:xfspism2xml.rec'
+
+.ifndef DBLNET
+external function
+    xml_parser_delete       ,^val
+.endc ;DBLNET
+
+.align
+record clr_i
+    str_ctr         ,i4                 ;structure loop counter
+    status          ,i4                 ;status
+
+.proc
+
+
+    ;close ISAM file
+    if (chan)
+        begin
+        xcall u_close(chan)
+        clear chan
+        end
+
+    ;memory cleanup
+
+    if (k_hdl)
+        k_hdl = %mem_proc(DM_FREE, k_hdl)
+
+    if (s_hdl)
+        begin
+        for str_ctr from 1 thru num_structures
+            begin
+            if (M_STR_INFO(hdl_flds))
+                M_STR_INFO(hdl_flds) =
+                &       %mem_proc(DM_FREE, M_STR_INFO(hdl_flds))
+
+            if (M_STR_INFO(hdl_tags))
+                M_STR_INFO(hdl_tags) =
+                &       %mem_proc(DM_FREE, M_STR_INFO(hdl_tags))
+            end
+
+        s_hdl = %mem_proc(DM_FREE, s_hdl)
+        end
+
+
+    ;delete parser
+    if (parser_id)
+        status = %xml_parser_delete(parser_id)
+
+    freturn 0
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; export isam to xml for specific file
+
+.function XFSP_ISM2XML_DATA ,^val
+    a_max_records   ,n                  ;OPTIONAL max number of records required
+    a_num_records   ,n                  ;OPTIONAL number of records actually read
+
+.include 'DBLDIR:synxml.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:xfspism2xml.rec'
+
+external function
+    ism2xml         ,^val
+
+.proc
+
+    freturn %ism2xml(file_node, a_max_records, a_num_records)
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; this is a seperate routine, so that we can choose which node is to be used
+; to add XML data
+
+.function ism2xml   ,^val
+
+    a_node          ,XML_ELEM_TYPE      ;REQUIRED node id
+    a_max_records   ,n                  ;OPTIONAL max number of records required
+    a_num_records   ,n                  ;OPTIONAL number of records actually read
+
+.include 'DBLDIR:synxml.def'
+.include 'RPSLIB:ddinfo.def'
+
+external function
+    convert_value           ,a
+    mime_encode_string      ,a
+.ifdef DBLNET
+    xml_elem_addchild       ,^val
+    xml_elem_create         ,^val
+    xml_elem_setattribute   ,^val
+    xml_elem_setname        ,^val
+    xml_elem_settext        ,^val
+.endc ;DBLNET
+
+.include 'INC:xfspism2xml.rec'          ;field definitions
+
+.align
+record clr_i
+    fstatus         ,i4                 ;function return status
+    err             ,i4                 ;err flag
+    pos             ,i4                 ;position
+    len             ,i4                 ;length
+    status          ,i4                 ;function status
+
+    str_ctr         ,i4                 ;structure array counter
+    fld_ctr         ,i4                 ;field array pointer
+    tag_ctr         ,i4                 ;tag number
+
+    b_hdl           ,D_HANDLE           ;buff handle
+    f_hdl           ,D_HANDLE           ;field handle
+    t_hdl           ,D_HANDLE           ;tag details list handle
+
+    rec_ctr         ,i4                 ;record counter
+    rec_max         ,i4                 ;max records required
+
+    str_node        ,XML_ELEM_TYPE      ;structure mode
+    fld_node        ,XML_ELEM_TYPE      ;field node
+
+.align
+record clr
+    field_name      ,a30                ;field name
+    field_value     ,a30                ;field value
+    tagname         ,a30                ;tag name
+    tag_value       ,a30                ;tag value
+    mask            ,a30                ;decimal mask
+
+.proc
+
+    clear clr, ^I(clr_i)
+
+    fstatus = DE_NOERROR
+
+    ;create dummy record, used to read data from isam file
+    b_hdl = %mem_proc(DM_ALLOC, reclen)
+
+    call process_structure
+
+    b_hdl = %mem_proc(DM_FREE, b_hdl)
+
+    if (^passed(a_num_records))
+        a_num_records = rec_ctr
+
+    freturn fstatus
+
+;----------------------------------------------------------------------------
+; now we're going to read the records from the ISAM file,
+; and export them into the XML document
+
+process_structure,
+
+    if (^passed(a_max_records) && a_max_records > 0)
+        rec_max = a_max_records
+
+    repeat
+        begin
+        ;read isam data
+        reads(chan, ^m(buff(1:reclen), b_hdl), eof)
+
+        ;is there an last key to compare
+        if (k_hdl)
+            begin
+            ;is this an ascending key
+            if (keyasc) then
+                begin
+                if (%keyval(chan, ^m(buff(1:reclen), b_hdl), keyno) > ^m(buff(1,keylen), k_hdl))
+                    exitloop
+                end
+            else
+                begin
+                if (%keyval(chan, ^m(buff(1:reclen), b_hdl), keyno) < ^m(buff(1,keylen), k_hdl))
+                    exitloop
+                end
+            end
+
+        ;check to see which tag/structure this record belongs to
+        if (num_structures > 1) then
+            begin
+            clear status
+            str_ctr = num_structures
+            while (str_ctr && !status)
+                begin
+                s_info = M_STR_INFO(info)
+                rps_strname = M_STR_INFO(name)
+                t_hdl = M_STR_INFO(hdl_tags)
+                f_hdl = M_STR_INFO(hdl_flds)
+
+                ;see which tag (if any) this record belongs to
+                if (str_ctr > 1)
+                    begin
+                    call check_rps_tags
+                    end
+                str_ctr -= 1
+                end
+            end
+        else
+            begin
+            ;only one structure - so don't need to check tags
+            s_info = ^m(str_info[1].info, s_hdl)
+            rps_strname = ^m(str_info[1].name, s_hdl)
+            t_hdl = ^m(str_info[1].hdl_tags, s_hdl)
+            f_hdl = ^m(str_info[1].hdl_flds, s_hdl)
+            end
+
+        ;export structure tag
+        call export_str_tag
+        if (fstatus == DE_NOERROR)
+            begin
+            clear fld_ctr
+            while(fstatus == DE_NOERROR && fld_ctr < s_info.si_nmflds)
+                begin
+                fld_ctr += 1
+                call export_fld
+                end
+
+            if (fstatus != DE_NOERROR)
+                exitloop
+
+            rec_ctr += 1
+            if (rec_max && rec_ctr >= rec_max)
+                exitloop
+            end
+        end
+    if (0)
+        begin
+eof,
+        ;only returns NOMOREDATA, if user requested data a number of records
+        if (^passed(a_num_records) && a_num_records)
+            fstatus = DE_NOMOREDATA
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+; export STRUCTURE tag
+
+export_str_tag,
+
+    ;create structure node
+    str_node = %xml_elem_create
+    if (!str_node)
+        begin
+        fstatus = DE_XML_CE_STR
+        xcall log_error(fstatus, "Error creating XML element (structure node)")
+        return
+        end
+
+    ;add structure node as child of file node
+    if (%xml_elem_addchild(a_node, str_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_AC_STR
+        xcall log_error(fstatus, "Error adding child node (structure node)")
+        return
+        end
+
+    using xml_type select
+    (D_XML_TYPE_TAG), ;tag data
+        begin
+        ;set name of structure node
+        if (%xml_elem_setname(str_node, rps_strname) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_STR
+            xcall log_error(fstatus, "Error setting name 2 (structure node)")
+            return
+            end
+
+        ;set TAGNAME attribute of structure node
+        if (tagname && %xml_elem_setattribute(str_node, D_XML_TAGNAME, %atrim(tagname)) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_KEYATTR
+            xcall log_error(fstatus, "Error setting keynum attribute (structure node)")
+            return
+            end
+        end
+    (D_XML_TYPE_ATTR),
+        begin
+        ;set name of structure node
+        if (%xml_elem_setname(str_node, D_XML_STRUCT) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_STR
+            xcall log_error(fstatus, "Error setting name 3 (structure node)")
+            return
+            end
+
+        ;set NAME attribute of structure node
+        if (%xml_elem_setattribute(str_node, D_XML_NAME, rps_strname) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name 3 attribute (structure node)")
+            return
+            end
+
+        ;set TAGNAME attribute of structure node
+        if (tagname && %xml_elem_setattribute(str_node, D_XML_TAGNAME, %atrim(tagname)) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_KEYATTR
+            xcall log_error(fstatus, "Error setting keynum attribute (structure node)")
+            return
+            end
+        end
+    (D_XML_TYPE_ADO),
+        begin
+        ;set name of structure node
+        if (%xml_elem_setname(str_node, D_XSDNS_XR + ':' + D_XSD_ROW) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_FLD
+            xcall log_error(fstatus, "Error setting element name 4 'xr:row' (structure node)")
+            return
+            end
+
+        end
+    (D_XML_TYPE_ISLE),
+        begin
+        ;set name of structure node
+        if (%xml_elem_setname(str_node, %atrim(rps_strname) + D_XSD_RECORD) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_FLD
+            xcall log_error(fstatus, "Error setting element name 5 (structure node)")
+            return
+            end
+        end
+    (),
+        begin
+        ;set name of structure node
+        if (%xml_elem_setname(str_node, rps_strname) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_STR
+            xcall log_error(fstatus, "Error setting name 1 (structure node)")
+            return
+            end
+
+        ;set TAGNAME attribute of structure node
+        if (tagname && %xml_elem_setattribute(str_node, D_XML_TAGNAME, %atrim(tagname)) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_KEYATTR
+            xcall log_error(fstatus, "Error setting keynum attribute (structure node)")
+            return
+            end
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+; export FIELD tag
+
+export_fld,
+
+    ;do not export overlay fields
+    if (M_FLD_ARRAY(fld_ovrlay))
+        return
+
+    ;field name (or ODBC field name)
+    field_name = M_FLD_ARRAY(fld_odbc_name)
+
+    ;get field position and length
+    pos = M_FLD_ARRAY(fld_pos)
+    len = M_FLD_ARRAY(fld_len)
+
+    using xml_type select
+    (D_XML_TYPE_TAG), ;tag data
+        begin
+        ;add child node to field
+        call add_fld_child
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set name of field node
+        if (%xml_elem_setname(fld_node, field_name) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_FLD
+            xcall log_error(fstatus, "Error setting element name 2 (field node)")
+            return
+            end
+
+        using M_FLD_ARRAY(fld_typ) select
+        (D_FLDTYP_DEC),
+            begin
+            using M_FLD_ARRAY(fld_dp) select
+            (1 thru 10),
+                begin
+                mask = 'ZZZZZZZZZZZZZZZZZX.XXXXXXXXXX '
+                clear mask(20 + M_FLD_ARRAY(fld_dp), ^size(mask))
+                field_value = ^d(^m(buff(pos:len), b_hdl)) ,mask [LEFT]
+                end
+            (),
+                field_value = ^d(^m(buff(pos:len), b_hdl)) [LEFT]
+            endusing
+            if (^d(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_settext(fld_node, field_value)
+            end
+        (D_FLDTYP_INT),
+            begin
+            field_value = %string(^i(^m(buff(pos:len), b_hdl)))
+            if (^i(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_settext(fld_node, field_value)
+            end
+        (), ;D_FLDTYP_ALPHA
+            begin
+            ;set VALUE attribute of field node
+            err = %xml_elem_settext(fld_node, %mime_encode_string(^m(buff(pos:len), b_hdl)))
+            end
+        endusing
+        if (err != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_ELETEXT
+            xcall log_error(fstatus, "Error setting element text 2 (field node)")
+            return
+            end
+        end
+    (D_XML_TYPE_ATTR), ;attribute data
+        begin
+        ;add child node to field
+        call add_fld_child
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set name of field node
+        if (%xml_elem_setname(fld_node, D_XML_FIELD) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_FLD
+            xcall log_error(fstatus, "Error setting element name 3 (field node)")
+            return
+            end
+        ;set NAME attribute of field node
+        if (%xml_elem_setattribute(fld_node, D_XML_NAME, field_name) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_FLD
+            xcall log_error(fstatus, "Error setting name attribute 3 (field node)")
+            return
+            end
+
+        using M_FLD_ARRAY(fld_typ) select
+        (D_FLDTYP_DEC),
+            begin
+            using M_FLD_ARRAY(fld_dp) select
+            (1 thru 10),
+                begin
+                mask = 'ZZZZZZZZZZZZZZZZZX.XXXXXXXXXX '
+                clear mask(20 + M_FLD_ARRAY(fld_dp), ^size(mask))
+                field_value = ^d(^m(buff(pos:len), b_hdl)) ,mask [LEFT]
+                end
+            (),
+                field_value = ^d(^m(buff(pos:len), b_hdl)) [LEFT]
+            endusing
+            if (^d(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_setattribute(fld_node, D_XML_VALUE, field_value)
+            end
+        (D_FLDTYP_INT),
+            begin
+            field_value = %string(^i(^m(buff(pos:len), b_hdl)))
+            if (^i(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_setattribute(fld_node, D_XML_VALUE, field_value)
+            end
+        (), ;D_FLDTYP_ALPHA
+            begin
+            ;set VALUE attribute of field node
+            err = %xml_elem_setattribute(fld_node, D_XML_VALUE, %mime_encode_string(^m(buff(pos:len), b_hdl)))
+            end
+        endusing
+        if (err != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_VALATTR
+            xcall log_error(fstatus, "Error setting value attribute 3 (field node)")
+            return
+            end
+        end
+    (D_XML_TYPE_ADO),
+        begin
+        using M_FLD_ARRAY(fld_typ) select
+        (D_FLDTYP_DEC),
+            begin
+            using M_FLD_ARRAY(fld_dp) select
+            (1 thru 10),
+                begin
+                mask = 'ZZZZZZZZZZZZZZZZZX.XXXXXXXXXX '
+                clear mask(20 + M_FLD_ARRAY(fld_dp), ^size(mask))
+                field_value = ^d(^m(buff(pos:len), b_hdl)) ,mask [LEFT]
+                end
+            (),
+                field_value = ^d(^m(buff(pos:len), b_hdl)) [LEFT]
+            endusing
+            if (^d(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_setattribute(str_node, field_name, field_value)
+            end
+        (D_FLDTYP_INT),
+            begin
+            field_value = %string(^i(^m(buff(pos:len), b_hdl)))
+            if (^i(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_setattribute(str_node, field_name, field_value)
+            end
+        (), ;D_FLDTYP_ALPHA
+            begin
+            ;set VALUE attribute of field node
+            err = %xml_elem_setattribute(str_node, field_name, %mime_encode_string(^m(buff(pos:len), b_hdl)))
+            end
+        endusing
+        if (err != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_VALATTR
+            xcall log_error(fstatus, "Error setting " + %atrim(field_name)
+            &                +  " attribute 4 (structure node)")
+            return
+            end
+        end
+    (D_XML_TYPE_ISLE),
+        begin
+        ;add child node to field
+        call add_fld_child
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set name of field node
+        if (%xml_elem_setname(fld_node, field_name) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_FLD
+            xcall log_error(fstatus, "Error setting element name 5 (field node)")
+            return
+            end
+
+        using M_FLD_ARRAY(fld_typ) select
+        (D_FLDTYP_DEC),
+            begin
+            using M_FLD_ARRAY(fld_dp) select
+            (1 thru 10),
+                begin
+                mask = 'ZZZZZZZZZZZZZZZZZX.XXXXXXXXXX '
+                clear mask(20 + M_FLD_ARRAY(fld_dp), ^size(mask))
+                field_value = ^d(^m(buff(pos:len), b_hdl)) ,mask [LEFT]
+                end
+            (),
+                field_value = ^d(^m(buff(pos:len), b_hdl)) [LEFT]
+            endusing
+            if (^d(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_settext(fld_node, field_value)
+            end
+        (D_FLDTYP_INT),
+            begin
+            field_value = %string(^i(^m(buff(pos:len), b_hdl)))
+            if (^i(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_settext(fld_node, field_value)
+            end
+        (), ;D_FLDTYP_ALPHA
+            begin
+            ;set VALUE attribute of field node
+            err = %xml_elem_settext(fld_node, %mime_encode_string(^m(buff(pos:len), b_hdl)))
+            end
+        endusing
+        if (err != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_ELETEXT
+            xcall log_error(fstatus, "Error setting element text 5 (field node)")
+            return
+            end
+        end
+    (),
+        begin
+        ;add child node to field
+        call add_fld_child
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set name of field node
+        if (%xml_elem_setname(fld_node, field_name) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_FLD
+            xcall log_error(fstatus, "Error setting element name 1 (field node)")
+            return
+            end
+
+        using M_FLD_ARRAY(fld_typ) select
+        (D_FLDTYP_DEC),
+            begin
+            using M_FLD_ARRAY(fld_dp) select
+            (1 thru 10),
+                begin
+                mask = 'ZZZZZZZZZZZZZZZZZX.XXXXXXXXXX '
+                clear mask(20 + M_FLD_ARRAY(fld_dp), ^size(mask))
+                field_value = ^d(^m(buff(pos:len), b_hdl)) ,mask [LEFT]
+                end
+            (),
+                field_value = ^d(^m(buff(pos:len), b_hdl)) [LEFT]
+            endusing
+            if (^d(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_setattribute(fld_node, D_XML_VALUE, field_value)
+            end
+        (D_FLDTYP_INT),
+            begin
+            field_value = %string(^i(^m(buff(pos:len), b_hdl)))
+            if (^i(^m(buff(pos:len), b_hdl)) < 0)
+                field_value = '-' + field_value
+            ;set VALUE attribute of field node
+            err = %xml_elem_setattribute(fld_node, D_XML_VALUE, field_value)
+            end
+        (), ;D_FLDTYP_ALPHA
+            begin
+            ;set VALUE attribute of field node
+            err = %xml_elem_setattribute(fld_node, D_XML_VALUE, %mime_encode_string(^m(buff(pos:len), b_hdl)))
+            end
+        endusing
+        if (err != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_VALATTR
+            xcall log_error(fstatus, "Error setting value attribute 1 (field node)")
+            return
+            end
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+add_fld_child,
+
+    ;create field node
+    fld_node = %xml_elem_create
+    if (!fld_node)
+        begin
+        fstatus = DE_XML_CE_FLD
+        xcall log_error(fstatus, "Error creating XML element (field node)")
+        return
+        end
+    ;add field node as child of structure node
+    if (%xml_elem_addchild(str_node, fld_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_AC_FLD
+        xcall log_error(fstatus, "Error adding child node (field node)")
+        return
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+; find the correct tag (if there is one) for the record we just read
+
+check_rps_tags,
+
+    clear tagname
+
+    ;are there any tags
+    if (!s_info.si_nmtags || !t_hdl)
+        begin
+        status = 1
+        return
+        end
+
+    ;no tag found
+    clear status
+
+    tag_ctr = 1
+    while(tag_ctr <= s_info.si_nmtags && !status)
+        begin
+        tagname = M_TAG_ARRAY(tag_name)
+        locase tagname
+        tg_info = M_TAG_ARRAY(tag_info)
+        locase tgi_tagfld
+
+        using s_info.si_tagtyp select
+        (TAGNON),
+            begin
+            status = 1
+            end
+        (TAGFLD),
+            begin
+            clear status
+            pos = M_TAG_ARRAY(tag_pos)
+            len = M_TAG_ARRAY(tag_len)
+
+            ;find the relevant field
+            fld_ctr = 1
+            while(fld_ctr < s_info.si_nmflds &&
+            &     tgi_tagfld != M_FLD_ARRAY(fld_name))
+                fld_ctr += 1
+
+            ;normalize the data, so that an apples to apples comparison can occur
+            field_value = %convert_value(M_FLD_ARRAY(fld_typ), ^m(buff(pos:len), b_hdl))
+            tag_value = %convert_value(M_FLD_ARRAY(fld_typ), tgi_tagval)
+
+            using tgi_tagcmp select
+            (TGI_EQ),
+                begin
+                status = (field_value == tag_value)
+                end
+            (TGI_NE),
+                begin
+                status = (field_value != tag_value)
+                end
+            (TGI_LE),
+                begin
+                status = (field_value <= tag_value)
+                end
+            (TGI_LT),
+                begin
+                status = (field_value < tag_value)
+                end
+            (TGI_GE),
+                begin
+                status = (field_value >= tag_value)
+                end
+            (TGI_GT),
+                begin
+                status = (field_value > tag_value)
+                end
+            (),
+                clear status
+            endusing
+
+            end
+        (TAGSIZ),
+            begin
+            using tgi_tagcmp select
+            (TGI_EQ),
+                begin
+                status = (%rsize == ^d(tgi_tagval))
+                end
+            (TGI_NE),
+                begin
+                status = (%rsize != ^d(tgi_tagval))
+                end
+            (TGI_LE),
+                begin
+                status = (%rsize <= ^d(tgi_tagval))
+                end
+            (TGI_LT),
+                begin
+                status = (%rsize < ^d(tgi_tagval))
+                end
+            (TGI_GE),
+                begin
+                status = (%rsize >= ^d(tgi_tagval))
+                end
+            (TGI_GT),
+                begin
+                status = (%rsize > ^d(tgi_tagval))
+                end
+            endusing
+            end
+        endusing
+
+        tag_ctr += 1
+
+        using tgi_tagcon select
+        (TGI_AND),
+            begin
+            ;no match
+            if (!status)
+                begin
+                if (tag_ctr <= s_info.si_nmtags)
+                    begin
+                    ;try next condition by finding next OR tag
+                    do  begin
+                        tg_info = M_TAG_ARRAY(tag_info)
+                        locase tgi_tagfld
+
+                        if (tgi_tagcon != TGI_OR)
+                            tag_ctr += 1
+                        end
+                    until(tag_ctr >= s_info.si_nmtags || tgi_tagcon == TGI_OR)
+                    end
+                end
+            end
+        (TGI_OR),
+            begin
+            if (status)
+                exitloop
+            end
+        (),
+            exitloop
+        endusing
+        end
+
+    if (!status)
+        clear tagname
+
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; mime encode reserved characters
+
+.function mime_encode_string ;alpha
+    a_string            ,a              ;REQUIRED string
+
+.align
+record clr_i
+    hdl                 ,D_HANDLE
+    len                 ,i4
+
+.proc
+
+    len = %trim(a_string)
+
+    hdl = %mem_proc(DM_ALLOC, len)
+
+    ^m(hdl) = a_string
+
+    xcall replace('&', '&amp;',  hdl)
+    xcall replace('"', '&quot;', hdl)
+    xcall replace('<', '&lt;',   hdl)
+    xcall replace('>', '&gt;',   hdl)
+
+    freturn ^m(hdl)
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; replace a string with another string
+
+.subroutine replace
+    a_replace           ,a              ;REQUIRED string to be replaced
+    a_replacement       ,a              ;REQUIRED replacement string
+    a_hdl               ,i              ;REQUIRED RETURNED string handle
+
+structure b
+    buff                ,a1
+
+.align
+record
+    slen                ,i4             ;length of a_replace
+    rlen                ,i4             ;length of a_replacement
+    len                 ,i4             ;length of buffer
+    start               ,i4             ;start looking here for string
+    pos                 ,i4             ;position in buffer
+
+.proc
+
+    slen = ^size(a_replace)
+    rlen = ^size(a_replacement)
+    len = %mem_proc(DM_GETSIZE, a_hdl)
+
+    start = 1
+    while(pos = %instr(start, ^m(a_hdl), a_replace))
+        begin
+        ;make room for characters
+        if(rlen - slen)
+            begin
+            len += rlen - slen
+            a_hdl = %mem_proc(DM_RESIZ, len, a_hdl)
+            ;is there an text after string to be replaced?
+            if(pos+rlen <= len)
+                ^m(buff(pos+rlen, len), a_hdl) = ^m(buff(pos+1, len), a_hdl)
+            end
+        ;replace string
+        ^m(buff(pos:rlen), a_hdl) = a_replacement
+
+        start = pos+rlen
+        end
+
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; convert data types
+
+.function convert_value ;ALPHA
+    a_type          ,a                  ;REQUIRED D, I or A
+    a_old_value     ,a                  ;REQUIRED original value
+
+.align
+record clr
+    ret_value       ,a30                ;returned value
+    decimal         ,d28.10
+    d18             ,d18 @decimal
+
+.proc
+
+    using a_type select
+    (D_FLDTYP_DEC),
+        begin
+        decimal = ^d(%atrim(a_old_value))
+        ret_value = decimal ,'XXXXXXXXXXXXXXXXX.XXXXXXXXXX-'
+        end
+    (D_FLDTYP_INT),
+        begin
+        d18 = ^argn(2)
+        ret_value = d18 ,'XXXXXXXXXXXXXXXXX-'
+        end
+    (), ;D_FLDTYP_ALPHA
+        begin
+        ret_value = a_old_value
+        end
+    endusing
+
+    freturn ret_value
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.subroutine log_error
+
+    a_error         ,n                  ;REQUIRED error number
+    a_ermsg         ,a                  ;REQUIRED error text
+
+.include 'RPSLIB:ddinfo.def'
+
+.align
+record
+    chan            ,i4
+    log_file        ,a255
+
+.proc
+
+xcall u_message(%string(a_error) + " " + %atrim(a_ermsg))
+xreturn
+
+    log_file = D_XFSPISM2XML_LOGFILE
+
+    if (a_error == -1)
+        begin
+        xcall delet(log_file)
+        xreturn
+        end
+
+    chan = %syn_freechn
+
+    open(chan, A, log_file)
+    writes(chan, %datetime + " " + %string(a_error) + " " + %atrim(a_ermsg))
+    close chan
+
+    xreturn
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; get error text for provided error number
+
+.function GET_ERROR_TEXT ,^val
+    a_error         ,n                  ;REQUIRED error number
+    a_text          ,a                  ;REQUIRED RETURNED error text
+
+.proc
+
+    if (^passed(a_error) && ^passed(a_text)) then
+        begin
+        using a_error select
+        (DE_NOERROR),
+            a_text = "No Error"
+        (DE_FIL_STR_ERR),
+            a_text = "Structure not defined in Repository"
+        (DE_FIL_STR_NONE),
+            a_text = "Structure name not provided by program"
+        (DE_FIL_NO_FILE),
+            a_text = "File not defined in Repository"
+        (DE_FIL_NO_STR),
+            a_text = "File has no assigned structures in Repository"
+        (DE_STR_ERROR),
+            a_text = "Structure not defined in Repository"
+        (DE_STR_ERROR2),
+            a_text = "Structure not defined in Repository"
+        (DE_NO_STRUCTS),
+            a_text = "File has no assigned structures in Repository"
+        (DE_PARSER_ERROR ),
+            a_text = "Cannot create document parser"
+        (DE_DOC_ERROR),
+            a_text = "Cannot add document declaration"
+        (DE_ROOT_NODE),
+            a_text = "Error creating root element"
+        (DE_ROOT_SETROOT),
+            a_text = "Error setting document root node"
+        (DE_ROOT_SETNAME),
+            a_text = "Error setting root element name"
+        (DE_XML_TOO_LONG ),
+            a_text = "Warning: XML string is too long for ALPHA parameter."
+        (DE_XML_GEN_ERROR),
+            a_text = "Error generating XML"
+        (DE_XML_CRE_ELE),
+            a_text = "Error creating XML element"
+        (DE_XML_ADDCHILD),
+            a_text = "Error adding child node (file node)"
+        (DE_XML_ELENAME),
+            a_text = "Error setting element name (file node)"
+        (DE_XML_NAMEATTR),
+            a_text = "Error setting name attribute (file node)"
+        (DE_XML_TYPEATTR),
+            a_text = "Error setting xmltype attribute on root (file node)"
+        (DE_XML_KEYATTR),
+            a_text = "Error setting keynum attribute (structure node)"
+        (DE_XML_INVKEY),
+            a_text = "Invalid Key number specified "
+        (DE_XML_CE_STR),
+            a_text = "Error creating XML element (structure node)"
+        (DE_XML_AC_STR),
+            a_text = "Error adding child node (structure node)"
+        (DE_XML_SN_STR),
+            a_text = "Error setting name (structure node)"
+        (DE_XML_SNA_STR),
+            a_text = "Error setting name attribute (structure node)"
+        (DE_XML_CE_FLD),
+            a_text = "Error creating XML element (field node)"
+        (DE_XML_AC_FLD),
+            a_text = "Error adding child node (field node)"
+        (DE_XML_SN_FLD),
+            a_text = "Error setting element name (field node)"
+        (DE_XML_SNA_FLD),
+            a_text = "Error setting name attribute (field node)"
+        (DE_XML_ELETEXT),
+            a_text = "Error setting element text (field node)"
+        (DE_XML_VALATTR),
+            a_text = "Error setting value attribute (field node)"
+        (-(10000 + E_NOFIND)),
+            a_text = "DD_INIT Record not found"
+        (-(10000 + E_OPNERR)),
+            a_text = "DD_INIT Cannot open RPS"
+        (-(10000 + E_INVFNC)),
+            a_text = "DD_INIT Invalid Function"
+        (-(10000 + E_OPNERRM)),
+            a_text = "DD_INIT Cannot open RPS main file"
+        (-(10000 + E_OPNERRT)),
+            a_text = "DD_INIT Cannot open RPS text file"
+        (-(10000 + E_BADVERS)),
+            a_text = "DD_INIT Incompatible Repository version"
+        (-19999 thru -10000),
+            a_text = "DD_INIT Unknown error"
+        (),
+            begin
+            a_text = "Unknown Error"
+            freturn -1
+            end
+        endusing
+        end
+    else
+        freturn 1
+
+    freturn 0
+.end
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; provide xml style sheet (must be called after xfsp_ism2xml_init)
+
+.function XFSP_ISM2XML_XSD ,^val
+    a_xsdstring     ,n                  ;REQUIRED RETURNED XML string handle
+
+.include 'DBLDIR:synxml.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:xfspism2xml.rec'
+.include 'INC:xfspism2xml.def'
+
+external function
+    rps2xsd                 ,^val
+.ifndef DBLNET
+    xml_doc_create          ,^val
+    xml_doc_setdeclaration  ,^val
+    xml_doc_setroot         ,^val
+    xml_doc_tostring        ,^val
+    xml_elem_addchild       ,^val
+    xml_elem_create         ,^val
+    xml_elem_setattribute   ,^val
+    xml_elem_setname        ,^val
+    xml_parser_create       ,^val
+    xml_string_delete       ,^val
+    xml_string_gethandle    ,^val
+    xml_string_getsize      ,^val
+.endc ;DBLNET
+
+.define D_MAX_SCHEMA_NODES      ,10
+
+.align
+record clr_i
+    fstatus         ,i4                 ;function return status
+    err             ,i4
+
+    xsd_parser_id   ,XML_PARSER_TYPE    ;XML parser
+    xsd_doc_id      ,XML_DOC_TYPE       ;document ID
+    xsd_root_node   ,XML_ELEM_TYPE      ;root node
+
+    node            ,XML_ELEM_TYPE      ;root node for file
+    prev_node       ,XML_ELEM_TYPE      ;previous node
+    tmp_node        ,XML_ELEM_TYPE      ;"temporary" node
+
+    xmlstring_id    ,XML_STRING_TYPE
+    string_hdl      ,D_HANDLE
+    string_len      ,i4
+
+    node_name       ,a80                ;node name
+
+.proc
+
+    clear ^i(clr_i)
+
+    onerror error_exit
+
+    fstatus = DE_NOERROR
+
+    call create_document
+
+    if (fstatus == DE_NOERROR)
+        fstatus = %rps2xsd(node)
+
+    if (fstatus == DE_NOERROR)
+        begin
+        ;get XML string
+        xmlstring_id = %xml_doc_tostring(xsd_doc_id)
+        ;convert XML string to handle
+        string_hdl = %xml_string_gethandle(xmlstring_id)
+        ;get length of string
+        string_len = %xml_string_getsize(xmlstring_id)
+
+        ;return data
+        if (^datatype(1) == D_TYPE_A) then
+            begin
+            ;strings cannot be larger than 64k bytes
+            if (string_len > 65535)
+                begin
+                fstatus = DE_XML_TOO_LONG
+                xcall log_error(fstatus, "Warning: XML string is too long."
+                &                +  "  [" + %string(string_len) + " bytes]")
+                end
+            ^a(a_xsdstring) = ^m(buff(1,string_len), string_hdl)
+            end
+        else
+            begin
+            ;resize memory area
+            a_xsdstring = %mem_proc(DM_RESIZ, string_len, a_xsdstring)
+            ;copy data to memory area
+            ^m(buff(1,string_len), a_xsdstring) = ^m(buff(1,string_len), string_hdl)
+            end
+
+        ;delete XML string
+        err = %xml_string_delete(xmlstring_id)
+        end
+
+    offerror
+
+    freturn fstatus
+
+error_exit,
+    offerror
+
+    freturn %error
+
+;----------------------------------------------------------------------------
+
+create_document,
+
+    clear xsd_parser_id, xsd_doc_id, node
+    if (xsd_parser_id = %xml_parser_create) then
+        begin
+        xsd_doc_id = %xml_doc_create
+        if (xsd_doc_id && %xml_doc_setdeclaration(xsd_doc_id, "<?xml version='1.0'?>") == XML_SUCCESS) then
+            begin
+            call create_root_node
+            if (fstatus != DE_NOERROR)
+                return
+            end
+        else
+            begin
+            fstatus = DE_DOC_ERROR
+            xcall log_error(fstatus, "Cannot add document declaration (XSD)")
+            clear xsd_doc_id
+            return
+            end
+        end
+    else
+        begin
+        fstatus = DE_PARSER_ERROR
+        xcall log_error(fstatus, "Cannot create document parser (XSD)")
+        return
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+
+create_root_node,
+
+    ;create root node
+    xsd_root_node = %xml_elem_create
+    if (!xsd_root_node)
+        begin
+        fstatus = DE_ROOT_NODE
+        xcall log_error(fstatus, "Error creating root element (XSD)")
+        return
+        end
+    ;set document root node
+    if (%xml_doc_setroot(xsd_doc_id, xsd_root_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_ROOT_SETROOT
+        xcall log_error(fstatus, "Error setting document root node (XSD)")
+        return
+        end
+
+    prev_node = xsd_root_node
+
+    using xml_type select
+    (D_XML_TYPE_TAG),
+        begin
+        call add_root_attributes
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;add schema attributes
+        call export_schema_elements
+        if (fstatus != DE_NOERROR)
+            return
+
+        node = tmp_node
+        end
+    (D_XML_TYPE_ATTR),
+        begin
+        call add_root_attributes
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;add schema attributes
+        call export_schema_elements
+        if (fstatus != DE_NOERROR)
+            return
+
+        node = tmp_node
+        end
+    (D_XML_TYPE_ADO),
+        begin
+        call add_ado_root_attributes
+        if (fstatus != DE_NOERROR)
+            return
+
+        node = xsd_root_node
+        end
+    (D_XML_TYPE_ISLE),
+        begin
+        ;set name of root element
+        if (%xml_elem_setname(xsd_root_node, D_XML_ROOT) != XML_SUCCESS)
+            begin
+            fstatus = DE_ROOT_SETNAME
+            xcall log_error(fstatus, "Error setting root element name (XSD)")
+            return
+            end
+
+        node = xsd_root_node
+        end
+    (),
+        begin
+        call add_root_attributes
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;add schema attributes
+        call export_schema_elements
+        if (fstatus != DE_NOERROR)
+            return
+
+        node = tmp_node
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+add_ado_root_attributes,
+
+    ;set name of root element
+    if (%xml_elem_setname(xsd_root_node, D_XML_ROOT) != XML_SUCCESS)
+        begin
+        fstatus = DE_ROOT_SETNAME
+        xcall log_error(fstatus, "Error setting root element name (XSD)")
+        return
+        end
+
+; duplicated logic (see add_ado_root_attributes in init)
+
+    ;set NAMESPACE attributes of root node
+    if (%xml_elem_setattribute(xsd_root_node, D_XMLNS + D_XSDNS_XS, 'uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14482') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_TYPEATTR
+        xcall log_error(fstatus, "Error setting namespace 'xs' attribute on root (XSD)")
+        return
+        end
+
+    if (%xml_elem_setattribute(xsd_root_node, D_XMLNS + D_XSDNS_DT, 'uuid:C2F41010-65B3-11d1-A29F-00AA00C14482') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_TYPEATTR
+        xcall log_error(fstatus, "Error setting namespace 'dt' attribute on root (XSD)")
+        return
+        end
+
+    if (%xml_elem_setattribute(xsd_root_node, D_XMLNS + D_XSDNS_RS, 'urn:schemas-microsoft-com:rowset') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_TYPEATTR
+        xcall log_error(fstatus, "Error setting namespace 'rs' attribute on root (XSD)")
+        return
+        end
+
+    if (%xml_elem_setattribute(xsd_root_node, D_XMLNS + D_XSDNS_XR, '#' + D_XSD_ROWSETSCHEMA) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_TYPEATTR
+        xcall log_error(fstatus, "Error setting namespace xr attribute on root (XSD)")
+        return
+        end
+
+; end of duplicated logic
+
+    return
+
+;----------------------------------------------------------------------------
+
+add_root_attributes,
+
+    ;set name of root element
+    if (%xml_elem_setname(xsd_root_node, D_XSDNS_XS + ':' + D_XML_ROOT) != XML_SUCCESS)
+        begin
+        fstatus = DE_ROOT_SETNAME
+        xcall log_error(fstatus, "Error setting root element name (XSD)")
+        return
+        end
+    ;set name of schema node
+    if (%xml_elem_setname(xsd_root_node, D_XSDNS_XS + ':' + D_XSD_SCHEMA) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ELENAME
+        xcall log_error(fstatus, "Error setting element name (schema node) (XSD)")
+        return
+        end
+    ;set namespace attribute of schema node
+    if (%xml_elem_setattribute(xsd_root_node, D_XMLNS + D_XSDNS_XS, 'http://www.w3.org/2001/XMLSchema') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting namespace attribute (schema node) (XSD)")
+        return
+        end
+    ;set attribute form default attribute of schema node
+    if (%xml_elem_setattribute(xsd_root_node, D_XSD_ATTRIBUTEFORMDEF, D_XSD_QUALIFIED) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting attribute form default attribute (schema node) (XSD)")
+        return
+        end
+    ;set element form default attribute of schema node
+    if (%xml_elem_setattribute(xsd_root_node, D_XSD_ELEMENTFORMDEF, D_XSD_QUALIFIED) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting element form default attribute (schema node) (XSD)")
+        return
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+; export schema elements
+
+export_schema_elements,
+
+    ;create schema root element
+
+    node_name = D_XSDNS_XS + ':' + D_XSD_ELEMENT
+    call add_node
+    if (fstatus != DE_NOERROR)
+        return
+
+    ;set name attribute of schema node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_NAME, D_XML_ROOT) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting namespace attribute (schema element node) (XSD)")
+        return
+        end
+
+    prev_node = tmp_node
+
+    ;add complex data type node
+    node_name = D_XSDNS_XS + ':' + D_XSD_COMPLEXTYPE
+    call add_node
+    if (fstatus != DE_NOERROR)
+        return
+
+    prev_node = tmp_node
+
+    ;add attribute child node to complex type
+
+    node_name = D_XSDNS_XS + ':' + D_XSD_ATTRIBUTE
+    call add_node
+
+    ;set NAME attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_NAME, D_XML_TYPE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+        return
+        end
+    ;set FORM attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_FORM, D_XSD_UNQUALIFIED) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+        return
+        end
+    ;set TYPE attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_STRING) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+        return
+        end
+
+    prev_node = tmp_node
+
+    ;add sequence child node to complex type
+    node_name = D_XSDNS_XS + ':' + D_XSD_SEQUENCE
+    call add_node
+    if (fstatus != DE_NOERROR)
+        return
+
+
+    return
+
+;----------------------------------------------------------------------------
+
+add_node,
+
+    ;create node
+    tmp_node = %xml_elem_create
+    if (!tmp_node)
+        begin
+        fstatus = DE_XML_CRE_ELE
+        xcall log_error(fstatus, "Error creating XML element (XSD)")
+        return
+        end
+    ;add node as child
+    if (%xml_elem_addchild(prev_node, tmp_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ADDCHILD
+        xcall log_error(fstatus, "Error adding child node (schema element node) (XSD)")
+        return
+        end
+    ;set name of node
+    if (%xml_elem_setname(tmp_node, %atrim(node_name)) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ELENAME
+        xcall log_error(fstatus, "Error setting element name (schema element node) (XSD)")
+        return
+        end
+
+    return
+
+.end
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; this is a seperate routine, so that we can choose which node is to be used
+; to add XML data
+
+.function rps2xsd   ,^val
+
+    a_node          ,XML_ELEM_TYPE      ;REQUIRED node id
+
+.include 'DBLDIR:synxml.def'
+.include 'RPSLIB:ddinfo.def'
+
+.ifndef DBLNET
+external function
+    xml_elem_addchild       ,^val
+    xml_elem_create         ,^val
+    xml_elem_setattribute   ,^val
+    xml_elem_setname        ,^val
+.endc ;DBLNET
+
+.include 'INC:xfspism2xml.rec'          ;field definitions
+
+.align
+record clr_i
+    fstatus         ,i4                 ;function return status
+    pos             ,i4                 ;position
+    len             ,i4                 ;length
+
+    str_ctr         ,i4                 ;structure number
+    fld_ctr         ,i4                 ;field number
+    f_hdl           ,i4                 ;field details list handle
+
+    fil_node        ,XML_ELEM_TYPE      ;file mode
+    fld_root_node   ,XML_ELEM_TYPE      ;root node for fields
+    fld_di_node     ,XML_ELEM_TYPE      ;Data Island root node
+    fld_node        ,XML_ELEM_TYPE      ;field node
+    tmp_node        ,XML_ELEM_TYPE      ;"temporary" node
+    prev_node       ,XML_ELEM_TYPE      ;previous node
+
+.align
+record clr
+    node_name       ,a80                ;node name
+    field_name      ,a30                ;field name
+
+.proc
+
+    clear clr, ^I(clr_i)
+
+    fstatus = DE_NOERROR
+
+    call export_file_tag
+
+    if (fstatus == DE_NOERROR)
+        call process_structures
+
+    freturn fstatus
+
+;----------------------------------------------------------------------------
+; export FILE tag
+
+export_file_tag,
+
+    ;create file node
+    fil_node = %xml_elem_create
+    if (!fil_node)
+        begin
+        fstatus = DE_XML_CE_STR
+        xcall log_error(fstatus, "Error creating XML element (file node) (XSD)")
+        return
+        end
+
+    ;add file node as child of schema root node
+    if (%xml_elem_addchild(a_node, fil_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_AC_STR
+        xcall log_error(fstatus, "Error adding child node (file node) (XSD)")
+        return
+        end
+
+    prev_node = fil_node
+
+    using xml_type select
+    (D_XML_TYPE_TAG), ;tag data
+        begin
+        ;set name of file node
+        if (%xml_elem_setname(prev_node, D_XSDNS_XS + ':' + D_XSD_ELEMENT) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_STR
+            xcall log_error(fstatus, "Error setting name 1 (file node) (XSD)")
+            return
+            end
+        ;set NAME attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XML_NAME, D_XML_FILE) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name attribute (file node) (XSD)")
+            return
+            end
+        ;set MINOCCURS attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XSD_MINOCCURS, '0') != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting minoccurs attribute (file node) (XSD)")
+            return
+            end
+        ;set MAXOCCURS attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XSD_MAXOCCURS, D_XSD_UNBOUNDED) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting maxoccurs attribute (file node) (XSD)")
+            return
+            end
+
+        ; add complex data type node
+        node_name = D_XSDNS_XS + ':' + D_XSD_COMPLEXTYPE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        prev_node = tmp_node
+
+
+        ;create first attribute node
+
+        node_name = D_XSDNS_XS + ':' + D_XSD_ATTRIBUTE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set NAME attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XML_NAME, D_XML_NAME) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name attribute (file node) (XSD)")
+            return
+            end
+        ;set FORM attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_FORM, D_XSD_UNQUALIFIED) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting form attribute (file node) (XSD)")
+            return
+            end
+        ;set TYPE attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting type attribute (file node) (XSD)")
+            return
+            end
+
+        ;create second attribute node
+
+        node_name = D_XSDNS_XS + ':' + D_XSD_ATTRIBUTE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set NAME attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XML_NAME, D_XML_KEYNUM) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name attribute (file node) (XSD)")
+            return
+            end
+        ;set FORM attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_FORM, D_XSD_UNQUALIFIED) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting form attribute (file node) (XSD)")
+            return
+            end
+        ;set TYPE attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting type attribute (file node) (XSD)")
+            return
+            end
+
+        prev_node = tmp_node
+
+        ;add sequence child node
+        node_name = D_XSDNS_XS + ':' + D_XSD_SEQUENCE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;reset logical file node
+        prev_node = tmp_node
+        end
+    (D_XML_TYPE_ATTR),
+        begin
+        ;set name of file node
+        if (%xml_elem_setname(prev_node, D_XSDNS_XS + ':' + D_XSD_ELEMENT) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_STR
+            xcall log_error(fstatus, "Error setting name 1 (file node) (XSD)")
+            return
+            end
+        ;set NAME attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XML_NAME, D_XML_FILE) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name attribute (file node) (XSD)")
+            return
+            end
+        ;set MINOCCURS attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XSD_MINOCCURS, '0') != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting minoccurs attribute (file node) (XSD)")
+            return
+            end
+        ;set MAXOCCURS attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XSD_MAXOCCURS, D_XSD_UNBOUNDED) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting maxoccurs attribute (file node) (XSD)")
+            return
+            end
+
+        ; add complex data type node
+        node_name = D_XSDNS_XS + ':' + D_XSD_COMPLEXTYPE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        prev_node = tmp_node
+
+        ;add sequence child node
+        node_name = D_XSDNS_XS + ':' + D_XSD_SEQUENCE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;reset logical file node
+        prev_node = tmp_node
+        end
+    (D_XML_TYPE_ADO),
+        begin
+        ;set name of file node
+        if (%xml_elem_setname(prev_node, D_XSDNS_XS + ':' + D_XSD_SCHEMA) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_STR
+            xcall log_error(fstatus, "Error setting name 'xs:schema' (file node) (XSD)")
+            return
+            end
+        ;set ID attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XSD_ID, D_XSD_ROWSETSCHEMA) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting id attribute (file node) (XSD)")
+            return
+            end
+
+        ;create elementtype child node
+        node_name = D_XSDNS_XS + ':' + D_XSD_ELEMENTTYPE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set NAME attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XML_NAME, D_XSD_ROW) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name 'row' attribute (file node) (XSD)")
+            return
+            end
+        ;set content attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_CONTENT, D_XSD_ELTONLY) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting content attribute (file node) (XSD)")
+            return
+            end
+
+        ;reset logical file node
+        prev_node = tmp_node
+        end
+    (D_XML_TYPE_ISLE),
+        begin
+        ;set name of file node
+        if (%xml_elem_setname(prev_node, D_XSD_SCHEMA) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_STR
+            xcall log_error(fstatus, "Error setting name 'xs:schema' (file node) (XSD)")
+            return
+            end
+        if (%xml_elem_setattribute(prev_node, D_XSDNS, 'urn:schemas-microsoft-com:xml-data') != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_TYPEATTR
+            xcall log_error(fstatus, "Error setting namespace attribute on root (XSD)")
+            return
+            end
+        if (%xml_elem_setattribute(prev_node, D_XMLNS + D_XSDNS_DT, 'urn:schemas-microsoft-com:datatypes') != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_TYPEATTR
+            xcall log_error(fstatus, "Error setting namespace 'rs' attribute on root (XSD)")
+            return
+            end
+
+        ; add elementtype node (for record definition)
+        node_name = D_XSD_ELEMENTTYPE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        if (%xml_elem_setattribute(tmp_node, D_XML_NAME, rps_strname) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_TYPEATTR
+            xcall log_error(fstatus, "Error setting name attribute on root elementtype (XSD)")
+            return
+            end
+        ;set content attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_CONTENT, D_XSD_ELTONLY) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting content attribute (root elementtype) (XSD)")
+            return
+            end
+        ;set order attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_ORDER, D_XSD_MANY) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting order attribute (root elementtype) (XSD)")
+            return
+            end
+
+        prev_node = tmp_node
+
+        ; add element node (for record name)
+        node_name = D_XSD_ELEMENT
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set TYPE attribute of structure node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, %atrim(rps_strname) + D_XSD_RECORD) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name 5 attribute (structure node) (XSD)")
+            return
+            end
+
+        ;reset logical file node
+        prev_node = fil_node
+        end
+    (),
+        begin
+        ;set name of file node
+        if (%xml_elem_setname(prev_node, D_XSDNS_XS + ':' + D_XSD_ELEMENT) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SN_STR
+            xcall log_error(fstatus, "Error setting name 1 (file node) (XSD)")
+            return
+            end
+        ;set NAME attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XML_NAME, D_XML_FILE) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name attribute (file node) (XSD)")
+            return
+            end
+        ;set MINOCCURS attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XSD_MINOCCURS, '0') != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting minoccurs attribute (file node) (XSD)")
+            return
+            end
+        ;set MAXOCCURS attribute of file node
+        if (%xml_elem_setattribute(prev_node, D_XSD_MAXOCCURS, D_XSD_UNBOUNDED) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting maxoccurs attribute (file node) (XSD)")
+            return
+            end
+
+        ; add complex data type node
+        node_name = D_XSDNS_XS + ':' + D_XSD_COMPLEXTYPE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        prev_node = tmp_node
+
+        ;add sequence child node
+        node_name = D_XSDNS_XS + ':' + D_XSD_SEQUENCE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;reset logical file node
+        prev_node = tmp_node
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+; now we're going to process the Repository field definitions
+; and export them into the XMD document
+
+process_structures,
+
+    str_ctr = num_structures
+    while (str_ctr)
+        begin
+        s_info = M_STR_INFO(info)
+        rps_strname = M_STR_INFO(name)
+        f_hdl = M_STR_INFO(hdl_flds)
+
+        ;export structure tag
+        call export_str_tag
+        if (fstatus == DE_NOERROR)
+            begin
+            clear fld_ctr
+            ;export complex data types for each field
+            while(fstatus == DE_NOERROR && fld_ctr < s_info.si_nmflds)
+                begin
+                fld_ctr += 1
+                call export_fld
+                end
+
+            if (fstatus == DE_NOERROR)
+                str_ctr -= 1
+            end
+
+        if (fstatus != DE_NOERROR)
+            exitloop
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+; export STRUCTURE tag
+
+export_str_tag,
+
+    using xml_type select
+    (D_XML_TYPE_TAG), ;tag data
+        begin
+        node_name = D_XSDNS_XS + ':' + D_XSD_ELEMENT
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set NAME attribute of structure node
+        if (%xml_elem_setattribute(tmp_node, D_XML_NAME, rps_strname) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name 2 attribute (structure node) (XSD)")
+            return
+            end
+        ;add raw xml structure attributes
+        call add_raw_xml_str_attrs
+        end
+    (D_XML_TYPE_ATTR),
+        begin
+        node_name = D_XSDNS_XS + ':' + D_XSD_ELEMENT
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set NAME attribute of structure node
+        if (%xml_elem_setattribute(tmp_node, D_XML_NAME, D_XML_STRUCT) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name 3 (structure node) (XSD)")
+            return
+            end
+        ;add raw xml structure attributes
+        call add_raw_xml_str_attrs
+        end
+    (D_XML_TYPE_ADO),
+        begin
+        tmp_node = prev_node
+        end
+    (D_XML_TYPE_ISLE),
+        begin
+        node_name = D_XSD_ELEMENTTYPE
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set NAME attribute of structure node
+        if (%xml_elem_setattribute(tmp_node, D_XML_NAME, %atrim(rps_strname) + D_XSD_RECORD) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name 5 attribute (structure node) (XSD)")
+            return
+            end
+        ;set content attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_CONTENT, D_XSD_ELTONLY) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting content attribute (structure node) (XSD)")
+            return
+            end
+        ;set order attribute of file node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_ORDER, D_XSD_MANY) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting order attribute (structure node) (XSD)")
+            return
+            end
+
+        ;save data island node
+        fld_di_node = tmp_node
+
+        tmp_node = prev_node
+        end
+    (),
+        begin
+        node_name = D_XSDNS_XS + ':' + D_XSD_ELEMENT
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set NAME attribute of structure node
+        if (%xml_elem_setattribute(tmp_node, D_XML_NAME, rps_strname) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name 1 attribute (structure node) (XSD)")
+            return
+            end
+
+        ;add raw xml structure attributes
+        call add_raw_xml_str_attrs
+        end
+    endusing
+
+    fld_root_node = tmp_node
+
+    return
+
+;----------------------------------------------------------------------------
+
+add_raw_xml_str_attrs,
+
+    ;set MINOCCURS attribute of structure node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_MINOCCURS, '0') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting minoccurs attribute (structure node) (XSD)")
+        return
+        end
+    ;set MAXOCCURS attribute of structure node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_MAXOCCURS, D_XSD_UNBOUNDED) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting maxoccurs attribute (structure node) (XSD)")
+        return
+        end
+
+    prev_node = tmp_node
+
+    ;add complex data type child node
+    node_name = D_XSDNS_XS + ':' + D_XSD_COMPLEXTYPE
+    call add_node
+    if (fstatus != DE_NOERROR)
+        return
+
+    prev_node = tmp_node
+
+    ;add sequence child node
+    node_name = D_XSDNS_XS + ':' + D_XSD_SEQUENCE
+    call add_node
+    if (fstatus != DE_NOERROR)
+        return
+
+    return
+
+;----------------------------------------------------------------------------
+; export FIELD tag
+
+export_fld,
+
+    ;do not export overlay fields
+    if (M_FLD_ARRAY(fld_ovrlay))
+        return
+
+    ;field name (or ODBC field name)
+    field_name = M_FLD_ARRAY(fld_odbc_name)
+
+    using xml_type select
+    (D_XML_TYPE_TAG), ;tag data
+        begin
+        nop
+        end
+    (D_XML_TYPE_ATTR),
+        begin
+        ;only want 1 field, cos it's all generic
+        if (fld_ctr.gt.1)
+            return
+        end
+    (D_XML_TYPE_ADO),
+        begin
+        nop
+        end
+    (D_XML_TYPE_ISLE),
+        begin
+        prev_node = fld_di_node
+
+        node_name = D_XSDNS_XS + ':' + D_XSD_ELEMENT
+        call add_node
+        if (fstatus != DE_NOERROR)
+            return
+
+        ;set type attribute of data island node
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, field_name) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting name 5 attribute (structure node) (XSD)")
+            return
+            end
+
+        end
+    (),
+        begin
+        nop
+        end
+    endusing
+
+    ;create field node
+    fld_node = %xml_elem_create
+    if (!fld_node)
+        begin
+        fstatus = DE_XML_CE_FLD
+        xcall log_error(fstatus, "Error creating XML element (field node) (XSD)")
+        return
+        end
+    ;add field node as child of structure node
+    if (%xml_elem_addchild(fld_root_node, fld_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_AC_FLD
+        xcall log_error(fstatus, "Error adding child node to fld_root_node (field node) (XSD)")
+        return
+        end
+
+    ;get field position and length
+    pos = M_FLD_ARRAY(fld_pos)
+    len = M_FLD_ARRAY(fld_len)
+
+    prev_node = fld_node
+
+    using xml_type select
+    (D_XML_TYPE_TAG), ;tag data
+        begin
+        call export_raw_tag_data
+        end
+    (D_XML_TYPE_ATTR), ;attribute data
+        begin
+        call export_raw_attr_data
+        end
+    (D_XML_TYPE_ADO), ;ado data
+        begin
+        call export_ado_data
+        end
+    (D_XML_TYPE_ISLE), ;data island
+        begin
+        call export_di_data
+        end
+    (),
+        begin
+        call export_raw_data
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+; add child node (tmp_node) to "prev_node" amd set name of node to "node_name"
+
+add_node,
+
+    ;create node
+    tmp_node = %xml_elem_create
+    if (!tmp_node)
+        begin
+        fstatus = DE_XML_CRE_ELE
+        xcall log_error(fstatus, "Error creating XML element (XSD)")
+        return
+        end
+    ;add node as child
+    if (%xml_elem_addchild(prev_node, tmp_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ADDCHILD
+        xcall log_error(fstatus, "Error adding child node (schema element node) (XSD)")
+        return
+        end
+    ;set name of node
+    if (%xml_elem_setname(tmp_node, %atrim(node_name)) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ELENAME
+        xcall log_error(fstatus, "Error setting element name (schema element node) (XSD)")
+        return
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_raw_tag_data,
+
+    ;add field attributes to current node, and create an complex data node
+    call export_raw_field_attributes
+    if (fstatus != DE_NOERROR)
+        return
+
+    ;add attribute child node
+
+    ;create node
+    tmp_node = %xml_elem_create
+    if (!tmp_node)
+        begin
+        fstatus = DE_XML_CRE_ELE
+        xcall log_error(fstatus, "Error creating XML element (XSD)")
+        return
+        end
+    ;add node as child
+    if (%xml_elem_addchild(prev_node, tmp_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ADDCHILD
+        xcall log_error(fstatus, "Error adding child node (schema element node) (XSD)")
+        return
+        end
+    ;set name of node
+    if (%xml_elem_setname(tmp_node, D_XSDNS_XS + ':' + D_XSD_ATTRIBUTE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ELENAME
+        xcall log_error(fstatus, "Error setting element name (schema element node) (XSD)")
+        return
+        end
+    ;set NAME attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_NAME, D_XML_VALUE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+        return
+        end
+    ;set FORM attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_FORM, D_XSD_UNQUALIFIED) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+        return
+        end
+    ;set field attributes of node
+    using M_FLD_ARRAY(fld_typ) select
+    (D_FLDTYP_DEC),
+        begin
+        ;set type attribute
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_DECIMAL) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_NAMEATTR
+            xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+            return
+            end
+        end
+    (D_FLDTYP_INT),
+        begin
+        ;set type attribute
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_DECIMAL) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_NAMEATTR
+            xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+            return
+            end
+        end
+    (), ;D_FLDTYP_ALPHA
+        begin
+        ;set type attribute
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_NAMEATTR
+            xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+            return
+            end
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_raw_attr_data,
+
+    ;add field attributes to current node, and create an complex data node
+    call export_raw_field_attributes
+    if (fstatus != DE_NOERROR)
+        return
+
+    ;add attribute child node
+
+    ;create node
+    tmp_node = %xml_elem_create
+    if (!tmp_node)
+        begin
+        fstatus = DE_XML_CRE_ELE
+        xcall log_error(fstatus, "Error creating XML element (XSD)")
+        return
+        end
+    ;add node as child
+    if (%xml_elem_addchild(prev_node, tmp_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ADDCHILD
+        xcall log_error(fstatus, "Error adding child node (schema element node) (XSD)")
+        return
+        end
+    ;set name of node
+    if (%xml_elem_setname(tmp_node, D_XSDNS_XS + ':' + D_XSD_ATTRIBUTE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ELENAME
+        xcall log_error(fstatus, "Error setting element name (schema element node) (XSD)")
+        return
+        end
+    ;set NAME attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_NAME, D_XML_NAME) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting name attribute (schema element node) (XSD)")
+        return
+        end
+    ;set FORM attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_FORM, D_XSD_UNQUALIFIED) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting form attribute (schema element node) (XSD)")
+        return
+        end
+    ;set TYPE attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_STRING) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+        return
+        end
+
+    ;create node
+    tmp_node = %xml_elem_create
+    if (!tmp_node)
+        begin
+        fstatus = DE_XML_CRE_ELE
+        xcall log_error(fstatus, "Error creating XML element (XSD)")
+        return
+        end
+    ;add node as child
+    if (%xml_elem_addchild(prev_node, tmp_node) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ADDCHILD
+        xcall log_error(fstatus, "Error adding child node (schema element node) (XSD)")
+        return
+        end
+    ;set name of node
+    if (%xml_elem_setname(tmp_node, D_XSDNS_XS + ':' + D_XSD_ATTRIBUTE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_ELENAME
+        xcall log_error(fstatus, "Error setting element name (schema element node) (XSD)")
+        return
+        end
+    ;set NAME attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_NAME, D_XML_VALUE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting name attribute (schema element node) (XSD)")
+        return
+        end
+    ;set FORM attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_FORM, D_XSD_UNQUALIFIED) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting form attribute (schema element node) (XSD)")
+        return
+        end
+    ;set TYPE attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_STRING) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+        return
+        end
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_ado_data,
+
+    ;set name of field node
+    if (%xml_elem_setname(prev_node, D_XSDNS_XS + ':' + D_XSD_ATTRIBUTETYPE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SN_FLD
+        xcall log_error(fstatus, "Error setting element name 'attributetype' (field node) (XSD)")
+        return
+        end
+    ;set NAME attribute of field node
+    if (%xml_elem_setattribute(prev_node, D_XSD_NAME, field_name) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting name attribute (field node) (XSD)")
+        return
+        end
+    ;set NUMBER attribute of field node
+    if (%xml_elem_setattribute(prev_node, D_XSDNS_RS + ':' + D_XSD_NUMBER, %string(fld_ctr)) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting number attribute (field node) (XSD)")
+        return
+        end
+    ;set NULLABLE attribute of field node
+    if (%xml_elem_setattribute(prev_node, D_XSDNS_RS + ':' + D_XSD_NULLABLE, D_XSD_TRUE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting nullable attribute (field node) (XSD)")
+        return
+        end
+    ;set WRITEUNKNOWN attribute of field node
+    if (%xml_elem_setattribute(prev_node, D_XSDNS_RS + ':' + D_XSD_WRITEUNKNOWN, D_XSD_TRUE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting write unknown attribute (field node) (XSD)")
+        return
+        end
+
+    node_name = D_XSDNS_XS + ':' + D_XSD_DATATYPE
+    call add_node
+    if (fstatus != DE_NOERROR)
+        return
+
+    ;set field attribites of node
+    using M_FLD_ARRAY(fld_typ) select
+    (D_FLDTYP_DEC),
+        begin
+        ;set TYPE attribute of field node
+        if (%xml_elem_setattribute(tmp_node, D_XSDNS_DT + ':' + D_XSD_TYPE, D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting type attribute (field node) (XSD)")
+            return
+            end
+        ;set MAXLENGTH attribute of field node
+        if (%xml_elem_setattribute(tmp_node, D_XSDNS_DT + ':' + D_XSD_MAXLENGTH,
+        &  %string(M_FLD_ARRAY(fld_len))) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting maxlength attribute (field node) (XSD)")
+            return
+            end
+        ;set PRECISION attribute of field node
+        if (%xml_elem_setattribute(tmp_node, D_XSDNS_DT + ':' + D_XSD_PRECISION,
+        &  %string(M_FLD_ARRAY(fld_dp))) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting precision attribute (field node) (XSD)")
+            return
+            end
+        end
+    (D_FLDTYP_INT),
+        begin
+        ;set TYPE attribute of field node
+        if (%xml_elem_setattribute(tmp_node, D_XSDNS_DT + ':' + D_XSD_TYPE, D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting type attribute (field node) (XSD)")
+            return
+            end
+        ;set MAXLENGTH attribute of field node
+        if (%xml_elem_setattribute(tmp_node, D_XSDNS_DT + ':' + D_XSD_MAXLENGTH,
+        &  %string(M_FLD_ARRAY(fld_len))) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting maxlength attribute (field node) (XSD)")
+            return
+            end
+        ;set PRECISION attribute of field node
+        if (%xml_elem_setattribute(tmp_node, D_XSDNS_DT + ':' + D_XSD_PRECISION,
+        &  %string(M_FLD_ARRAY(fld_len))) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting precision attribute (field node) (XSD)")
+            return
+            end
+        end
+    (), ;D_FLDTYP_ALPHA
+        begin
+        ;set TYPE attribute of field node
+        if (%xml_elem_setattribute(tmp_node, D_XSDNS_DT + ':' + D_XSD_TYPE, D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting type attribute (field node) (XSD)")
+            return
+            end
+        ;set MAXLENGTH attribute of field node
+        if (%xml_elem_setattribute(tmp_node, D_XSDNS_DT + ':' + D_XSD_MAXLENGTH,
+        &  %string(M_FLD_ARRAY(fld_len))) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting maxlength attribute (field node) (XSD)")
+            return
+            end
+        ;set PRECISION attribute of field node
+        if (%xml_elem_setattribute(tmp_node, D_XSDNS_DT + ':' + D_XSD_PRECISION,
+        &  %string(M_FLD_ARRAY(fld_len))) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting precision attribute (field node) (XSD)")
+            return
+            end
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_di_data,
+
+    ;set name of field node
+    if (%xml_elem_setname(prev_node, D_XSD_ELEMENTTYPE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SN_FLD
+        xcall log_error(fstatus, "Error setting element name 'attributetype' (field node) (XSD)")
+        return
+        end
+
+    node_name = D_XSD_ELEMENTTYPE
+    call add_node
+    if (fstatus != DE_NOERROR)
+        return
+
+    ;set name attribute of field node
+    if (%xml_elem_setattribute(prev_node, D_XSD_NAME, field_name) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting content attribute (file node) (XSD)")
+        return
+        end
+    ;set content attribute of field node
+    if (%xml_elem_setattribute(prev_node, D_XSD_CONTENT, D_XSD_TEXTONLY) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting content attribute (file node) (XSD)")
+        return
+        end
+    ;set field attributes of node
+    using M_FLD_ARRAY(fld_typ) select
+    (D_FLDTYP_DEC),
+        begin
+        ;set TYPE attribute of field node
+        if (%xml_elem_setattribute(prev_node, D_XSDNS_DT + ':' + D_XSD_TYPE, D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting type attribute (field node) (XSD)")
+            return
+            end
+        end
+    (D_FLDTYP_INT),
+        begin
+        ;set TYPE attribute of field node
+        if (%xml_elem_setattribute(prev_node, D_XSDNS_DT + ':' + D_XSD_TYPE, D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting type attribute (field node) (XSD)")
+            return
+            end
+        end
+    (), ;D_FLDTYP_ALPHA
+        begin
+        ;set TYPE attribute of field node
+        if (%xml_elem_setattribute(prev_node, D_XSDNS_DT + ':' + D_XSD_TYPE, D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_SNA_STR
+            xcall log_error(fstatus, "Error setting type attribute (field node) (XSD)")
+            return
+            end
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_raw_data,
+
+    ;add field attributes to current node, and create an complex data node
+    call export_raw_field_attributes
+    if (fstatus != DE_NOERROR)
+        return
+
+    ;add attribute child node
+    node_name = D_XSDNS_XS + ':' + D_XSD_ATTRIBUTE
+    call add_node
+    if (fstatus != DE_NOERROR)
+        return
+
+    ;set NAME attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_NAME, D_XML_VALUE) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+        return
+        end
+    ;set FORM attribute of node
+    if (%xml_elem_setattribute(tmp_node, D_XSD_FORM, D_XSD_UNQUALIFIED) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_NAMEATTR
+        xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+        return
+        end
+    ;set field attributes of node
+    using M_FLD_ARRAY(fld_typ) select
+    (D_FLDTYP_DEC),
+        begin
+        ;set type attribute
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_DECIMAL) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_NAMEATTR
+            xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+            return
+            end
+        end
+    (D_FLDTYP_INT),
+        begin
+        ;set type attribute
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_DECIMAL) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_NAMEATTR
+            xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+            return
+            end
+        end
+    (), ;D_FLDTYP_ALPHA
+        begin
+        ;set type attribute
+        if (%xml_elem_setattribute(tmp_node, D_XSD_TYPE, D_XSDNS_XS + ':' + D_XSD_STRING) != XML_SUCCESS)
+            begin
+            fstatus = DE_XML_NAMEATTR
+            xcall log_error(fstatus, "Error setting type attribute (schema element node) (XSD)")
+            return
+            end
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+export_raw_field_attributes,
+
+    ;set name of field node
+    if (%xml_elem_setname(prev_node, D_XSDNS_XS + ':' + D_XSD_ELEMENT) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SN_FLD
+        xcall log_error(fstatus, "Error setting element name 1 (field node) (XSD)")
+        return
+        end
+    ;set NAME attribute of structure node
+    if (%xml_elem_setattribute(prev_node, D_XSD_NAME, field_name) != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting name 1 attribute (field node) (XSD)")
+        return
+        end
+    ;set MINOCCURS attribute of structure node
+    if (%xml_elem_setattribute(prev_node, D_XSD_MINOCCURS, '0') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting MINOCCURS attribute (field node) (XSD)")
+        return
+        end
+    ;set MAXOCCURS attribute of structure node
+    if (%xml_elem_setattribute(prev_node, D_XSD_MAXOCCURS, '1') != XML_SUCCESS)
+        begin
+        fstatus = DE_XML_SNA_STR
+        xcall log_error(fstatus, "Error setting MAXOCCURS attribute (field node) (XSD)")
+        return
+        end
+
+    ;add complex data type child node
+    node_name = D_XSDNS_XS + ':' + D_XSD_COMPLEXTYPE
+    call add_node
+    if (fstatus != DE_NOERROR)
+        return
+
+    prev_node = tmp_node
+
+    return
+
+;----------------------------------------------------------------------------
+.end
+

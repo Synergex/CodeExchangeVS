@@ -1,0 +1,262 @@
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+;For more information on USPS web tools, goto http://www.usps.com/webtools
+;
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+import SynPSG.Utilities.USPS
+import System.Collections
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+main
+
+    stack record
+        test_type       ,i4
+        test_one        ,i4
+        sts             ,i4
+        char            ,a1
+    endrecord
+
+    stack record addressData
+        arrayCtr        ,d1                     ;array counter
+        firm            ,a38                    ;company name
+        addr1           ,a38                    ;address line 1
+        addr2           ,a38                    ;address line 2
+        city            ,a15                    ;city
+        state           ,a2                     ;state
+        zip5            ,a5                     ;zip
+        zip4            ,a4                     ;zip+4
+    endrecord
+
+    stack record rateData
+        myUSPS          ,@USPS
+        service         ,SynPSG.Utilities.USPS.ServiceType
+        firstClass      ,SynPSG.Utilities.USPS.FirstClassType
+        fromZip         ,string
+        toZip           ,string
+        pounds          ,integer
+        ounces          ,decimal
+        container       ,SynPSG.Utilities.USPS.ContainerType
+        size            ,SynPSG.Utilities.USPS.SizeType
+        width           ,decimal
+        length          ,decimal
+        height          ,decimal
+        girth           ,decimal
+        machinable      ,boolean
+        shipDate        ,integer ;yyyymmdd
+        shipOption      ,SynPSG.Utilities.USPS.ShipOption
+        returnLoc       ,boolean
+    endrecord
+    stack record
+        resultData      ,@ArrayList
+    endrecord
+
+proc
+
+    open(1, O, 'TT:')
+    writes(1, "USPS webservice test v2.0")
+
+    ;;Set USPS user ID
+    ;xcall setlog('USPS_USER', '', sts)
+
+    test_type = 4
+    test_one = 1
+
+    using test_type select
+    (1),
+    begin
+        data    resultText      ,a2000
+        if(!test_one || test_one == 1)
+        begin
+            clear addressData, resultText
+            addr1           = ''
+            addr2           = '6406 Ivy Lane'
+            city            = 'Greenbelt'
+            state           = 'MD'
+            zip5            = ''
+            zip4            = ''
+
+            xcall displayAddress(addressData)
+            xcall validateUSaddress(0,, addr1, addr2, city, state, zip5, zip4, resultText)
+            xcall displayAddress(addressData, ResultText)
+        end
+
+        if(!test_one || test_one == 2)
+        begin
+            clear addressData, resultText
+            addr1           = ''
+            addr2           = '8 Wildwood Drive'
+            city            = 'Old Lyme'
+            state           = 'CT'
+            zip5            = '06371'
+            zip4            = ''
+
+            xcall displayAddress(addressData)
+            xcall validateUSaddress(0, firm, addr1, addr2, city, state, zip5, zip4, resultText)
+            xcall displayAddress(addressData, ResultText)
+        end
+    end
+    (2),
+    begin
+        data    resultText      ,a2000
+        if(!test_one || test_one == 1)
+        begin
+            clear addressData, resultText
+;            firm            = 'XYZ Corp.'
+            addr1           = ''
+            addr2           = '6406 Ivy Lane'
+            city            = 'Greenbelt'
+            state           = 'MD'
+            zip5            = ''
+            zip4            = ''
+
+            xcall displayAddress(addressData)
+            xcall validateUSaddress(1, firm, addr1, addr2, city, state, zip5, zip4, resultText)
+            xcall displayAddress(addressData, ResultText)
+        end
+
+        if(!test_one || test_one == 2)
+        begin
+            clear addressData, resultText
+            addr1           = ''
+            addr2           = '8 Wildwood Drive'
+            city            = 'Old Lyme'
+            state           = 'CT'
+            zip5            = ''
+            zip4            = ''
+
+            xcall displayAddress(addressData)
+            xcall validateUSaddress(1, firm, addr1, addr2, city, state, zip5, zip4, resultText)
+            xcall displayAddress(addressData, ResultText)
+        end
+    end
+    (3),
+    begin
+        data    resultText      ,a2000
+        if(!test_one || test_one == 1)
+        begin
+            clear addressData, resultText
+            zip5 = '90210'
+
+            xcall lookupUSzipcode(zip5, city, state, resultText)
+            xcall displayAddress(addressData, ResultText)
+        end
+
+        if(!test_one || test_one == 2)
+        begin
+            clear addressData, resultText
+            zip5 = '20770'
+
+            xcall lookupUSzipcode(zip5, city, state, resultText)
+            xcall displayAddress(addressData, ResultText)
+        end
+    end
+    (4),
+    begin
+        data     resultText      ,string
+        resultData = new ArrayList()
+        if(!test_one || test_one == 1)
+        begin
+            myUSPS = new USPS()
+            service         = SynPSG.Utilities.USPS.ServiceType.FirstClass
+            firstClass      = SynPSG.Utilities.USPS.FirstClassType.Letter
+            fromZip         = '44106'
+            toZip           = '20770'
+            pounds          = 0
+            ounces          = 3.5
+            container       = SynPSG.Utilities.USPS.ContainerType.FlatRateEnvelope
+            size            = SynPSG.Utilities.USPS.SizeType.None
+            width           = 0.0
+            length          = 0.0
+            height          = 0.0
+            girth           = 0.0
+            machinable      = TRUE
+            shipDate        = 0
+            ;^a(shipDate)    = %datetime ;today's date
+            shipOption      = SynPSG.Utilities.USPS.ShipOption.EMSH
+            returnLoc       = FALSE
+
+            using myUSPS.calculatePostage(resultData, service, firstClass, fromZip, toZip, pounds, ounces, container, size,
+&               width, length, height, girth, machinable, shipDate, shipOption, returnLoc) select
+            (1),
+                xcall displayResult(resultData, myUSPS.RespText)
+            (0),
+                xcall displayResult(resultData, "")
+            (), ;error
+                xcall displayResult(resultData, myUSPS.RespText)
+            endusing
+        end
+    end
+    endusing
+
+    ;;wait 10 seconds before stopping program
+    accept(1, char, WAIT:10) [ERR=ok]
+ok,
+    close 1
+    xcall flags(7000000,1)
+    stop D_EXIT_SUCCESS
+
+endmain
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine displayAddress
+    req in    aAddressData  ,a
+    opt in    aResultText   ,a
+    endparams
+
+    stack record addressData
+        arrayCtr        ,d1                     ;array counter
+        firm            ,a38                    ;company name
+        addr1           ,a38                    ;address line 1
+        addr2           ,a38                    ;address line 2
+        city            ,a15                    ;city
+        state           ,a2                     ;state
+        zip5            ,a5                     ;zip
+        zip4            ,a4                     ;zip+4
+    endrecord
+proc
+    addressData = aAddressData
+    if(firm)
+        writes(1, "Firm "+firm)
+    writes(1, "Adr1 "+addr1)
+    writes(1, "Adr2 "+addr2)
+    writes(1, "City "+%atrim(city)+'  '+state)
+    writes(1, "Zip  "+zip5+'-'+zip4)
+    if(^passed(aResultText) && aResultText)
+        writes(1, "Rslt "+%atrim(aResultText))
+    xreturn
+end
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine displayResult
+    req in    aResultData   ,@ArrayList
+    req in    aResultText   ,string
+    endparams
+    stack record resultData
+        zone            ,a2                     ;USPS zone
+        serviceClass    ,a2                     ;service class #
+        serviceType     ,a25                    ;service class text
+        serviceRate     ,d10.2                  ;rate
+    endrecord
+    stack record
+        arrayRow    ,@object
+    endrecord
+proc
+    foreach arrayRow in aResultData
+    begin
+        resultData = (a)arrayRow
+        writes(1, "Zone="+zone)
+        writes(1, "Cls ="+serviceClass)
+        writes(1, "Type="+serviceType)
+        writes(1, "Rate="+%string(serviceRate))
+    end
+    if(aResultText)
+        writes(1, "Rslt="+%atrim(aResultText))
+    xreturn
+end
+
+;+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

@@ -1,0 +1,891 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+; xfspism2xmltest.dbl
+;
+;
+; Version :
+.define D_APP       ,"XFSPISM2XMLTEST"
+.define D_VERSION   ,"1.2.1"
+;
+; Date : 22nd April 2003
+;
+;
+; dbl xfspism2xmltest
+; dblink xfspism2xmltest WND:tklib.elb
+;
+; dbl xfspism2xml
+; dblink -l xfspism2xml.elb xfspism2xml.dbo
+;
+;
+; to run using xfServerPlus
+;
+; dbr xfspism2xmltest -f rps_file_name -rx
+;
+; to run locally
+;
+; dbr xfspism2xmltest -f rps_file_name
+;
+; to show help
+;
+; dbr xfspism2xmltest -h
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.main ;xfspism2xmltest
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.include 'WND:tools.def'
+.include 'DBLDIR:rcbapi.def'
+
+.define XFSP_ERROR      ,99999
+
+.define LOCAL_MODE      ,0
+.define REMOTE_MODE     ,1
+.define REMOTE_DEBUG    ,2
+
+.include 'INC:xfspism2xml.def'
+
+record
+.include 'DBLDIR:rxerr.def'
+.include 'DBLDIR:rxapi.def'
+
+record
+    netid               ,i4 ,0
+    port                ,i4 ,2356       ;xfServerPlus port
+    ip                  ,a* ,'localhost';xfServerPlus server
+
+    dbgip               ,i4             ;debugging TCP/IP address
+    dbgport             ,i4             ;debugging port
+
+
+external function
+    u_cmdlinopt         ,^val
+    rc_api              ,^val
+    xml_string_to_file  ,^val
+
+structure b
+    buff                ,a65535;1
+
+.align
+record clr_i
+    status              ,i4             ;function return status
+    status2             ,i4             ;function status
+    xmltyp              ,i4             ;XML type (number)
+    chan                ,i4             ;TT channel
+    lk                  ,i4             ;first key provided
+    uk                  ,i4             ;last key provided
+    rcbid               ,i4             ;RCB id
+    xml_hdl             ,D_HANDLE       ;xml handle
+    mode                ,i4             ;0=local, 1=remote, 2=remote debug
+    call_ref            ,i4             ;call reference number
+    max_recs            ,i4             ;maximum number of records required
+    num_recs            ,i4             ;number of records returned
+
+.align
+record clr
+    text                ,a80            ;error text
+    out_file            ,a255           ;output filename
+    xml                 ,a2048          ;xml display string
+
+.align
+record params
+    filename            ,a255           ;Filename
+    str_name            ,a30            ;RPS structure name
+    xml_type            ,a D_XML_TYPES_SIZ  ;XML type
+    key_num             ,a3;d3             ;key number
+    key_frst            ,a80            ;first key
+    key_last            ,a80            ;last key
+    rangevar            ,a1;d1             ;range variables type (0-record, 1-key)
+
+.align
+literal
+    xml_types           ,D_XML_TYPES_NUM a D_XML_TYPES_SIZ
+    &                       ,D_XML_TYPE_DFLT
+    &                       ,D_XML_TYPE_ATTR
+    &                       ,D_XML_TYPE_TAG
+    &                       ,D_XML_TYPE_ADO
+    &                       ,D_XML_TYPE_ISLE
+
+.proc
+
+    clear ^i(clr_i), clr, xml, params
+
+    xcall flags(7000000,1)
+
+    xcall u_start
+
+    call decode_cmdln
+
+    if(!status) then
+        begin
+
+        ;create memory handle
+        xml_hdl = %mem_proc(DM_ALLOC, 1)
+        clear ^m(xml_hdl)
+
+        using mode select
+        (REMOTE_DEBUG),
+            begin
+            status = %rx_debug_init(netid, dbgip, dbgport)
+
+            writes(g_terminal, " ")
+            writes(g_terminal, "Run xfServerPlus in debug mode")
+            writes(g_terminal, " ")
+            writes(g_terminal, " ")
+            writes(g_terminal, " MS Windows / UNIX")
+            writes(g_terminal, " ")
+            writes(g_terminal, "  dbr -d DBLDIR:xfpl " + %hex(dbgip) + " " + %string(dbgport))
+            writes(g_terminal, " ")
+            writes(g_terminal, " ")
+            writes(g_terminal, " OpenVMS")
+            writes(g_terminal, " ")
+            writes(g_terminal, "  RUN DBLDIR:XFPLD")
+            writes(g_terminal, " ")
+            writes(g_terminal, " ")
+            writes(g_terminal, " then")
+            writes(g_terminal, " ")
+            writes(g_terminal, "  set break xfpl_debug_break")
+            writes(g_terminal, " ")
+
+            status = %rx_debug_start(netid)
+
+            call remote_xcalls
+
+            xcall rx_shutdown_remote(netid)
+            end
+        (REMOTE_MODE),
+            begin
+            status = %rx_start_remote(netid, ip, port)
+            if(status != RX_SUCCESS) then
+                xcall u_message("Cannot start xfServerPlus  status=" + %string(status))
+            else
+                begin
+                call remote_xcalls
+
+                xcall rx_shutdown_remote(netid)
+                end
+            end
+        (LOCAL_MODE),
+            begin
+            xcall openelb('RPSLIB:ddlib.elb')
+            xcall openelb('DBLDIR:synxml.elb')
+
+            call local_init
+
+            if(status == DE_NOERROR)
+                call local_schema
+
+            if(status == DE_NOERROR)
+                call local_data
+
+            if(status == DE_NOERROR)
+                call local_exit
+
+            end
+        endusing
+
+        ;delete memory handle
+        if(xml_hdl)
+            xml_hdl = %mem_proc(DM_FREE, xml_hdl)
+
+        onerror call_timeout
+        accept(g_terminal, status2, WAIT:10)
+call_timeout,
+        offerror
+
+        end
+    else
+        begin
+        chan = %syn_freechn()
+        open(chan, O, 'TT:')
+
+        writes(chan, "xfspISM2XMLtest  v"+D_VERSION)
+        writes(chan, " ")
+        if(status == -1)
+            begin
+            writes(chan, "Options ")
+            writes(chan, " ")
+            end
+        writes(chan, "-f ""filename""")
+        if(status == -1)
+            begin
+            writes(chan, "   if filename contains a colon, must be a physical file specification")
+            writes(chan, "   if filename does not contain a colon, must a Repository filename")
+            end
+        writes(chan, "[-s structure_name]")
+        if(status == -1)
+            begin
+            writes(chan, "   Required if filename is a physical file specification")
+            writes(chan, "   If provided, will override structures assigned in Repository")
+            end
+        writes(chan, "[-t XML_style_number]")
+        writes(chan, "   1 : """ + %atrim(xml_types(1)) + """  (default)")
+        for xmltyp from 2 thru D_XML_TYPES_NUM
+            writes(chan, "   " + %string(xmltyp) + " : """ + %atrim(xml_types(xmltyp)) + """")
+        writes(chan, "[-k key_number]")
+        writes(chan, "[-kf ""first_key_to_read""]")
+        writes(chan, "[-kl ""last_key_to_read""]")
+        writes(chan, "[-kt key_range_type]")
+        writes(chan, "   1 : Key fields are pre-assembled key strings (default)")
+        writes(chan, "   2 : Key fields are records, and %keyspec is used to extract key details")
+        writes(chan, "[-rx xfServerPlus remote execution mode]")
+        writes(chan, "[-rd xfServerPlus remote debug mode]")
+        writes(chan, "[-o ""output_filename""]")
+        if(status == -1)
+            begin
+            writes(chan, "   do not provide a filetype - it will be added")
+            end
+        writes(chan, "[-h] Verbose help")
+
+        onerror help_timeout
+        accept(chan, status2, WAIT:10)
+help_timeout,
+        offerror
+        close chan
+        end
+
+    xcall u_finish
+    freturn D_EXIT_SUCCESS
+
+;   ---------------------------------------------------------------------
+
+remote_xcalls,
+
+    call remote_init
+
+    if(status == DE_NOERROR)
+        call remote_schema
+
+    if(status == DE_NOERROR)
+        call remote_data
+
+    if(status == DE_NOERROR)
+        call remote_exit
+
+    return
+
+;   ---------------------------------------------------------------------
+
+remote_init,
+
+    rcbid = %rcb_create(7)
+
+    xcall rx_setrmtfnc(rcbid, netid, 'xfsp_ism2xml_init')
+
+    xcall rcb_setarg(rcbid, filename, 1, D_TYPE_A)
+    xcall rcb_setarg(rcbid, str_name, 2, D_TYPE_A)
+    xcall rcb_setarg(rcbid, xml_type, 3, D_TYPE_A)
+    xcall rcb_setarg(rcbid, key_num,  4, D_TYPE_D)
+    xcall rcb_setarg(rcbid, key_frst, 5, D_TYPE_A)
+    xcall rcb_setarg(rcbid, key_last, 6, D_TYPE_A)
+    xcall rcb_setarg(rcbid, rangevar, 7, D_TYPE_D)
+
+    onerror ($ERR_XFHALT) remote_error_halt, remote_error
+
+    call_ref = 1
+    status = %rcb_call(rcbid)
+
+    offerror
+
+remote1_error_exit,
+
+    xcall rcb_delete(rcbid)
+
+    using status select
+    (DE_NOERROR),
+        nop
+    (XFSP_ERROR),
+        nop
+    (),
+        begin
+        call remote_get_error_text
+
+        xcall u_message("Remote_init Status=" + %string(status)
+        &               + " " + %atrim(text))
+        end
+    endusing
+
+    return
+
+;--------------------------------------------------------------------
+
+remote_schema,
+
+    rcbid = %rcb_create(1)
+
+    xcall rx_setrmtfnc(rcbid, netid, 'xfsp_ism2xml_xsd')
+
+    xcall rcb_setarg(rcbid, xml_hdl, 1, D_TYPE_I)
+
+    clear xml_hdl
+
+    onerror ($ERR_XFHALT) remote_error_halt, remote_error
+
+    call_ref = 4
+    status = %rcb_call(rcbid)
+
+    offerror
+
+remote4_error_exit,
+
+    xcall rcb_delete(rcbid)
+
+    using status select
+    (DE_NOERROR),
+        begin
+        if(out_file)
+            begin
+            xcall xml_string_to_file(xml_hdl, %atrim(out_file) + '.xsd')
+            end
+
+        if(%mem_proc(DM_GETSIZE, xml_hdl).lt.65535) then
+            xml = ^m(xml_hdl)
+        else
+            xml = ^m(buff(1:65535), xml_hdl)
+
+        xcall u_message("xsd=" + %atrim(xml))
+        end
+    (XFSP_ERROR),
+        nop
+    (),
+        begin
+        call remote_get_error_text
+
+        xcall u_message("Remote_data Status=" + %string(status)
+        &               + " " + %atrim(text))
+        end
+    endusing
+
+    return
+
+;   ---------------------------------------------------------------------
+
+remote_data,
+
+    rcbid = %rcb_create(2)
+
+    xcall rx_setrmtfnc(rcbid, netid, 'xfsp_ism2xml_data')
+
+    xcall rcb_setarg(rcbid, max_recs, 1, D_TYPE_I)
+    xcall rcb_setarg(rcbid, num_recs, 2, D_TYPE_I)
+
+    clear max_recs, num_recs
+
+    onerror ($ERR_XFHALT) remote_error_halt, remote_error
+
+    call_ref = 2
+    status = %rcb_call(rcbid)
+
+    offerror
+
+remote2_error_exit,
+
+    xcall rcb_delete(rcbid)
+
+    using status select
+    (DE_NOERROR, DE_NOMOREDATA),
+        begin
+        xcall u_message("Records Read " + %string(num_recs))
+        clear status
+        end
+    (XFSP_ERROR),
+        nop
+    (),
+        begin
+        call remote_get_error_text
+
+        xcall u_message("Remote_data Status=" + %string(status)
+        &               + " " + %atrim(text))
+        end
+    endusing
+
+    return
+
+;   ---------------------------------------------------------------------
+
+remote_exit,
+
+    rcbid = %rcb_create(1)
+
+    xcall rx_setrmtfnc(rcbid, netid, 'xfsp_ism2xml_exit')
+
+    xcall rcb_setarg(rcbid, xml_hdl, 1, D_TYPE_HANDLE)
+
+    onerror ($ERR_XFHALT) remote_error_halt, remote_error
+
+    call_ref = 3
+    status = %rcb_call(rcbid)
+
+    offerror
+
+remote3_error_exit,
+
+    xcall rcb_delete(rcbid)
+
+    using status select
+    (DE_NOERROR),
+        begin
+        if(out_file)
+            begin
+            xcall xml_string_to_file(xml_hdl, %atrim(out_file) + '.xml')
+            end
+
+        if(%mem_proc(DM_GETSIZE, xml_hdl).lt.65535) then
+            xml = ^m(xml_hdl)
+        else
+            xml = ^m(buff(1:65535), xml_hdl)
+
+        xcall u_message("xml=" + %atrim(xml))
+        end
+    (XFSP_ERROR),
+        nop
+    (),
+        begin
+        call remote_get_error_text
+
+        xcall u_message("Remote_exit Status=" + %string(status)
+        &               + " " + %atrim(text))
+        end
+    endusing
+
+    return
+
+;   ---------------------------------------------------------------------
+
+remote_get_error_text,
+
+    rcbid = %rcb_create(2)
+
+    xcall rx_setrmtfnc(rcbid, netid, 'get_error_text')
+
+    xcall rcb_setarg(rcbid, status, 1, D_TYPE_I)
+    xcall rcb_setarg(rcbid, text, 2, D_TYPE_A)
+
+    onerror ($ERR_XFHALT) remote_error_halt, remote_error
+
+    call_ref = 0
+    status2 = %rcb_call(rcbid)
+
+    offerror
+
+remote_error_exit,
+
+    xcall rcb_delete(rcbid)
+
+    return
+
+;   ---------------------------------------------------------------------
+
+remote_error,
+
+    offerror
+
+    xcall rx_get_errinfo(netid, rx_stderror)
+
+    xcall u_message("Call error:" + %string(rx_stderror.error_num)
+    &               + "  " + %atrim(clarifying_desc))
+
+    status = XFSP_ERROR
+
+    goto (remote1_error_exit, remote2_error_exit, remote3_error_exit,
+    &     remote4_error_exit), call_ref
+
+    goto remote_error_exit
+
+;--------------------------------------------------------------------
+
+remote_error_halt,
+
+    offerror
+
+    xcall rx_get_haltinfo(netid, rx_fatalerror)
+
+    xcall u_message("Halt error in " + %atrim(subroutine_name)
+    &       + " Error:" + %string(rx_fatalerror.error_num)
+    &       + " @line:" + %string(error_line_number)
+    &       + " System Error:" + %string(sys_error_number)
+    &       + " in program:" + %atrim(prog_name)
+    &       + "\n" + %atrim(error_text))
+
+    status = XFSP_ERROR
+
+    goto (remote1_error_exit, remote2_error_exit, remote3_error_exit,
+    &     remote4_error_exit), call_ref
+
+    goto remote_error_exit
+
+;--------------------------------------------------------------------
+
+local_init,
+
+    rcbid = %rcb_create(7)
+
+    ;note different name for routine.  This is a secondary entry point,
+    ; after Synergy ELB's have been opened, and toolkit started
+    xcall rcb_setfnc(rcbid, 'init', 'xfspism2xml.elb')
+
+    xcall rcb_setarg(rcbid, filename, 1, D_TYPE_A)
+    xcall rcb_setarg(rcbid, str_name, 2, D_TYPE_A)
+    xcall rcb_setarg(rcbid, xml_type, 3, D_TYPE_A)
+    xcall rcb_setarg(rcbid, key_num,  4, D_TYPE_D)
+    xcall rcb_setarg(rcbid, key_frst, 5, D_TYPE_A)
+    xcall rcb_setarg(rcbid, key_last, 6, D_TYPE_A)
+    xcall rcb_setarg(rcbid, rangevar, 7, D_TYPE_D)
+
+    status = %rcb_call(rcbid)
+
+    xcall rcb_delete(rcbid)
+
+    if(status == DE_NOERROR) then
+        begin
+        end
+    else
+        begin
+        call local_get_error_text
+
+        xcall u_message("local_init Status=" + %string(status)
+        &               + " " + %atrim(text))
+        end
+
+    return
+
+;--------------------------------------------------------------------
+
+local_schema,
+
+    rcbid = %rcb_create(1)
+
+    xcall rcb_setfnc(rcbid, 'xfsp_ism2xml_xsd', 'xfspism2xml.elb')
+
+    xcall rcb_setarg(rcbid, xml_hdl, 1, D_TYPE_I)
+
+    status = %rcb_call(rcbid)
+
+    xcall rcb_delete(rcbid)
+
+    if(status == DE_NOERROR) then
+        begin
+        if(out_file)
+            begin
+            xcall xml_string_to_file(xml_hdl, %atrim(out_file) + '.xsd')
+            end
+
+        if(%mem_proc(DM_GETSIZE, xml_hdl).lt.65535) then
+            xml = ^m(xml_hdl)
+        else
+            xml = ^m(buff(1:65535), xml_hdl)
+
+        xcall u_message("xsd=" + %atrim(xml))
+        end
+    else
+        begin
+        call local_get_error_text
+
+        xcall u_message("local_data Status=" + %string(status)
+        &               + " " + %atrim(text))
+        end
+
+    return
+
+;--------------------------------------------------------------------
+
+local_data,
+
+    rcbid = %rcb_create(2)
+
+    xcall rcb_setfnc(rcbid, 'xfsp_ism2xml_data', 'xfspism2xml.elb')
+
+    xcall rcb_setarg(rcbid, max_recs, 1, D_TYPE_I)
+    xcall rcb_setarg(rcbid, num_recs, 2, D_TYPE_I)
+
+    clear max_recs, num_recs
+
+    status = %rcb_call(rcbid)
+
+    xcall rcb_delete(rcbid)
+
+    using status select
+    (DE_NOERROR, DE_NOMOREDATA),
+        begin
+        xcall u_message("Records Read " + %string(num_recs))
+        clear status
+        end
+    (),
+        begin
+        call local_get_error_text
+
+        xcall u_message("local_data Status=" + %string(status)
+        &               + " " + %atrim(text))
+        end
+    endusing
+
+    return
+
+;--------------------------------------------------------------------
+
+local_exit,
+
+    rcbid = %rcb_create(1)
+
+    xcall rcb_setfnc(rcbid, 'xfsp_ism2xml_exit', 'xfspism2xml.elb')
+
+    xcall rcb_setarg(rcbid, xml_hdl, 1, D_TYPE_I)
+
+    status = %rcb_call(rcbid)
+
+    xcall rcb_delete(rcbid)
+
+    using status select
+    (DE_NOERROR),
+        begin
+        if(out_file)
+            begin
+            xcall xml_string_to_file(xml_hdl, %atrim(out_file) + '.xml')
+            end
+
+        if(%mem_proc(DM_GETSIZE, xml_hdl).lt.65535) then
+            xml = ^m(xml_hdl)
+        else
+            xml = ^m(buff(1:65535), xml_hdl)
+
+        xcall u_message("xml=" + %atrim(xml))
+
+        end
+    (),
+        begin
+        call local_get_error_text
+
+        xcall u_message("local_exit Status=" + %string(status)
+        &               + " " + %atrim(text))
+        end
+    endusing
+
+    return
+
+;--------------------------------------------------------------------
+
+local_get_error_text,
+
+    rcbid = %rcb_create(2)
+
+    xcall rcb_setfnc(rcbid, 'get_error_text', 'xfspism2xml.elb')
+
+    xcall rcb_setarg(rcbid, status, 1, D_TYPE_I)
+    xcall rcb_setarg(rcbid, text, 2, D_TYPE_A)
+
+    status2 = %rcb_call(rcbid)
+
+    xcall rcb_delete(rcbid)
+
+    return
+
+;--------------------------------------------------------------------
+
+decode_cmdln,
+
+    clear status
+
+    ;defaults
+    mode = LOCAL_MODE
+    xmltyp = 1
+
+    if(%u_cmdlinopt('h ', 1, filename))
+        begin
+        status = -1
+        return
+        end
+    if(%u_cmdlinopt('? ', 1, filename))
+        begin
+        status = 1
+        return
+        end
+
+    if(!%u_cmdlinopt('f ', 1, filename))
+        begin
+        status = 1
+        return
+        end
+
+    if(!%u_cmdlinopt('s ', 1, str_name))
+        begin
+        clear str_name
+        end
+
+    if(%u_cmdlinopt('t ', 1, xml_type))
+        begin
+        onerror bad_xml_type
+        xmltyp = xml_type
+bad_xml_type,
+        offerror
+        end
+
+    if(!%u_cmdlinopt('k ', 1, key_num))
+        begin
+        clear key_num
+        end
+
+    lk = %u_cmdlinopt('kf ', 1, key_frst)
+    if(!lk)
+        begin
+        clear key_frst
+        end
+
+    uk = %u_cmdlinopt('kl ', 1, key_last)
+    if(!uk)
+        begin
+        clear key_last
+        end
+
+    if(!%u_cmdlinopt('kt ', 1, rangevar))
+        begin
+        clear rangevar
+        end
+
+    ;how many key parameters do we have?
+    using (lk + uk) select
+    (0),
+        clear rangevar
+    (2),
+        begin
+        if(!rangevar)
+            rangevar = D_RANGE_KEY
+        end
+    (),
+        begin
+        status = 2
+        return
+        end
+    endusing
+
+    using xmltyp select
+    (1 thru D_XML_TYPES_NUM),
+        begin
+        xml_type = xml_types(xmltyp)
+        if(.not.xml_type)
+            begin
+            status = 2
+            return
+            end
+        end
+    (),
+        begin
+        status = 2
+        return
+        end
+    endusing
+
+    if(%u_cmdlinopt('rx '))
+        begin
+        mode = REMOTE_MODE
+        return
+        end
+
+    if(%u_cmdlinopt('rd '))
+        begin
+        mode = REMOTE_DEBUG
+        return
+        end
+
+    if(!%u_cmdlinopt('o ', 1, out_file))
+        begin
+        clear out_file
+        end
+
+    return
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.function xml_string_to_file ,^val
+    a_xml_hdl           ,i
+    a_file              ,a
+
+
+.include 'DBLDIR:synxml.def'
+
+external function
+    xml_doc_setcomment      ,^val
+    xml_doc_tofile          ,^val
+    xml_string_appendhandle ,^val
+    xml_string_create       ,^val
+    xml_parser_create       ,^val
+    xml_parser_parsestring  ,^val
+
+
+structure b
+    buff                ,a1
+
+.align
+record
+    len                 ,i4                     ;length of memory handle data
+    parser_id           ,XML_PARSER_TYPE        ;XML parser
+    doc_id              ,XML_DOC_TYPE           ;document ID
+    xmlstring_id        ,XML_STRING_TYPE        ;XML string ID
+
+.proc
+
+    ;create xml string
+    xmlstring_id = %xml_string_create()
+    if(!xmlstring_id)
+        freturn 0
+
+    ;get the size of the string
+    len = %mem_proc(DM_GETSIZE, a_xml_hdl)
+
+    ;append handle data to xml string
+    if(%xml_string_appendhandle(xmlstring_id, a_xml_hdl, len) != XML_SUCCESS)
+        freturn 0
+
+    ;create parser
+    if (parser_id = %xml_parser_create)
+        begin
+        ;parse xml string into new document
+        doc_id = %xml_parser_parsestring(parser_id, xmlstring_id)
+
+        ;add document comment (removed by xml_parser_parsestring)
+        if(doc_id && %xml_doc_setcomment(doc_id, "Created by "+D_APP+" v"+D_VERSION+" on "+%datetime) == XML_SUCCESS)
+            nop
+
+        ;store document to file
+        if (doc_id && %xml_doc_tofile(doc_id, a_file) == XML_SUCCESS)
+            begin
+            freturn 1
+            end
+        end
+
+    freturn 0
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

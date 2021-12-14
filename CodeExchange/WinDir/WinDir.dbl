@@ -1,0 +1,286 @@
+;*******************************************************************************
+;
+; Title:        WinDir.dbl
+;
+; Description:  Returns information about files matching a file spec (like dir)
+;
+; Author:       Steve Ives, Synergex Professional Services Group
+;
+; Date:         19th August 2005
+;
+; Availability: Windows only
+;
+; Disclaimer:   This code is provided "as is" and without guarantee or warranty
+;               of any kind.  You may use the code freely, so long as this code
+;               header and disclaimer remains unchanged. In doing so you accept
+;               that neither the author or Synergex accept any responsibility
+;               for any damage or loss which may result from the use of the code
+;
+;*******************************************************************************
+
+.ifdef D_GUI
+.ifndef DBLNET
+
+.function WinDir, ^VAL
+
+;Argument list
+
+    ;Required arguments
+    a_spec      ,a      ;Search spec
+    a_handle    ,n      ;(Returned) handle containing results
+    a_count     ,n      ;(Returned) number of matches
+
+    ;Optional arguments
+    a_case      ,n      ;(Optional) return filenames in upper or lower case
+    a_sort      ,n      ;(Optional) sort return data
+
+;End of argument list
+
+.include "INC:WinDir.def"
+
+.align
+    stack record
+        status      ,i4     ;Return status
+        dll         ,i4     ;DLL Handle
+        mhs         ,i4     ;Current size of dynamic memory
+        sh          ,i4     ;Search handle
+        spec        ,a260   ;Search spec
+
+    stack record WIN32_FIND_DATA
+        FileAttributes      ,i4     ;File attribute bit flags
+        CreationTimeLow     ,i4     ; Low-order 32 bits of file creation time (UTC format)
+        CreationTimeHigh    ,i4     ;High-order 32 bits of file creation time (UTC format)
+        LastAccessTimeLow   ,i4     ; Low-order 32 bits of last access time (UTC format)
+        LastAccessTimeHigh  ,i4     ;High-order 32 bits of last access time (UTC format)
+        LastWriteTimeLow    ,i4     ; Low-order 32 bits of last write time (UTC format)
+        LastWriteTimeHigh   ,i4     ;High-order 32 bits of last write time (UTC format)
+        FileSizeHigh        ,i4     ;High-order 32 bits of file size (bytes)
+        FileSizeLow         ,i4     ; Low-order 32 bits of file size (bytes)
+        Reserved0           ,i4     ;
+        Reserved1           ,i4     ;
+        FileName            ,a260   ;Name of file (null-terminated string)
+        AlternateFileName   ,a14    ;8.3 file name (null-terminated string
+
+.define INVALID_HANDLE  -1
+
+.define INIT_SIZE       10      ;Initial size of dynamic memory section
+.define INCR_SIZE       10      ;Increment size of dynamic memory section
+
+.define ATTR_READONLY             %x(1)
+.define ATTR_HIDDEN               %x(2)
+.define ATTR_SYSTEM               %x(4)
+.define ATTR_DIRECTORY            %x(10)
+.define ATTR_ARCHIVE              %x(20)
+.define ATTR_DEVICE               %x(40)
+.define ATTR_NORMAL               %x(80)
+.define ATTR_TEMPORARY            %x(100)
+.define ATTR_SPARSE_FILE          %x(200)
+.define ATTR_REPARSE_POINT        %x(400)
+.define ATTR_COMPRESSED           %x(800)
+.define ATTR_OFFLINE              %x(1000)
+.define ATTR_NOT_CONTENT_INDEXED  %x(2000)
+.define ATTR_ENCRYPTED            %x(4000)
+
+.proc
+
+    status=1                ;Default to success
+
+    ;Make sure we don't pass back garbage
+    clear a_handle, a_count
+
+    ;Open the DLL containing the functions we need to call
+    dll=%dll_open("kernel32.dll")
+
+    xcall fill(%char(0),spec)
+    spec(1:%trim(a_spec))=a_spec
+
+    ;Look for the first file
+    if ((sh=%dll_call(dll,DLL_TYPE_WINAPI,"FindFirstFileA",^addr(spec),
+&       ^addr(WIN32_FIND_DATA)))==INVALID_HANDLE) then
+        status=0            ;No files found
+    else
+    begin
+        ;First file not a directory?
+        if (!(FileAttributes & ATTR_DIRECTORY))
+        begin
+            a_count=1
+            call CreateArray
+            call PopulateData
+        end
+
+        ;Continue the search
+        repeat
+        begin
+            if (!(%dll_call(dll,DLL_TYPE_WINAPI,"FindNextFileA",sh,
+&               ^addr(WIN32_FIND_DATA)))) then
+                exitloop
+            else
+            begin
+                ;Found another file, check it's not a directory
+                if (!(FileAttributes & ATTR_DIRECTORY))
+                begin
+                    a_count+=1
+                    call CreateArray
+                    call ResizeArray
+                    call PopulateData
+                end
+            end
+        end
+
+        ;Close the search handle
+        xcall dll_call(dll,DLL_TYPE_WINAPI,"FindClose",sh)
+
+        ;Do we have data to return?
+        if (a_count)
+        begin
+
+            ;Trim unused space from dynamic memory array
+            if (a_count<mhs)
+                a_handle=%mem_proc(DM_RESIZ+DM_BLANK,
+&                   ^size(WINDIR$DATA)*a_count,a_handle)
+
+            ;If requested, sort the return data
+            if (^passed(a_sort)&&a_sort)
+            begin
+                using a_sort select
+                (WINDIR$SORT_NAME),
+                    nop
+                (WINDIR$SORT_NAMEDESC),
+                    xcall qsort(WINDIR$FILEDATA(a_handle,1),a_count,
+&                       "WinDirSortNameDesc")
+                (WINDIR$SORT_SIZE),
+                    xcall qsort(WINDIR$FILEDATA(a_handle,1),a_count,
+&                       "WinDirSortSize")
+                (WINDIR$SORT_SIZEDESC),
+                    xcall qsort(WINDIR$FILEDATA(a_handle,1),a_count,
+&                       "WinDirSortSizeDesc")
+                endusing
+            end
+
+        end
+    end
+
+    ;Close the DLL
+    dll = %dll_close(dll)
+
+    freturn status
+
+;-----------------------------------------------------
+;Populate return handle with data about this file
+
+PopulateData,
+
+    WINDIR$FILENAME(a_handle,a_count)=FileName(1:(%instr(1,FileName,%char(0))-1))
+
+    if (^passed(a_case)&&a_case)
+    begin
+        case (a_case) of
+        begincase
+        WINDIR$UPPERCASE:
+            upcase WINDIR$FILENAME(a_handle,a_count)
+        WINDIR$LOWERCASE:
+            locase WINDIR$FILENAME(a_handle,a_count)
+        endcase
+    end
+
+    if (!FileSizeHigh) then
+        WINDIR$FILESIZE(a_handle,a_count) = %unsigned(FileSizeLow)
+    else
+        WINDIR$FILESIZE(a_handle,a_count) = (%unsigned(FileSizeHigh)
+&           * (4294967295+1)) + %unsigned(FileSizeLow)
+
+    WINDIR$ARCHIVE(a_handle,a_count)  = FileAttributes & ATTR_ARCHIVE
+    WINDIR$HIDDEN(a_handle,a_count)   = FileAttributes & ATTR_HIDDEN
+    WINDIR$READONLY(a_handle,a_count) = FileAttributes & ATTR_READONLY
+    WINDIR$SYSTEM(a_handle,a_count)   = FileAttributes & ATTR_SYSTEM
+
+    return
+
+;-----------------------------------------------------
+;Create dynamic memory section if it doesn't exist
+
+CreateArray,
+
+    if(!a_handle)
+        a_handle=%mem_proc(DM_ALLOC+DM_STATIC+DM_BLANK,
+&           ^size(WINDIR$DATA)*(mhs=INIT_SIZE))
+
+    return
+
+;-----------------------------------------------------
+;Resize dynamic memory section if necessary
+
+ResizeArray,
+
+    ;Resize dynamic memory?
+    if (a_count==mhs)
+        a_handle=%mem_proc(DM_RESIZ+DM_BLANK,
+&           ^size(WINDIR$DATA)*(mhs+=INCR_SIZE),a_handle)
+
+    return
+
+.end
+
+;****************************************************************************
+.function WinDirSortNameDesc, ^val
+
+    file1 ,a
+    file2 ,a
+
+.include "INC:WinDir.def"
+
+.proc
+
+    if (^m(WINDIR$DATA.wd_filename,file2) < ^m(WINDIR$DATA.wd_filename,file1))
+        freturn(-1) ;Return element #1 < element #2
+
+    if (^m(WINDIR$DATA.wd_filename,file2) > ^m(WINDIR$DATA.wd_filename,file1))
+        freturn(1) ;Return element #1 > element #2
+
+    freturn(0)
+
+.end
+
+;****************************************************************************
+.function WinDirSortSize, ^val
+
+    file1 ,a
+    file2 ,a
+
+.include "INC:WinDir.def"
+
+.proc
+
+    if (^m(WINDIR$DATA.wd_filesize,file1) < ^m(WINDIR$DATA.wd_filesize,file2))
+        freturn(-1) ;Return element #1 < element #2
+
+    if (^m(WINDIR$DATA.wd_filesize,file1) > ^m(WINDIR$DATA.wd_filesize,file2))
+        freturn(1) ;Return element #1 > element #2
+
+    freturn(0)
+
+.end
+
+;****************************************************************************
+.function WinDirSortSizeDesc, ^val
+
+    file1 ,a
+    file2 ,a
+
+.include "INC:WinDir.def"
+
+.proc
+
+    if (^m(WINDIR$DATA.wd_filesize,file2) < ^m(WINDIR$DATA.wd_filesize,file1))
+        freturn(-1) ;Return element #1 < element #2
+
+    if (^m(WINDIR$DATA.wd_filesize,file2) > ^m(WINDIR$DATA.wd_filesize,file1))
+        freturn(1) ;Return element #1 > element #2
+
+    freturn(0)
+
+.end
+
+.endc ;DBLNET
+.endc ;D_GUI
+

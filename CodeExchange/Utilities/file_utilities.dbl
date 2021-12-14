@@ -1,0 +1,862 @@
+;=======================================================================;
+;  Copyright 2001 by Synergex International Corporation                 ;
+;                                                                       ;
+;  Synergex provides this software under a license and may only be      ;
+;  used in accordance with the terms and conditions of such             ;
+;  license and with the inclusion of the above Copyright notice.        ;
+;=======================================================================;
+;
+; Source:  file_utilities.dbl
+;
+; Function: Import Synergy XML file into Synergy Method Catalog
+;
+; Environment: Synergy Development Environment, v7.5
+;
+; $Author: William Hawkins $
+;
+; $Date: 2010-04-13 17:06:56-07:00 $
+;
+; $Revision: 1 $
+;
+; History
+;
+; 26-Jul-2001   WJH     Initial version
+; 10-Aug-2001   WJH     Added debug_break
+; 21-Sep-2001   WJH     Moved get_rps_filenames to rps_utilities.dbl
+; 24-Sep-2001   WJH     Synergy/DE 7.5 features added
+; 30-Aug-2002   WJH     Added DBLCASE_FILE
+;
+;=======================================================================;
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+.include 'INC:file_utilities.def'
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; log messages
+
+.subroutine LOG_MESSAGE
+
+    a_msg               ,a                      ;REQUIRED message
+    a_purge             ,n                      ;OPTIONAL purge message file
+    a_filename          ,a                      ;OPTIONAL file to use
+
+.ifndef DBLV75
+    external function
+        syn_freechn     ,^val
+.endc
+
+
+.align
+    record
+        chan                ,i4
+        error               ,i4
+        filename            ,a255   ,'error.log'
+
+.proc
+
+    ;use filename provided
+    if(^passed(a_filename).and.a_filename)
+        filename = a_filename
+
+    ;do we want to purge file
+    if(^passed(a_purge).and.a_purge)
+    begin
+        if(filename(%trim(filename):1).ne.':')
+            xcall delet(filename)
+    end
+
+    ;output message (if passed)
+    if(^passed(a_msg).and.a_msg)
+    begin
+        call open_filename
+
+        if(.not.error)
+        begin
+            writes(chan, %atrim(a_msg))
+
+            close chan
+        end
+    end
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+open_filename,
+
+    chan = %syn_freechn()
+
+    open(chan, A, filename) [ERR=no_file_a]
+
+    return
+
+no_file_a,
+
+    open(chan, O, filename) [ERR=no_file_o]
+
+    return
+
+no_file_o,
+
+    error = %error
+
+    return
+
+.end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Check if a file exists.  Uses mode to confirm it's the correct file type
+
+.function FILE_EXISTS ,^VAL
+
+    a_file              ,a                      ;REQUIRED filename
+    a_mode              ,a                      ;REQUIRED open mode
+
+.ifndef DBLV75
+    external function
+        syn_freechn         ,^val
+.endc
+
+.align
+    record
+        chan                ,i4                     ;channel to open file on
+        error               ,i4                     ;error number
+
+.proc
+
+    error = 18
+
+    chan = %syn_freechn()
+
+    open(chan, MODE:a_mode, a_file) [ERR=nofile]
+    close chan
+
+    clear error
+
+nofile,
+
+    freturn (error.eq.0)
+
+.end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; convert the case of an alpha string
+
+.function CASE_NAME ;,ALPHA
+    a_name              ,a                      ;REQUIRED name
+    a_mode              ,n                      ;OPTIONAL conversion type
+
+.align
+    record
+        mode                ,i4                     ;conversion mode
+        name                ,a D_FILENAME_SIZE      ;name
+
+.proc
+
+    ;what conversion mode is required
+    if(^passed(a_mode)) then
+        mode = a_mode
+    else
+        clear mode
+
+    name = a_name
+
+    using mode select
+    (D_CASE_CAPITALIZE),
+    begin
+        locase name
+        upcase name(1:1)
+    end
+    (D_CASE_LOWER),
+    begin
+        locase name
+    end
+    (D_CASE_UPPER),
+    begin
+        upcase name
+    end
+    endusing
+
+    freturn name(1:%trim(name))
+
+.end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; uppercase a string
+
+.function UPCASE ;,ALPHA
+    a_arg               ,a                      ;REQUIRED string to be uppercased
+
+.align
+    record
+        handle              ,D_HANDLE               ;memory handle
+
+.proc
+
+    handle = %mem_proc(DM_ALLOC, ^size(a_arg))
+
+    ^m(handle) = a_arg
+    upcase ^m(handle)
+
+    freturn ^m(handle)
+
+.end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; lowercase a string
+
+.function LOCASE ;,ALPHA
+    a_arg               ,a                      ;REQUIRED string to be uppercased
+
+.align
+    record
+        handle              ,D_HANDLE               ;memory handle
+
+.proc
+
+    handle = %mem_proc(DM_ALLOC, ^size(a_arg))
+
+    ^m(handle) = a_arg
+    locase ^m(handle)
+
+    freturn ^m(handle)
+
+.end
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; expand a directory specification to a full path, taking into account relative
+; directory tags
+
+.function EXPAND_FOLDER ;,ALPHA
+
+    a_name              ,a                      ;REQUIRED name
+    a_dir_term          ,a                      ;OPTIONAL directory terminator
+    a_expand_log        ,n                      ;OPTIONAL expand logicals
+
+    external function
+        get_dir_term        ,a
+.ifndef DBLV75
+        syn_getdir          ,a
+.endc
+
+.align
+    record clr
+        name                ,a D_FILENAME_SIZE      ;converted name
+        folder              ,a D_FILENAME_SIZE      ;folder
+        logical             ,a D_FILENAME_SIZE      ;logical
+        dir_term            ,a1                     ;folder terminator
+        dir_term2           ,a2                     ;folder terminator search pattern
+        up_dir              ,a3                     ;up a directory level
+
+.align
+    record clr_i
+        envrn               ,i4                     ;environment
+        pos                 ,i4                     ;position
+        ctr                 ,i4                     ;counter
+        len                 ,i4                     ;length
+
+.proc
+
+    clear clr, ^i(clr_i)
+
+    xcall envrn(envrn)                          ;what OS are we using
+
+    name = a_name
+
+    if(^passed(a_dir_term).and.a_dir_term) then
+        dir_term = a_dir_term
+    else
+    begin
+        ;set the directory terminator (based upon OS)
+        dir_term = %get_dir_term
+    end
+
+    if(^passed(a_expand_log).and.a_expand_log)
+    begin
+        ;is there a logical portion
+        pos = %instr(1, name, ':')
+        if(pos.gt.1)
+        begin
+
+            ; this logic does not cope with search lists
+
+            xcall getlog(name(1:pos-1), logical, len)
+            if(len) then
+            begin
+                ;remove logical from filename
+                name = name(pos+1, ^size(name))
+
+                ;add directory terminator (if missing)
+                if(logical(len:1).ne.dir_term)
+                    logical = logical(1:len) + dir_term
+            end
+            else
+                clear logical
+        end
+    end
+
+    using envrn select
+    (ENV_VMS),
+    begin
+
+        ; []
+        if(name.eqs.'[]')
+        begin
+            name = %syn_getdir
+        end
+
+        ; [-]
+        if(name.eqs.'[-]')
+        begin
+            name = %syn_getdir
+            ;go up one directory level
+            pos = %rvstr(1, name, '.')
+            if(pos) then
+            begin
+                using pos select
+                (1),
+                    nop ;should never get here
+                (.ge.^size(name)-1),
+                    nop ;should never get here
+                (),
+                begin
+                    if(len=%instr(pos, name, ']'))
+                        name = name(1:pos-1) + name(len,^size(name))
+                end
+                endusing
+            end
+            else
+            begin
+                pos = %rvstr(1, name, '[')
+                len = %instr(pos, name, ']')
+                if(pos.and.len)
+                begin
+                    name = name(1:pos) + '000000' + name(len,^size(name))
+                end
+            end
+        end
+
+        ; [-.*]
+        if(name.eqs.'[-.')
+        begin
+            ctr = 1
+            name = name(4, ^size(name))
+            while(name.eq.'-.'.or.name.eq.'-]')
+            begin
+                name = name(2, ^size(name))
+                ctr += 1
+            end
+
+            name = %syn_getdir
+            pos = %trim(name) + 1
+            while(ctr)
+            begin
+                if(pos.gt.1) then
+                    pos = %rvstr(1, name(1:pos-1), '.')
+                else
+                    exitloop
+                ctr -= 1
+            end
+            if(pos.gt.0) then
+            begin
+                using pos select
+                (1),
+                    nop ;should never get here
+                (.ge.^size(name)-1),
+                    nop ;should never get here
+                (),
+                begin
+                    if(len=%instr(pos, name, ']'))
+                        name = name(1:pos-1) + name(len,^size(name))
+                end
+                endusing
+            end
+            else
+            begin
+                pos = %rvstr(1, name, '[')
+                len = %instr(pos, name, ']')
+                if(pos.and.len)
+                begin
+                    name = name(1:pos) + '000000' + name(len,^size(name))
+                end
+            end
+        end
+    end
+    (),
+    begin
+
+        ; .
+        if(name.eqs.'.')
+        begin
+            name = %syn_getdir + dir_term
+            freturn name(1:%trim(name))
+        end
+
+        ; ..
+        if(name.eqs.'..')
+        begin
+            name = %syn_getdir
+            pos = %rvstr(1, name, dir_term)
+            if(pos) then
+                name = name(1:pos)
+            else
+                name = dir_term
+            freturn name(1:%trim(name))
+        end
+
+        ; .\*
+        if(name.eq.'.'+dir_term)
+        begin
+            name = (%syn_getdir + name(2, ^size(name)))
+            freturn name(1:%trim(name))
+        end
+
+        ; ..\..\*
+        up_dir = '..' + dir_term
+        clear ctr
+        while(name.eq.up_dir)
+        begin
+            name = name(4, ^size(name))
+            ctr += 1
+        end
+
+        if(ctr)
+        begin
+            ;get current directory
+            folder = %syn_getdir + dir_term
+            while(ctr)
+            begin
+                pos = %rvstr(1, folder, dir_term)
+                if(pos)
+                    folder = folder(1:pos)
+                ctr -= 1
+            end
+            name = %atrim(folder) + name
+        end
+
+    end
+    endusing
+
+    ;add logical to filename
+    if(logical)
+        name = %atrim(logical) + name
+
+    ;get rid of double directory delimeters
+    dir_term2 = dir_term + dir_term
+
+    while(pos = %instr(1, name, dir_term2))
+    begin
+        if(pos.gt.1) then
+        begin
+            if(pos.lt.^size(name)) then
+                name = name(1:pos-1) + name(pos+1,^size(name))
+            else
+                name = name(1:^size(name)-1)
+        end
+        else
+            name = name(2,^size(name))
+    end
+
+    freturn name(1:%trim(name))
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; get the directory terminator character for this operating system
+
+.function GET_DIR_TERM  ;ALPHA
+
+.align
+    record
+        envrn               ,i4
+        dir_term            ,a1
+
+.proc
+
+    xcall envrn(envrn)                          ;what OS are we using
+
+    ;set the directory terminator (based upon OS)
+    using envrn select
+    (ENV_VMS),
+        dir_term = ']'                          ;VMS
+    (ENV_UNIX),
+        dir_term = '/'                          ;UNIX
+    (),
+        dir_term = '\'                          ;WINDOWS
+    endusing
+
+    freturn dir_term
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; returns a filename with the case as per DBLCASE setting
+
+.function DBLCASE_FILE  ;ALPHA
+    a_filename      ,a              ;REQUIRED filename
+    a_dblcase       ,a              ;OPTIONAL dblcase setting
+
+    external function
+        get_dir_term        ,a
+
+.align
+    record
+        pos                 ,i4             ;position of colon
+        pos2                ,i4             ;position of directory terminator
+        file_name           ,a D_FILENAME_SIZE
+        dblcase             ,a3             ;DBLCASE settings
+
+.proc
+
+    file_name = a_filename
+
+    if(^passed(a_dblcase)) then
+        dblcase = a_dblcase
+    else
+        xcall getlog('DBLCASE', dblcase, pos)
+
+    if(dblcase)
+    begin
+        locase dblcase
+
+        ;is there a colon
+        if(pos = %rvstr(1, a_filename, ':'))
+        begin
+            ;uppercase
+            if(dblcase(1:1).eq.'u') then
+                upcase file_name(1:pos)
+            else
+                locase file_name(1:pos)
+        end
+
+        ;is there a directory terminator
+        pos2 = %rvstr(1, a_filename, %get_dir_term())
+        if(pos2.gt.pos)
+            pos = pos2
+
+        if(dblcase(3:1).eq.'u') then
+            upcase file_name(pos+1, ^size(file_name))
+        else
+            locase file_name(pos+1, ^size(file_name))
+
+    end
+
+    freturn file_name
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; uses a filename with a logical, and expands it into a fully qualified path
+; taking search lists into account
+
+.function FULLY_QUALIFY_FILESPEC ;,ALPHA
+
+    a_filename          ,a                      ;REQUIRED name
+
+    external function
+        get_dir_term        ,a
+        expand_folder       ,a
+.ifndef DBLV75
+        syn_freechn         ,^val
+        syn_getdir          ,a
+.endc ;DBLV75
+
+.align
+    record clr
+        name                ,a D_FILENAME_SIZE      ;converted name
+        folder              ,a D_FILENAME_SIZE      ;folder
+        logical             ,a D_FILENAME_SIZE      ;logical
+        filename            ,a D_FILENAME_SIZE      ;qualified filename
+        dir_term            ,a1                     ;folder terminator
+
+.align
+    record clr_i
+        chan                ,i4                     ;channel
+        pos                 ,i4                     ;position
+        len                 ,i4                     ;length
+        error               ,i4                     ;error
+
+.proc
+
+    clear clr, ^i(clr_i)
+
+    ;get directory terminator
+    dir_term = %get_dir_term()
+
+    pos = %instr(1, a_filename, ':')
+
+    ;no colon - therefore no logical
+    if(.not.pos) then
+    begin
+        ;process relative paths
+        name = %expand_folder(a_filename, dir_term)
+
+        ;got a directory terminator, so ignore colons
+        if(%rvstr(1, name, dir_term))
+            freturn a_filename
+
+        folder = %syn_getdir
+
+        if(folder(%trim(folder):1).ne.dir_term) then
+            name = folder(1:%trim(folder)) + dir_term + name
+        else
+            name = folder(1:%trim(folder)) + name
+    end
+    else
+    begin
+
+        ;get logical
+        xcall getlog(a_filename(1:pos-1), logical, len)
+
+        ;no logical
+        if(.not.len)
+            freturn a_filename
+
+        ;xfServer syntax - no translation
+        if(%instr(1, logical, '@'))
+            freturn a_filename
+
+        name = a_filename(pos+1, ^size(a_filename))
+
+        ;get an unused channel
+        chan = %syn_freechn
+
+        if(pos = %instr(1, logical, ',')) then
+        begin
+            do  begin
+                ;get the folder from search list
+                folder = logical(1, pos-1)
+                ;remove folder from search list so that it's not checked in next iteration
+                logical = logical(pos+1, ^size(logical))
+
+                if(logical(%trim(logical):1).ne.dir_term) then
+                    filename = logical(1:%trim(logical)) + dir_term + name
+                else
+                    filename = logical(1:%trim(logical)) + name
+
+                call check_filename
+            end
+            until(.not.error.or..not.logical)
+
+            ;couldn't find it anywhere
+            if(error)
+                freturn a_filename
+
+            name = filename
+        end
+        else
+        begin
+            if(logical(%trim(logical):1).ne.dir_term) then
+                name = logical(1:%trim(logical)) + dir_term + name
+            else
+                name = logical(1:%trim(logical)) + name
+        end
+    end
+
+    freturn name(1:%trim(name))
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+check_filename,
+
+    error = 18
+    onerror nofile
+
+    open(chan, I, filename)
+    close chan
+    clear error
+
+nofile,
+    offerror
+
+    return
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; convert alpha variable to decimal field (with no precision)
+
+.function TO_INT  ,^val
+    avar                ,a              ;REQUIRED string
+    dflt                ,n              ;OPTIONAL default value
+
+.align
+    record
+        dvar                ,d18
+
+.proc
+
+    onerror not_num
+    dvar = avar
+    offerror
+
+    freturn dvar
+
+not_num,
+    offerror
+    if(^passed(dflt)) then
+        dvar = dflt
+    else
+        clear dvar
+    freturn dvar
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; convert string data to DBL numeric
+;
+;returns DBL number field with precision
+
+.function STR_TO_DBL ;,DEC
+    a_afld          ,a              ;REQUIRED string
+    a_dp            ,n              ;OPTIONAL number of decimal places
+
+;end of args(2)
+
+.align
+    record
+        dfld            ,d18            ;returned decimal field
+        dp              ,d2             ;number of decimals
+        num             ,d28.10         ;decimal field
+        numa            ,a28 @ num
+
+.proc
+
+    clear dfld
+
+    onerror not_number
+
+    num = a_afld                    ;dfld = afld conversion
+
+    if (^passed(a_dp).and.a_dp.gt.0.and.a_dp.le.10) then
+        dp = a_dp
+    else
+        clear dp
+
+    dfld = numa(dp+1:18)
+
+    ;make sure returned field is correct sign
+    if(num.lt.0.and.dfld.gt.0)
+        dfld = -dfld
+
+not_number,
+
+    offerror
+
+    freturn dfld
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; convert DBL number to string data
+;
+;returns STRING with leading spaces, then negative sign (if required) then
+; formatted number.  String is returned as same size as incoming number, so
+; a D14 field will return a 14 character string holding a
+; +D14, +D13.1 +D12.2 or -D13, -D12.1 or D11.2  etc.
+; i.e. decimal point characters and negative characters reduce the number
+; of significant digits returned.
+
+.function DBL_TO_STR ;,ALPHA
+    a_dfld          ,n              ;REQUIRED DBL number
+    a_dp            ,n              ;OPTIONAL number of decimal places
+
+;end of args(2)
+
+.align
+    record
+        len             ,i4             ;length of a_dfld
+        pos             ,i4             ;position in string
+
+.align
+    record
+        afld            ,a30            ;alpha string
+        dp              ,d2             ;number of decimals
+        mask            ,a30            ;numeric mask
+
+.proc
+
+    mask = ' ZZZZZZZZZZZZZZZZZX.XXXXXXXXXX'
+
+    len = ^size(a_dfld)
+
+    if (^passed(a_dp).and.a_dp.gt.0.and.a_dp.le.10.and.a_dp.lt.len) then
+        dp = a_dp
+    else
+        clear dp
+
+    if(dp) then
+        afld(1:len) = a_dfld ,mask(1:20+dp)
+    else
+        afld(1:len) = a_dfld
+
+    ;add minus sign to string
+    if(a_dfld.lt.0)
+    begin
+        pos = 1
+
+        ;if first position is blank
+        if(.not.afld(1:1))
+        begin
+            ;see if next position is blank
+            while(.not.afld(pos+1:1))
+                pos += 1
+        end
+
+        ;put negative sign in last blank position
+        afld(pos:1) = '-'
+    end
+
+    freturn afld(1:len)
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; dummy routine used for debug break purposes
+
+.subroutine DEBUG_BREAK
+
+.proc
+
+    xreturn
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifndef DBLV75
+
+.include 'DBLDIR:apmisc.def'
+
+.function syn_freechn ,^val
+
+.proc
+
+    freturn %ap_misc(MSC_GETCHN)
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.function syn_getdir ;,ALPHA
+
+.align
+    record
+        status          ,i4
+        dir             ,a255
+
+.proc
+
+    status = %ap_misc(MSC_GETDIR, dir)
+    freturn dir(1:%trim(dir))
+
+.end
+
+.endc ;DBLV75
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

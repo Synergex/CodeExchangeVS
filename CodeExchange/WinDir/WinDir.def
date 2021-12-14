@@ -1,0 +1,53 @@
+;*******************************************************************************
+;
+; Title:        WinDir.def
+;
+; Description:  Support file for WinDir function.  Routines using WinDir must
+;               include this file.
+;
+; Author:       Steve Ives, Synergex Professional Services Group
+;
+; Date:         19th August 2005
+;
+; Availability: Windows only
+;
+; Disclaimer:   This code is provided "as is" and without guarantee or warranty
+;               of any kind.  You may use the code freely, so long as this code
+;               header and disclaimer remains unchanged. In doing so you accept
+;               that neither the author or Synergex accept any responsibility
+;               for any damage or loss which may result from the use of the code
+;
+;*******************************************************************************
+
+external function
+	WinDir						,^val
+
+structure WINDIR$DATA
+	wd_filename					,a259	;File name
+	wd_filesize					,i8		;File size (bytes on disk)
+	wd_archive					,d1		;Archive attribute is set
+	wd_hidden					,d1		;Hidden file
+	wd_readonly					,d1		;Read only file
+	wd_system					,d1		;System file
+
+.ifndef WINDIR$SETUP
+.define WINDIR$SETUP
+
+.define WINDIR$FILEDATA(x,y)		^m(WINDIR$DATA[y],x)
+.define WINDIR$FILENAME(x,y)	^m(WINDIR$DATA[y].wd_filename,x)
+.define WINDIR$FILESIZE(x,y)	^m(WINDIR$DATA[y].wd_filesize,x)
+.define WINDIR$ARCHIVE(x,y)		^m(WINDIR$DATA[y].wd_archive,x)
+.define WINDIR$HIDDEN(x,y)		^m(WINDIR$DATA[y].wd_hidden,x)
+.define WINDIR$READONLY(x,y)	^m(WINDIR$DATA[y].wd_readonly,x)
+.define WINDIR$SYSTEM(x,y)		^m(WINDIR$DATA[y].wd_system,x)
+	
+.define WINDIR$UPPERCASE		1
+.define WINDIR$LOWERCASE		2
+
+.define WINDIR$SORT_NAME		1
+.define WINDIR$SORT_NAMEDESC	2
+.define WINDIR$SORT_SIZE		3
+.define WINDIR$SORT_SIZEDESC	4
+
+.endc ;WINDIR$SETUP
+

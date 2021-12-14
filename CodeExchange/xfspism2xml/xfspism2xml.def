@@ -1,0 +1,258 @@
+; xfspism2xml.def
+
+.ifndef D_XSFPISM2XML
+
+.define D_XSFPISM2XML
+
+; XML tags
+.define D_XML_ROOT              ,'xfspism2xml'
+.define D_XML_FILE              ,'file'
+.define D_XML_STRUCT            ,'structure'
+.define D_XML_FIELD             ,'field'
+
+.define D_XML_NAME              ,'name'
+.define D_XML_VALUE             ,'value'
+.define D_XML_KEYNUM            ,'keynum'
+.define D_XML_TYPE              ,'XMLtype'
+.define D_XML_TAGNAME           ,'tagname'
+
+; FirstKey / LastKey parameter type
+.define D_RANGE_KEY             ,1
+.define D_RANGE_REC             ,2
+
+.define D_XML_TYPES_NUM         ,5
+.define D_XML_TYPES_SIZ         ,25
+
+.define D_XML_TYPE_DFLT         ,'nameTAG value='
+.define D_XML_TYPE_ATTR         ,'TAG name= value='
+.define D_XML_TYPE_TAG          ,'nameTAG DATA nameENDTAG'
+.define D_XML_TYPE_ADO          ,'ADO recordset'
+.define D_XML_TYPE_ISLE         ,'Data Island'
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.define D_XSDNS                 ,'xmlns'
+.define D_XMLNS                 ,D_XSDNS+':'
+
+.define D_XSDNS_XS              ,'xs'
+
+; XML schema elements
+
+;.define D_XSD_ALL               ,'all'
+;.define D_XSD_ANNOTATION        ,'annotation'
+;.define D_XSD_ANY               ,'any'
+;.define D_XSD_ANYATTRIBUTE      ,'anyAttribute'
+;.define D_XSD_APPINFO           ,'appInfo'
+.define D_XSD_ATTRIBUTE         ,'attribute'
+;.define D_XSD_ATTRIBUTEGROUP    ,'attributeGroup'
+;.define D_XSD_CHOICE            ,'choice'
+;.define D_XSD_COMPLEXCONTENT    ,'complexContent'
+.define D_XSD_COMPLEXTYPE       ,'complexType'
+;.define D_XSD_DOCUMENTATION     ,'documentation'
+.define D_XSD_ELEMENT           ,'element'
+;.define D_XSD_ENUMERATION       ,'enumeration'
+;.define D_XSD_EXTENSION         ,'extension'
+.define D_XSD_FIELD             ,'field'
+;.define D_XSD_GROUP             ,'group'
+;.define D_XSD_IMPORT            ,'import'
+;.define D_XSD_INCLUDE           ,'include'
+;.define D_XSD_KEY               ,'key'
+;.define D_XSD_KEYREF            ,'keyref'
+;.define D_XSD_LENGTH            ,'length'
+;.define D_XSD_LIST              ,'list'
+;.define D_XSD_MAXINCLUSIVE      ,'maxInclusive'
+;.define D_XSD_MAXLENGTH         ,'maxLength'
+;.define D_XSD_MININCLUSIVE      ,'minInclusive'
+;.define D_XSD_MINLENGTH         ,'minLength'
+;.define D_XSD_PATTERN           ,'pattern'
+;.define D_XSD_REDEFINE          ,'redefine'
+;.define D_XSD_RESTRICTION       ,'restriction'
+.define D_XSD_SCHEMA            ,'schema'
+;.define D_XSD_SELECTOR          ,'selector'
+.define D_XSD_SEQUENCE          ,'sequence'
+;.define D_XSD_SIMPLECONTENT     ,'simpleContent'
+;.define D_XSD_SIMPLETYPE        ,'simpleType'
+;.define D_XSD_UNION             ,'union'
+;.define D_XSD_UNIQUE            ,'unique'
+
+; XML schema attributes
+
+;.define D_XSD_ABSTRACT          ,'abstract'
+.define D_XSD_ATTRIBUTEFORMDEF  ,'attributeFormDefault'
+;.define D_XSD_BASE              ,'base'
+;.define D_XSD_BLOCK             ,'block'
+;.define D_XSD_BLOCKDEFAULT      ,'blockDefault'
+;.define D_XSD_DEFAULT           ,'default'
+.define D_XSD_ELEMENTFORMDEF    ,'elementFormDefault'
+;.define D_XSD_FINAL             ,'final'
+;.define D_XSD_FINALDEFAULT      ,'finalDefault'
+;.define D_XSD_FIXED             ,'fixed'
+.define D_XSD_FORM              ,'form'
+;.define D_XSD_ITEMTYPE          ,'itemType'
+;.define D_XSD_MEMBERTYPES       ,'memberTypes'
+.define D_XSD_MAXOCCURS         ,'maxOccurs'
+.define D_XSD_MINOCCURS         ,'minOccurs'
+;.define D_XSD_MIXED             ,'mixed'
+.define D_XSD_NAME              ,'name'
+.define D_XSD_NAMESPACE         ,'namespace'
+;.define D_XSD_NONSSCHEMALOCATION,'noNamespaceSchemaLocation'
+;.define D_XSD_NILLABLE          ,'nillable'
+;.define D_XSD_PROCESSCONTENTS   ,'processContents'
+;.define D_XSD_REF               ,'ref'
+;.define D_XSD_SCHEMALOCATION    ,'schemaLocation'
+;.define D_XSD_SUBSTITUTIONGROUP ,'substitutionGroup'
+;.define D_XSD_TARGETNAMESPACE   ,'targetNamespace'
+.define D_XSD_TYPE              ,'type'
+;.define D_XSD_USE               ,'use'
+;.define D_XSD_XPATH             ,'xpath'
+
+; XML definitions
+
+;.define D_XSD_XMLLANG           ,'xml:lang'
+;.define D_XSD_XSINILL           ,'xsi:nil'
+
+;.define D_XSD_ARCHETYPE         ,'archetype'
+;.define D_XSD_ARCHETYPEREF      ,'archetypeRef'
+;.define D_XSD_ATTRIBUTE         ,'attribute'
+.define D_XSD_ATTRIBUTETYPE     ,'attributeType'
+;.define D_XSD_BASETYPE          ,'basetype'
+.define D_XSD_DATATYPE          ,'datatype'
+.define D_XSD_ELEMENTTYPE       ,'elementType'
+;.define D_XSD_ELEMENTTYPEREF    ,'elementTypeRef'
+;.define D_XSD_LEXICAL           ,'lexical'
+;.define D_XSD_LEXICALREP        ,'lexicalRepresentation'
+.define D_XSD_QUALIFIED         ,'qualified'
+.define D_XSD_UNBOUNDED         ,'unbounded'
+.define D_XSD_UNQUALIFIED       ,'unqualified'
+.define D_XSD_VALUE             ,'value'
+
+; processContents values
+;.define D_XSD_LAX               ,'lax'
+;.define D_XSD_SKIP              ,'skip'
+
+
+; XML schema data types
+
+.define D_XSD_STRING            ,'string'
+;.define D_XSD_NORMALIZEDSTRING  ,'normalizedString'
+;.define D_XSD_TOKEN             ,'token'
+;.define D_XSD_BYTE              ,'byte'
+;.define D_XSD_UNSIGNEDBYTE      ,'unsignedByte'
+;.define D_XSD_BASE64BINARY      ,'base64Binary'
+;.define D_XSD_HEXBINARY         ,'hexBinary'
+;.define D_XSD_INTEGER           ,'integer'
+;.define D_XSD_POSITIVEINTEGER   ,'positiveInteger'
+;.define D_XSD_NEGATIVEINTEGER   ,'negativeInteger'
+;.define D_XSD_NONPOSITIVEINT    ,'nonpositiveInteger'
+;.define D_XSD_NONNEGATIVEINT    ,'nonnegativeInteger'
+;.define D_XSD_INT               ,'int'
+;.define D_XSD_UNSIGNEDINT       ,'unsignedInt'
+;.define D_XSD_LONG              ,'long'
+;.define D_XSD_UNSIGNEDLONG      ,'unsignedLong'
+;.define D_XSD_SHORT             ,'short'
+;.define D_XSD_UNSIGNEDSHORT     ,'unsignedShort'
+.define D_XSD_DECIMAL           ,'decimal'
+;.define D_XSD_FLOAT             ,'float'
+;.define D_XSD_DOUBLE            ,'double'
+;.define D_XSD_BOOLEAN           ,'boolean'
+;.define D_XSD_TIME              ,'time'
+;.define D_XSD_DATETIME          ,'dateTime'
+;.define D_XSD_DURATION          ,'duration'
+;.define D_XSD_DATE              ,'date'
+;.define D_XSD_GMONTH            ,'gMonth'
+;.define D_XSD_GYEAR             ,'gYear'
+;.define D_XSD_GYEARMONTH        ,'gYearMonth'
+;.define D_XSD_GDAY              ,'gDay'
+;.define D_XSD_GMONTHDAY         ,'gMonthDay'
+;;.define D_XSD_NAME              ,'Name'
+;.define D_XSD_QNAME             ,'QName'
+;.define D_XSD_NCNAME            ,'NCName'
+;.define D_XSD_ANYURI            ,'anyURI'
+;.define D_XSD_LANGUAGE          ,'language'
+
+; XSD attributes (for DTD compatibility)
+
+;.define D_XSD_ID                ,'ID'
+;.define D_XSD_IDREF             ,'IDREF'
+;.define D_XSD_ENTITY            ,'ENTITY'
+;.define D_XSD_ENTITIES          ,'ENTITIES'
+;.define D_XSD_NOTATION          ,'NOTATION'
+;.define D_XSD_NMTOKEN           ,'NMTOKEN'
+;.define D_XSD_NMTOKENS          ,'NMTOKENS'
+
+; ADO options
+
+.define D_XSDNS_DT              ,'dt'
+.define D_XSDNS_RS              ,'rs'
+.define D_XSDNS_XR              ,'xr'
+
+.define D_XSD_CONTENT           ,'content'
+.define D_XSD_NUMBER            ,'number'
+.define D_XSD_NULLABLE          ,'nullable'
+.define D_XSD_WRITEUNKNOWN      ,'writeunknown'
+.define D_XSD_MAXLENGTH         ,'maxLength'
+.define D_XSD_PRECISION         ,'precision'
+.define D_XSD_EXTENDS           ,'extends'
+.define D_XSD_TRUE              ,'true'
+.define D_XSD_FALSE             ,'false'
+.define D_XSD_ROW               ,'row'
+.define D_XSD_DATA              ,'data'
+.define D_XSD_ROWSETSCHEMA      ,'RowsetSchema'
+.define D_XSD_ID                ,'ID'
+.define D_XSD_ELTONLY           ,'eltOnly'
+.define D_XSD_TEXTONLY          ,'textOnly'
+.define D_XSD_ORDER             ,'order'
+.define D_XSD_MANY              ,'many'
+
+.define D_XSD_RECORD            ,'record'
+
+.define D_FLDTYP_ALPHA          ,'A'
+.define D_FLDTYP_DEC            ,'D'
+.define D_FLDTYP_INT            ,'I'
+
+; Errors returned
+.define DE_NOERROR              ,0
+.define DE_NO_DATA              ,1
+.define DE_NOMOREDATA           ,2
+
+.define DE_XML_CRE_ELE          ,-1
+.define DE_XML_ADDCHILD         ,-2
+.define DE_XML_ELENAME          ,-3
+.define DE_XML_NAMEATTR         ,-4
+.define DE_XML_TYPEATTR         ,-5
+.define DE_XML_KEYATTR          ,-8
+.define DE_XML_INVKEY           ,-9
+.define DE_XML_CE_STR           ,-10
+.define DE_XML_AC_STR           ,-11
+.define DE_XML_SN_STR           ,-12
+.define DE_XML_SNA_STR          ,-13
+.define DE_XML_CE_FLD           ,-14
+.define DE_XML_AC_FLD           ,-15
+.define DE_XML_SN_FLD           ,-16
+.define DE_XML_SNA_FLD          ,-17
+.define DE_XML_SN_FIL           ,-18
+.define DE_XML_ELETEXT          ,-21
+.define DE_XML_VALATTR          ,-22
+
+.define DE_FIL_STR_ERR          ,-100
+.define DE_FIL_STR_NONE         ,-101
+.define DE_FIL_NO_FILE          ,-102
+.define DE_FIL_NO_STR           ,-103
+.define DE_STR_ERROR            ,-200
+.define DE_STR_ERROR2           ,-201
+.define DE_NO_STRUCTS           ,-202
+.define DE_XML_TOOMANY          ,-203
+.define DE_PARSER_ERROR         ,-300
+.define DE_DOC_ERROR            ,-301
+.define DE_ROOT_NODE            ,-302
+.define DE_ROOT_SETROOT         ,-303
+.define DE_ROOT_SETNAME         ,-304
+.define DE_XML_TOO_LONG         ,-998
+.define DE_XML_GEN_ERROR        ,-999
+
+; Macro for Repository errors
+.define DE_RPS_ERROR            -(10000 + dcs.error)
+
+
+.endc ;D_XSFPISM2XML
+

@@ -1,0 +1,2456 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+; utklib.dbl
+;
+; Contains UI toolkit routines that are UI "free"
+;
+;
+; Hand coded version of the Synergy UI Toolkit subroutine
+; Used when the Synergy/DE UI toolkit is not running.
+;
+; Change History
+;
+; 23-Jun-2000 William Hawkins   Initial version
+; 15-Dec-2000 William Hawkins   Added support for searching and environments
+; 28-May-2003 William Hawkins   Split into utklib.dbl and wtklib.dbl
+; 18-Jun-2003 William Hawkins   DTK_NULL and OpenVMS, Synergex tabbing/spacing
+; 29-Apr-2005 William Hawkins   Add logic for month descriptions
+; 15-Aug-2007 William Hawkins   DBLv9 stong prototyping
+; 09-Feb-2009 William Hawkins   Synergy 9.1.5 routines added
+; 29-Oct-2009 William Hawkins   Synergy 9.3.1 routines added
+; 05-Nov-2009 William Hawkins   Updated routine signatures
+; 22-Apr-2010 William Hawkins   Updated routine signatures
+; 23-Jul-2010 William Hawkins   Added u_enumwnds
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+; use "dbl -WD=706,696" to avoid SYSRTNOVR and NARROWING warnings
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine dtk_null
+
+endparams
+
+; dummy routine
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifdef D_VMS
+.define D_RET_STATUS    1
+.endc
+
+.ifndef D_RET_STATUS
+.define D_RET_STATUS    0
+.endc
+
+.define D_FILENAME_SIZE  255                    ;filename size
+.define D_MODE_SIZE      3                      ;I/O mode size
+
+.define D_OUTPUT_MODE    'O'                    ;output mode
+.define D_UNKNOWN_FILE   '~Unknown'             ;unknown filename
+.define D_GETCHAN_FILE   '~GetChan'             ;unknown filename
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine e_enter
+
+opt in      a_share         ,n              ;share display
+
+endparams
+
+.include 'WND:tools.def'
+.include 'WND:gblctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+proc
+
+        if (g_env_lvl >= g_maxenv)
+            xreturn
+
+        onerror no_mem
+        env_hdl = %mem_proc(DM_RESIZ, ((g_env_lvl+2)*^size(env)), env_hdl)
+        offerror
+
+        g_env_lvl += 1
+
+        ^m(env[g_env_lvl+1].state, env_hdl) = g_state_save
+
+        xreturn
+
+no_mem,
+        offerror
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine e_exit
+
+endparams
+
+.include 'WND:gblctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record
+        chan            ,i4             ;channel loop counter
+
+proc
+
+        if (g_env_lvl <= 0)
+            xreturn
+
+        for chan from 1 thru maxchn
+        begin
+            if (io[chan].environment >= g_env_lvl)
+            begin
+                u_close(D_PURGE, chan)
+            end
+        end
+
+        g_env_lvl -= 1
+
+        ;resize smaller
+        env_hdl = %mem_proc(DM_RESIZ, ((g_env_lvl+1)*^size(env)), env_hdl)
+
+        ;restore flags & dflag settings
+        g_state_save = ^m(env[g_env_lvl+1].state, env_hdl)
+
+        ;reset flags
+        set_state(g_state_save)
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+subroutine u_open
+
+req out     a_channel       ,n                      ; channel
+opt in      a_mode          ,a                      ; mode
+req in      a_filename      ,a                      ; filename
+opt in      a_options       ,a                      ; file open options
+opt inout   a_search        ,n                      ; search
+opt out     a_error         ,n                      ; error
+opt in      a_noalloc       ,n                      ; do not allocate a channel
+
+endparams
+
+.include 'WND:tools.def'
+.include 'WND:gblctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record clr
+        io_mode         ,a D_MODE_SIZE          ;I/O mode (uppercased)
+
+.align
+record clr_i
+        chan            ,i4                     ;channel
+
+proc
+
+        clear clr, ^i(clr_i)
+
+        if(^passed(a_mode)) then
+        begin
+            io_mode = a_mode
+            upcase io_mode                      ;uppercase mode
+            using io_mode select
+            ('SU'),
+                io_mode = 'U:I'
+            ('SI'),
+                io_mode = 'I:I'
+            endusing
+        end
+        else
+            io_mode = 'I:I'
+
+        if (^passed(a_search))
+            clear a_search                      ;clear search flag
+
+        if (!^passed(a_noalloc))
+        begin
+            clear a_channel
+
+            if (^passed(a_search))
+            begin
+                if (io_mode != D_OUTPUT_MODE)
+                begin                         ;search for filename & mode
+                    for chan from first_channel thru last_channel
+                    begin
+                        if (a_filename == io[chan].filename && io_mode == io[chan].mode)
+                        begin                 ;found match
+                            a_channel = chan
+                            a_search = 1
+                        end
+                    end
+                end
+            end
+
+            if (!a_channel)
+            begin
+                chan = first_channel
+                while(io[chan].filename && chan <= last_channel)
+                    chan += 1
+                if (io[chan].filename)
+                begin
+                    if (^passed(a_error))
+                        a_error = $ERR_CHNEXC   ;too many files open
+                    xreturn
+                end
+
+                a_channel = chan                ;get a free channel
+            end
+        end
+
+        if (^passed(a_search) && a_search) then
+            nop                                 ;already opened the file
+        else
+        begin
+            if (^passed(a_options) && a_options) then
+                open(a_channel, MODE:a_mode, a_filename, OPTIONS:a_options) [ERR=syn_error]
+            else
+                open(a_channel, MODE:a_mode, a_filename) [ERR=syn_error]
+
+            ;make sure all io[channel] fields are set,
+            ; remembering that environment level could be set by u_getchn
+            io[a_channel].filename = a_filename ;store filename
+            io[a_channel].mode = io_mode        ;store mode
+
+            if(!^passed(a_noalloc))
+                io[a_channel].environment = g_env_lvl   ;environment
+
+            if (maxchn <a_channel)
+                maxchn = a_channel              ;store upper channel in use
+        end
+
+        if (^passed(a_error))
+            clear a_error                       ;no error
+
+        xreturn
+
+;--------------------------------------------------------------------
+
+syn_error,
+
+        if (^passed(a_error))
+            a_error = %error                    ;error occurred
+
+        if (!^passed(a_noalloc))
+            clear a_channel                     ;clear i/o channel
+
+        xreturn
+
+endsubroutine
+
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+subroutine u_close, varargs
+
+req in      a_arg1          ,n              ;channel number or D_PURGE
+opt in      a_arg2          ,n
+opt in      a_arg3          ,n
+opt in      a_arg4          ,n
+opt in      a_arg5          ,n
+
+endparams
+
+.include 'WND:tools.def'
+.include 'WND:gblctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record clr_i
+        fstatus         ,i4                     ;dummy return status
+        purge_mode      ,i4                     ;purge mode
+        chan            ,i4                     ;channel
+        ctr             ,i4                     ;loop counter
+
+proc
+
+        clear ^i(clr_i)
+
+        for ctr from 1 thru %numargs
+        begin
+            chan = ^argn(ctr)                   ;get channel
+            using chan select
+            (1 thru D_MAXCHN),
+            begin
+                call close                      ;close channel
+            end
+            (D_PURGE),
+            begin
+                purge_mode = TRUE               ;purge mode
+            end
+            (0),
+            begin
+                if (fstatus == 0)
+                    fstatus = -1                ;tried to close channel 0
+            end
+            (),
+            begin
+                if (fstatus <= 0)
+                    fstatus = -2                ;invalid channel
+            end
+            endusing
+        end
+
+        xreturn
+
+;--------------------------------------------------------------------
+
+close,
+
+        if (io[chan].environment != -1 && io[chan].environment < g_env_lvl)
+        begin
+            fstatus = 1                         ;owned by previous environment
+            return
+        end
+
+        close chan                              ;close channel
+
+        if (purge_mode && io[chan].mode == D_OUTPUT_MODE)
+        begin                                   ;purge file
+            delet(io[chan].filename)
+        end
+
+        clear io[chan]                          ;clear data
+
+        if (chan >= maxchn)
+        begin                                   ;find new maxchn
+            while(maxchn && !io[maxchn].filename)
+                maxchn -= 1
+        end
+
+        onerror wrtlit
+        clear ^argn(ctr)                        ;clear channel
+wrtlit,
+        offerror
+
+        return
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; This routine exists to define the global data section in tools.def
+; and to initialize the data in utklib.def
+
+subroutine u_start
+
+opt         a_util_lib      ,a              ;window library
+opt         a_header_lines  ,n              ;header lines
+opt         a_footer_lines  ,n              ;footer liens
+opt         a_pool_size     ,n              ;unused
+opt         a_screen_rows   ,n              ;rows
+opt         a_screen_columns,n              ;columns
+opt         a_text_lib      ,a              ;text library isam channel
+opt         a_first_channel ,n              ;lowest channel (expected to be TT:)
+opt         a_env_levels    ,n              ;number of environment levels
+opt         a_last_channel  ,n              ;highest channel
+opt         a_start_method  ,a              ;start method
+opt         a_start_method_elb,a            ;start method ELB name
+opt         a_arg           ,a              ;undocumented
+
+endparams
+
+.define TOOLS_INIT
+.include 'WND:tools.def'
+
+
+.define TKCTL_INIT
+.include 'WND:tkctl.def'
+.undefine TKCTL_INIT
+
+.define GBLCTL_INIT
+.include 'WND:gblctl.def'
+.undefine GBLCTL_INIT
+
+.define INPCTL_INIT
+.include 'WND:inpctl.def'
+.undefine INPCTL_INIT
+
+global common
+.include 'UTL:utklib.def'
+
+literal
+        month_names     ,12a3   ,'JAN','FEB','MAR','APR','MAY','JUN'
+        &                       ,'JUL','AUG','SEP','OCT','NOV','DEC'
+
+.align
+record
+        chan            ,i4             ;loop counter
+        logical         ,a8
+
+proc
+
+        if (^passed(a_first_channel)) then
+        begin
+            using a_first_channel select
+            (1 thru D_MAXCHN),
+                first_channel = a_first_channel
+            (),
+                first_channel = 1
+            endusing
+        end
+        else
+            first_channel = 1
+
+        ;open terminal channel
+        if (!g_terminal)
+        begin
+            g_terminal = first_channel
+            open(g_terminal, O, 'TT:')
+            g_ttchn = first_channel
+        end
+
+        if (^passed(a_env_levels)) then
+        begin
+            using a_env_levels select
+            (2 thru D_MAXENV),
+                g_maxenv = a_env_levels
+            (),
+                g_maxenv = D_DFLTENV
+            endusing
+        end
+        else
+            g_maxenv = D_DFLTENV
+
+        if (^passed(a_last_channel)) then
+        begin
+            using a_last_channel select
+            (1 thru D_MAXCHN),
+                last_channel = a_last_channel
+            (),
+                last_channel = D_MAXCHN
+            endusing
+        end
+        else
+            last_channel = D_MAXCHN
+
+
+        if ((last_channel-first_channel+1) < 3)
+        begin
+            throw_error($ERR_ILLCHN)
+            xreturn
+        end
+
+        ;global 'environment'
+        env_hdl = %mem_proc(DM_ALLOC+DM_STATIC, ^size(env))
+
+        ;initialize 'environment'
+        clear g_env_lvl, maxchn
+        for chan from 1 thru D_MAXCHN
+        begin
+            clear io[chan]
+            if (%chopen(chan))
+            begin                       ;file open before u_start called
+                io[chan].filename = D_UNKNOWN_FILE
+            end
+        end
+
+        ;initialize month descriptions
+        for chan from 1 thru 12
+            mths[chan] = month_names(chan)
+
+        ampm[1] = 'AM.'
+        ampm[2] = 'PM.'
+
+        g_date_sep = '/'                ;date delimiter
+        g_time_sep = ':'                ;time delimiter
+
+        g_periods = 12
+        g_date_order = 0
+
+        g_syncentury = 0
+
+        xcall getlog("SYNCENTURY", logical, chan)
+        if(chan == 1 || chan = 2)
+        begin
+            if(logical(1:1) < '0' || logical(1:1) > '9')
+                exit
+            if(chan == 2 && (logical(2:1) < '0' || logical(2:1) > '9'))
+                exit
+            g_syncentury = logical(1:chan)
+        end
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_finish
+
+opt in      a_no_clear      ,n              ; do not clear screen
+opt out     a_cancel        ,n              ; cancel shutdown
+opt in      a_arg3          ,n              ; undocumented
+
+endparams
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record
+        chan            ,i4             ;channel to close
+        ctr             ,i4             ;loop counter
+
+proc
+
+        if (^passed(a_cancel))
+            clear a_cancel
+
+        ;close any files opened by 'toolkit'
+        for ctr from 1 thru D_MAXCHN
+        begin
+            if (io[ctr].filename && io[ctr].filename != D_UNKNOWN_FILE)
+            begin
+                if (%chopen(ctr))
+                begin
+                    chan = ctr          ;set channel to close
+                                        ; (will be cleared after u_close)
+                    u_close(chan)
+                end
+            end
+        end
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_beep
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; returns option info from command line.
+
+function u_cmdlinopt   ,^val
+
+req in      a_opt           ,a        ;option string
+opt in      a_maxoptvals    ,n        ;maximum argument to return
+.ifdef DBLv93
+opt out     a_optvals       ,(*)a     ;option arguments
+.else
+opt out     a_optvals       ,a        ;option arguments
+.endc
+opt out     a_numoptvals    ,n        ;number of arguments
+
+endparams
+
+.define MAXARGS         128
+
+.align
+record clr_i
+        fstatus         ,i4             ;function return status
+        maxopts         ,i4             ;maximum number of options
+        maxoptvals      ,i4             ;maximum number of options requested
+        numoptvals      ,i4             ;number of options found
+        ctr             ,i4             ;counter
+        len             ,i4             ;length
+
+        num_args        ,i4
+        arg_pos         ,[MAXARGS] i4
+        arg_len         ,[MAXARGS] i4
+
+
+.align
+record clr
+        command         ,a1024
+        opt_char        ,a1
+        optVal          ,a255
+
+proc
+
+        clear clr, ^i(clr_i)
+
+        if (^passed(a_maxoptvals) && ^passed(a_optvals))
+            maxoptvals = a_maxoptvals
+
+        if (%option(34)) then
+            opt_char = '/'
+        else
+            opt_char = '-'
+
+        cmdln(command, maxopts, arg_pos, arg_len)
+
+        clear num_args
+
+        for ctr from 1 thru maxopts
+        begin
+            if (arg_pos[ctr] && arg_len[ctr]) then
+                optVal = command(arg_pos[ctr]:arg_len[ctr])
+            else
+                clear optVal
+
+            ;is this the requested option
+            if (optVal == opt_char+a_opt)
+                call process_argument
+        end
+
+        if (^passed(a_numoptvals))
+            a_numoptvals = num_args
+
+        freturn fstatus
+
+;--------------------------------------------------------------------
+
+process_argument,
+
+        ;found requested option
+        fstatus = 1
+
+        ;process next argument
+        ctr += 1
+
+        if (arg_pos[ctr] && arg_len[ctr]) then
+            optVal = command(arg_pos[ctr]:arg_len[ctr])
+        else
+            optVal = opt_char
+
+        while(optVal != opt_char)
+        begin
+            num_args += 1
+            if (num_args <= maxoptvals)
+            begin
+                ;strip leading and trailing quote characters
+                using optVal select
+                ("'", '"'),
+                begin
+                    len = %trimz(optVal)
+                    if (len > 1 && optVal(len:1) == optVal(1:1))
+                    begin
+                        if (len > 2) then
+                            optVal = optVal(2, len-1)
+                        else
+                            clear optVal
+                    end
+                end
+                endusing
+                a_optvals(num_args) = optVal
+            end
+
+            ;process next argument
+            ctr += 1
+
+            if (arg_pos[ctr] && arg_len[ctr]) then
+                optVal = command(arg_pos[ctr]:arg_len[ctr])
+            else
+                optVal = opt_char
+        end
+
+        ;adjust counter to stay in correct position in loop
+        ctr -= 1
+        return
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_checkversion
+
+req in      a_product       ,a              ;product name
+req in      a_version       ,a              ;current version
+req in      a_minvers       ,a              ;minimum required version
+
+endparams
+
+proc
+
+        return
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_chninf
+
+req in      a_channel       ,n              ; channel
+opt         a_filename      ,a              ; filename
+opt         a_mode          ,a              ; I/O mode
+opt         a_class         ,n              ; environment level
+                                            ; 0=not in use, -1=global, -2=system
+
+endparams
+
+external common
+.include 'UTL:utklib.def'
+
+proc
+
+        if (io[a_channel].filename) then
+        begin
+            if (^passed(a_filename))
+                a_filename = io[a_channel].filename
+            if (^passed(a_mode))
+                a_mode = io[a_channel].mode
+            if (^passed(a_class))
+                a_class = io[a_channel].environment
+        end
+        else
+        begin
+            if (^passed(a_filename))
+                clear a_filename
+            if (^passed(a_mode))
+                clear a_mode
+            if (^passed(a_class))
+                clear a_class
+        end
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_cnvdat
+
+req in      a_mode          ,n      ; mode
+req         a_year          ,n      ; year
+req         a_month         ,n      ; month
+req         a_day           ,n      ; day of month
+req         a_julian        ,n      ; julian date
+
+endparams
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record
+        ctr             ,i4
+        jdays           ,i4
+
+        group date      ,d
+         yyyy            ,d4
+         mm              ,d2
+         dd              ,d2
+        endgroup
+
+        group adate     ,a
+         day             ,d2
+                         ,a1
+         mon             ,a3
+                         ,a1
+         year            ,d4
+        endgroup
+
+record month_len
+        mm_len          ,[12]d2
+
+proc
+        month_len = '312831303130313130313031'
+        date.yyyy = a_year
+        if(date.yyyy < 100)
+            date.yyyy += 1900
+        if((date.yyyy / 4) * 4 == date.yyyy)
+        begin
+            using TRUE select
+            ((date.yyyy / 400) * 400 == date.yyyy),
+                mm_len[2] = 29  ;century year on 400 year boundary (e.g. 2000)
+            ((date.yyyy / 100) * 100 == date.yyyy),
+                nop             ;century year (e.g. 1900, 2100)
+            (),
+                mm_len[2] = 29  ;regular leap year
+            endusing
+        end
+        date.mm = 1
+        date.dd = 1
+        jdays = %jperiod(date)  ;julian date for first day of year
+
+        using a_mode select
+        (1),
+        begin
+            if(a_month < 1 || a_month > 12 || a_day < 1 | a_day > mm_len[a_month])
+            begin
+                a_julian = 999
+                xreturn
+            end
+            date.mm = a_month
+            date.dd = a_day
+            a_julian = %jperiod(date) - jdays + 1
+        end
+        (2),
+        begin
+            if(a_julian < 1 || a_julian > 366 || (a_julian > 365 && mm_len[2] == 28))
+            begin
+                a_day = 99
+                a_month = 99
+                xreturn
+            end
+            jdays += (a_julian-1)
+            date = %ndate(%date(jdays))
+            a_day = date.dd
+            a_month = date.mm
+        end
+        endusing
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_dcddat
+
+req         a_status        ,n              ; status (0=ok)
+opt in      a_string        ,a              ; string to convert into numeric form
+opt in      a_type          ,n              ; format type
+opt in      a_today         ,n              ; D_TODAY
+req         a_year          ,n              ; year
+req         a_mon           ,n              ; month
+req         a_day           ,n              ; day of month
+
+endparams
+
+.include 'WND:tkctl.def'
+.include 'WND:gblctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+record
+        dMode           ,i4
+        dateSegment     ,i4
+        datePart        ,[3]i4
+        number          ,i4
+        pos             ,i4
+        isNumeric       ,boolean
+        dateString      ,a20
+endrecord
+
+record month_len
+        mm_len          ,[12]d2
+
+proc
+
+        a_status = 0
+
+        if(!^passed(a_string) || !a_string) then
+            dMode = D_TODAY
+        else
+            dMode = a_type
+
+        using dMode select
+        (D_TODAY),
+        begin
+            dateString = %datetime
+            a_year = dateString(1:4)
+            a_mon  = dateString(5:2)
+            a_day  = dateString(7:2)
+            xreturn
+        end
+        (1),
+        begin
+            call decode_date_string
+            call ppyy
+        end
+        (2),
+        begin
+            call decode_date_string
+            call ppyyyy
+        end
+        (3),
+        begin
+            call decode_date_string
+            call ddmmyy
+        end
+        (4),
+        begin
+            call decode_date_string
+            call ddmmyyyy
+        end
+        (),
+            a_status = 1
+        endusing
+
+        xreturn
+
+;--------------------------------------------------------------------
+
+ppyy,
+
+        a_year = datePart[2]
+        a_mon  = datePart[1]
+        a_day  = 0
+
+        call validate_period
+
+        return
+
+;--------------------------------------------------------------------
+
+ppyyyy,
+
+        a_year = datePart[2]
+        a_mon  = datePart[1]
+        a_day  = 0
+
+        call validate_period
+
+        return
+
+;--------------------------------------------------------------------
+
+ddmmyy,
+
+        using g_date_order select
+        (2),
+        begin
+            a_year = datePart[1]
+            a_mon  = datePart[2]
+            a_day  = datePart[3]
+        end
+        (1),
+        begin
+            a_year = datePart[3]
+            a_mon  = datePart[2]
+            a_day  = datePart[1]
+        end
+        (),
+        begin
+            a_year = datePart[3]
+            a_mon  = datePart[1]
+            a_day  = datePart[2]
+        end
+        endusing
+
+        call validate_date
+        return
+
+;--------------------------------------------------------------------
+
+ddmmyyyy,
+
+        using g_date_order select
+        (2),
+        begin
+            a_year = datePart[1]
+            a_mon  = datePart[2]
+            a_day  = datePart[3]
+        end
+        (1),
+        begin
+            a_year = datePart[3]
+            a_mon  = datePart[2]
+            a_day  = datePart[1]
+        end
+        (),
+        begin
+            a_year = datePart[3]
+            a_mon  = datePart[1]
+            a_day  = datePart[2]
+        end
+        endusing
+
+        call validate_date
+        return
+
+;--------------------------------------------------------------------
+
+validate_date,
+
+        dateString = %datetime
+        if(!a_year)
+            a_year = dateString(1:4)
+        if(!a_mon)
+            a_mon  = dateString(5:2)
+        if(!a_day)
+            a_day  = dateString(7:2)
+
+        if(a_mon < 1 || a_mon > 12)
+        begin
+            a_status = 1
+            return
+        end
+
+        call populate_mon_len
+
+        if(a_day < 1 || a_day > mm_len[a_mon])
+        begin
+            a_status = 1
+            return
+        end
+
+        return
+
+;--------------------------------------------------------------------
+
+populate_mon_len,
+
+        month_len = '312831303130313130313031'
+        number = a_year
+        if(number < 100)
+            number += 1900
+        if((number/ 4) * 4 == number)
+        begin
+            using TRUE select
+            ((number / 400) * 400 == number),
+                mm_len[2] = 29  ;century year on 400 year boundary (e.g. 2000)
+            ((number / 100) * 100 == number),
+                nop             ;century year (e.g. 1900, 2100)
+            (),
+                mm_len[2] = 29  ;regular leap year
+            endusing
+        end
+        return
+
+;--------------------------------------------------------------------
+
+validate_period,
+
+        dateString = %datetime
+        if(!a_year)
+            a_year = dateString(1:4)
+        if(!a_mon)
+            a_mon  = dateString(5:2)
+
+        if(a_mon < 1 || a_mon > g_periods)
+            a_status = 1
+
+        return
+
+;--------------------------------------------------------------------
+
+decode_date_string,
+
+        try
+        begin
+            number = a_string
+            isNumeric = TRUE
+            ;recheck for characters that are ignored by numeric=alpha conversions
+            if(%instr(1, a_string, '.'))
+                isNumeric = FALSE
+            if(%instr(1, a_string, ','))
+                isNumeric = FALSE
+            if(%instr(1, a_string, '-'))
+                isNumeric = FALSE
+            if(%instr(1, a_string, '+'))
+                isNumeric = FALSE
+        end
+        catch (ex)
+            isNumeric = FALSE
+        endtry
+
+        if(isNumeric == TRUE) then
+        begin
+            datePart[1] = 0
+            datePart[2] = 0
+            datePart[3] = 0
+            using dMode select
+            (1),
+            begin
+                using %trim(a_string) select
+                (1),
+                begin
+                    datePart[1] = a_string(1:1)
+                end
+                (2),
+                begin
+                    datePart[1] = a_string(1:2)
+                end
+                (3),
+                begin
+                    datePart[1] = a_string(1:1)
+                    datePart[2] = a_string(2:2)
+                end
+                (4),
+                begin
+                    datePart[1] = a_string(1:2)
+                    datePart[2] = a_string(3:2)
+                end
+                (),
+                    a_status = 1
+                endusing
+                call ppyy
+            end
+            (2),
+            begin
+                using %trim(a_string) select
+                (1),
+                begin
+                    datePart[1] = a_string(1:1)
+                end
+                (2),
+                begin
+                    datePart[1] = a_string(1:2)
+                end
+                (3),
+                begin
+                    datePart[1] = a_string(1:1)
+                    datePart[2] = a_string(2:2)
+                    if(datePart[2] > g_syncentury) then
+                        datePart[2] += 2000
+                    else
+                        datePart[2] += 1900
+                end
+                (4),
+                begin
+                    datePart[1] = a_string(1:2)
+                    datePart[2] = a_string(3:2)
+                    if(datePart[2] > g_syncentury) then
+                        datePart[2] += 2000
+                    else
+                        datePart[2] += 1900
+                end
+                (5),
+                begin
+                    datePart[1] = a_string(1:1)
+                    datePart[2] = a_string(2:4)
+                end
+                (6),
+                begin
+                    datePart[1] = a_string(1:2)
+                    datePart[2] = a_string(3:4)
+                end
+                (),
+                    a_status = 1
+                endusing
+                call ppyyyy
+            end
+            (3),
+            begin
+                using %trim(a_string) select
+                (1),
+                begin
+                    using g_date_order select
+                    (2),
+                        datePart[3] = a_string(1:1)
+                    (1),
+                        datePart[1] = a_string(1:1)
+                    (),
+                        datePart[2] = a_string(1:1)
+                    endusing
+                end
+                (2),
+                begin
+                    using g_date_order select
+                    (2),
+                        datePart[3] = a_string(1:2)
+                    (1),
+                        datePart[1] = a_string(1:2)
+                    (),
+                        datePart[2] = a_string(1:2)
+                    endusing
+                end
+                (3),
+                begin
+                    using g_date_order select
+                    (2),
+                    begin
+                        datePart[2] = a_string(1:1)
+                        datePart[3] = a_string(2:2)
+                    end
+                    (1),
+                    begin
+                        datePart[2] = a_string(1:1)
+                        datePart[1] = a_string(2:2)
+                    end
+                    (),
+                    begin
+                        datePart[1] = a_string(1:1)
+                        datePart[2] = a_string(2:2)
+                    end
+                    endusing
+                end
+                (4),
+                begin
+                    using g_date_order select
+                    (2),
+                    begin
+                        datePart[2] = a_string(1:2)
+                        datePart[3] = a_string(3:2)
+                    end
+                    (1),
+                    begin
+                        datePart[2] = a_string(1:2)
+                        datePart[1] = a_string(3:2)
+                    end
+                    (),
+                    begin
+                        datePart[1] = a_string(1:2)
+                        datePart[2] = a_string(3:2)
+                    end
+                    endusing
+                end
+                (5),
+                begin
+                    datePart[1] = a_string(1:1)
+                    datePart[2] = a_string(2:2)
+                    datePart[3] = a_string(4:2)
+                end
+                (6),
+                begin
+                    datePart[1] = a_string(1:2)
+                    datePart[2] = a_string(3:2)
+                    datePart[3] = a_string(5:2)
+                end
+                (),
+                    a_status = 1
+                endusing
+                call ddmmyy
+            end
+            (4),
+            begin
+                using %trim(a_string) select
+                (1),
+                begin
+                    using g_date_order select
+                    (2),
+                        datePart[3] = a_string(1:1)
+                    (1),
+                        datePart[1] = a_string(1:1)
+                    (),
+                        datePart[2] = a_string(1:1)
+                    endusing
+                end
+                (2),
+                begin
+                    using g_date_order select
+                    (2),
+                        datePart[3] = a_string(1:2)
+                    (1),
+                        datePart[1] = a_string(1:2)
+                    (),
+                        datePart[2] = a_string(1:2)
+                    endusing
+                end
+                (3),
+                begin
+                    using g_date_order select
+                    (2),
+                    begin
+                        datePart[2] = a_string(1:1)
+                        datePart[3] = a_string(2:2)
+                    end
+                    (1),
+                    begin
+                        datePart[1] = a_string(1:1)
+                        datePart[2] = a_string(2:2)
+                    end
+                    (),
+                    begin
+                        datePart[1] = a_string(1:1)
+                        datePart[2] = a_string(2:2)
+                    end
+                    endusing
+                end
+                (4),
+                begin
+                    using g_date_order select
+                    (2),
+                    begin
+                        datePart[2] = a_string(1:2)
+                        datePart[3] = a_string(3:2)
+                    end
+                    (1),
+                    begin
+                        datePart[1] = a_string(1:2)
+                        datePart[2] = a_string(3:2)
+                    end
+                    (),
+                    begin
+                        datePart[1] = a_string(1:2)
+                        datePart[2] = a_string(3:2)
+                    end
+                    endusing
+                end
+                (5),
+                begin
+                    using g_date_order select
+                    (2),
+                    begin
+                        datePart[1] = a_string(1:1)
+                        datePart[2] = a_string(2:2)
+                        datePart[3] = a_string(4:2)
+                        if(datePart[1] > g_syncentury) then
+                            datePart[1] += 2000
+                        else
+                            datePart[1] += 1900
+                    end
+                    (1),
+                    begin
+                        datePart[1] = a_string(1:1)
+                        datePart[2] = a_string(2:2)
+                        datePart[3] = a_string(4:2)
+                        if(datePart[3] > g_syncentury) then
+                            datePart[3] += 2000
+                        else
+                            datePart[3] += 1900
+                    end
+                    (),
+                    begin
+                        datePart[1] = a_string(1:1)
+                        datePart[2] = a_string(2:2)
+                        datePart[3] = a_string(4:2)
+                        if(datePart[3] > g_syncentury) then
+                            datePart[3] += 2000
+                        else
+                            datePart[3] += 1900
+                    end
+                    endusing
+                end
+                (6),
+                begin
+                    using g_date_order select
+                    (2),
+                    begin
+                        datePart[1] = a_string(1:2)
+                        datePart[2] = a_string(3:2)
+                        datePart[3] = a_string(5:2)
+                        if(datePart[1] > g_syncentury) then
+                            datePart[1] += 2000
+                        else
+                            datePart[1] += 1900
+                    end
+                    (1),
+                    begin
+                        datePart[1] = a_string(1:2)
+                        datePart[2] = a_string(3:2)
+                        datePart[3] = a_string(5:2)
+                        if(datePart[3] > g_syncentury) then
+                            datePart[3] += 2000
+                        else
+                            datePart[3] += 1900
+                    end
+                    (),
+                    begin
+                        datePart[1] = a_string(1:2)
+                        datePart[2] = a_string(3:2)
+                        datePart[3] = a_string(5:2)
+                        if(datePart[3] > g_syncentury) then
+                            datePart[3] += 2000
+                        else
+                            datePart[3] += 1900
+                    end
+                    endusing
+                end
+                (7),
+                begin
+                    datePart[1] = a_string(1:1)
+                    datePart[2] = a_string(2:2)
+                    datePart[3] = a_string(4:4)
+                end
+                (8),
+                begin
+                    datePart[1] = a_string(1:2)
+                    datePart[2] = a_string(3:2)
+                    datePart[3] = a_string(5:4)
+                end
+                (),
+                    a_status = 1
+                endusing
+                call ddmmyyyy
+            end
+            endusing
+        end
+        else
+        begin
+            dateString = a_string
+            upcase dateString
+
+            dateSegment = 1
+            pos = 1
+            while(pos <= %trim(DateString))
+            begin
+                using DateString(pos:1) select
+                ('0' thru '9'),
+                    number = (number*10)+^d(a_string(pos:1))
+                (),
+                begin
+                    if(!number)
+                    begin
+                        number = 12
+                        while(number > 0 && dateString != %atrim(mths[number]))
+                            number -= 1
+                        if(number > 0)
+                            pos += (%trim(mths[number])-1) ;skip to end of month text
+                    end
+                    call update_date_segment
+                end
+                endusing
+                pos += 1
+            end
+        end
+
+        return
+
+;--------------------------------------------------------------------
+
+update_date_segment,
+
+        using dateSegment select
+        (1, 2, 3),
+            datePart[dateSegment] = number
+        (),
+            a_status = 1
+        endusing
+
+        dateSegment += 1
+        clear number
+        return
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_dcdtim
+
+req         a_status        ,n              ; status (0=ok)
+opt in      a_string        ,a              ; string to convert into numeric form
+opt in      a_today         ,n              ; D_NOW
+req         a_hour          ,n              ; hour
+req         a_min           ,n              ; minute
+opt         a_sec           ,n              ; second
+
+endparams
+
+external common
+.include 'UTL:utklib.def'
+
+record
+        group hhmmss    ,d
+            hh              ,d2
+            mm              ,d2
+            ss              ,d2
+        endgroup
+        isNumeric       ,boolean
+        time_segment    ,i4
+        pos             ,i4
+        number          ,i4
+        time_string     ,a20
+        am              ,a1
+        pm              ,a1
+endrecord
+
+proc
+
+        a_status = 0
+
+        if((^passed(a_string) && !a_string && ^passed(a_today) && a_today == D_NOW)) ||
+        &  (!^passed(a_string))
+        begin
+            time(hhmmss)
+            a_hour = hh
+            a_min = mm
+            if(^passed(a_sec))
+                a_sec = ss
+            xreturn
+        end
+
+
+        try
+        begin
+            hhmmss = a_string
+            isNumeric = TRUE
+            ;recheck for characters that are ignored by numeric=alpha conversions
+            if(%instr(1, a_string, '.'))
+                isNumeric = FALSE
+            if(%instr(1, a_string, ','))
+                isNumeric = FALSE
+            if(%instr(1, a_string, '-'))
+                isNumeric = FALSE
+            if(%instr(1, a_string, '+'))
+                isNumeric = FALSE
+        end
+        catch (ex)
+            isNumeric = FALSE
+        endtry
+
+        if(isNumeric == TRUE) then
+        begin
+            hhmmss = 0
+            pos = %trim(a_string)
+            using pos select
+            (1,2),
+                hh = a_string(1:pos)
+            (3),
+            begin
+                hh = a_string(1:1)
+                mm = a_string(2:2)
+            end
+            (4),
+            begin
+                hh = a_string(1:2)
+                mm = a_string(3:2)
+            end
+            (5),
+            begin
+                hh = a_string(1:1)
+                mm = a_string(2:2)
+                ss = a_string(4:2)
+            end
+            (),
+            begin
+                hh = a_string(1:1)
+                mm = a_string(3:2)
+                ss = a_string(5:2)
+            end
+            endusing
+        end
+        else
+        begin
+            time_string = a_string
+            upcase time_string
+
+            am = ampm[1](1:1)
+            pm = ampm[2](1:1)
+            upcase am
+            upcase pm
+
+            clear number
+            time_segment = 1
+            for pos from 1 thru %trim(a_string)
+            begin
+                using a_string(pos:1) select
+                ('0' thru '9'),
+                    number = (number*10)+^d(a_string(pos:1))
+                (am),
+                begin
+                    call update_time_segment
+                    if(pos != %trim(a_string))
+                        a_status = 1
+                end
+                (pm),
+                begin
+                    call update_time_segment
+                    hh += 12
+                    if(pos != %trim(a_string))
+                        a_status = 1
+                end
+                (),
+                    call update_time_segment
+                endusing
+            end
+        end
+
+        if(hh < 0 || hh > 23 ||
+        &  mm < 0 || mm > 59 ||
+        &  ss < 0 || ss > 59) then
+        begin
+            a_hour = 0
+            a_min = 0
+            if(^passed(a_sec))
+                a_sec = 0
+
+            a_status = 1
+        end
+        else
+        begin
+            a_hour = hh
+            a_min = mm
+            if(^passed(a_sec))
+                a_sec = ss
+        end
+
+        xreturn
+
+;--------------------------------------------------------------------
+
+update_time_segment,
+
+        using time_segment select
+        (1),
+            hh = number
+        (2),
+            mm = number
+        (3),
+            ss = number
+        (),
+            a_status = 1
+        endusing
+
+        time_segment += 1
+        clear number
+        return
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_enumwnds ,^val
+
+req in      a_channel       ,n          ;channel
+opt in      a_max           ,n          ;number of window names in array
+opt out     a_windownames   ,a          ;array of window names
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_fmtdat
+
+req in      a_type          ,n              ; 1 thru 6
+req         a_date          ,a              ; formatted date
+opt in      a_year          ,n              ; year (or entire date in storage/from format)
+opt in      a_month         ,n              ; month or julian day
+opt in      a_day           ,n              ; day
+opt in      a_justify       ,n              ; D_LEFT
+opt in      a_order         ,n              ; 0=mdy, 1=dmy, 2=ymd
+opt in      a_seperator     ,a              ; date seperator character
+
+endparams
+
+.include 'WND:tkctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+record month_len
+        mm_len              ,[12]d2
+
+record
+        group yypp          ,d
+            yy               ,d2
+            pp               ,d2
+        endgroup
+        group yyjjj         ,d
+            yy               ,d2
+            jjj              ,d3
+        endgroup
+        group yymmdd        ,d
+            yy               ,d2
+            mm               ,d2
+            dd               ,d2
+        endgroup
+        group yyyypp        ,d
+            yyyy             ,d4
+            pp               ,d2
+        endgroup
+        group yyyyjjj       ,d
+            yyyy             ,d4
+            jjj              ,d3
+        endgroup
+        group yyyymmdd      ,d
+          group yyyy         ,d4
+            cc               ,d2
+            yy               ,d2
+          endgroup
+            mm               ,d2
+            dd               ,d2
+        endgroup
+        seperator           ,a1
+
+proc
+
+        if(^passed(a_seperator)) then
+            seperator = a_seperator
+        else
+            seperator = g_date_sep
+
+        using a_type select
+        (1),
+        begin
+            ;pp/yy from yypp
+            if(^passed(a_month)) then
+            begin
+                yypp.yy = a_year
+                yypp.pp = a_month
+            end
+            else
+                yypp = a_year
+            a_date = ^a(yypp.pp) + seperator + ^a(yypp.yy)
+        end
+        (2),
+        begin
+            ;mm/dd/yy from yyjjj
+            if(^passed(a_month)) then
+            begin
+                yyjjj.yy = a_year
+                yyjjj.jjj = a_month
+            end
+            else
+                yyjjj = a_year
+            ;using yyyymmdd
+            if(yypp.yy > 50) then
+                yyyymmdd.yyyy = 1900 + yyjjj.yy
+            else
+                yyyymmdd.yyyy = 2000 + yyjjj.yy
+            call adjust_mm_for_leap
+            yymmdd.yy = yyjjj.yy
+            yymmdd.mm = 1
+            while (yyjjj.jjj > mm_len[yymmdd.mm])
+            begin
+                yyjjj.jjj -= mm_len[yymmdd.mm]
+                yymmdd.mm += 1
+            end
+            yymmdd.dd = yyjjj.jjj
+            a_date = ^a(yymmdd.mm) + seperator + ^a(yymmdd.dd) + seperator + ^a(yymmdd.yy)
+        end
+        (3),
+        begin
+            ;mm/dd/yy from yymmdd
+            if(^passed(a_month) && ^passed(a_day)) then
+            begin
+                yymmdd.yy = a_year
+                yymmdd.mm = a_month
+                yymmdd.dd = a_day
+            end
+            else
+                yymmdd = a_year
+            a_date = ^a(yymmdd.mm) + seperator + ^a(yymmdd.dd) + seperator + ^a(yymmdd.yy)
+        end
+        (4),
+        begin
+            ;pp/yyyy from yyyypp
+            if(^passed(a_month)) then
+            begin
+                yypp.yy = a_year
+                yypp.pp = a_month
+            end
+            else
+                yypp = a_year
+            a_date = ^a(yyyypp.pp) + seperator + ^a(yyyypp.yyyy)
+        end
+        (5),
+        begin
+            ;mm/dd/yyyy from yyyyjjj
+            if(^passed(a_month)) then
+              begin
+                yyyyjjj.yyyy = a_year
+                yyyyjjj.jjj = a_month
+              end
+            else
+                yyyyjjj = a_year
+            yyyymmdd.yyyy = yyyyjjj.yyyy
+            call adjust_mm_for_leap
+            yyyymmdd.mm = 1
+            while (yyjjj.jjj > mm_len[yymmdd.mm])
+            begin
+                yyjjj.jjj -= mm_len[yymmdd.mm]
+                yyyymmdd.mm += 1
+            end
+            yyyymmdd.dd = yyjjj.jjj
+            a_date = ^a(yyyymmdd.mm) + seperator + ^a(yyyymmdd.dd) + seperator + ^a(yyyymmdd.yyyy)
+        end
+        (6),
+        begin
+            ;mm/dd/yyyy from yyyymmdd
+            if(^passed(a_month) && ^passed(a_day)) then
+              begin
+                yyyymmdd.yyyy = a_year
+                yyyymmdd.mm = a_month
+                yyyymmdd.dd = a_day
+              end
+            else
+                yymmdd = a_year
+            a_date = ^a(yyyymmdd.mm) + seperator + ^a(yyyymmdd.dd) + seperator + ^a(yyyymmdd.yyyy)
+        end
+        endusing
+
+        xreturn
+
+;--------------------------------------------------------------------
+
+adjust_mm_for_leap,
+
+        month_len = '312831303130313130313031'
+
+        if((yyyymmdd.yyyy / 4) * 4 == yyyymmdd.yyyy)
+        begin
+            using TRUE select
+            ((yyyymmdd.yyyy / 400) * 400 == yyyymmdd.yyyy),
+                mm_len[2] = 29  ;century year on 400 year boundary (e.g. 2000)
+            ((yyyymmdd.yyyy / 100) * 100 == yyyymmdd.yyyy),
+                nop             ;century year (e.g. 1900, 2100)
+            (),
+                mm_len[2] = 29  ;regular leap year
+            endusing
+        end
+
+        return
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_fmttim
+
+req in      a_type          ,n              ; 1 thru 4
+req         a_time          ,a              ; formatted time
+opt in      a_hour          ,n              ; hour
+opt in      a_min           ,n              ; minute
+opt in      a_sec           ,n              ; second
+opt in      a_justify       ,n              ; D_LEFT
+opt in      a_seperator     ,a              ; time seperator character
+
+endparams
+
+.include 'WND:tkctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+record
+        time_formatted  ,a11
+        group datetime  ,a
+         date            ,d8
+         group time      ,d
+          hour            ,d2
+          min             ,d2
+          sec             ,d2
+         endgroup
+                        ,a6
+        endgroup
+        seperator       ,a1
+
+.align
+record
+        pm              ,i4             ;is afternoon?
+        just            ,i4             ;justification
+        len             ,i4
+        len_time        ,i4
+
+proc
+
+        datetime = %datetime
+
+        if(^passed(a_hour))
+        begin
+            if(^passed(a_min)) then
+            begin
+                hour = a_hour
+                min = a_min
+                if(^passed(a_sec))
+                    sec = a_sec
+            end
+            else
+                time = a_hour
+        end
+
+        if(^passed(a_seperator)) then
+            seperator = a_seperator
+        else
+            seperator = g_time_sep
+
+        clear time_formatted, pm
+
+        using a_type select
+        (1),
+        begin
+            time_formatted = ^a(hour) + seperator + ^a(min)
+        end
+        (2),
+        begin
+            if(hour >= 12)
+            begin
+                pm = 1
+                hour -= 12
+            end
+            time_formatted = ^a(hour) + seperator + ^a(min) + " " + ampm(pm+1)
+        end
+        (3),
+        begin
+            time_formatted = ^a(hour) + seperator + ^a(min) + seperator + ^a(sec)
+        end
+        (4),
+        begin
+            if(hour >= 12)
+            begin
+                pm = 1
+                hour -= 12
+            end
+           time_formatted = ^a(hour) + seperator + ^a(min) + " " + ampm(pm+1)
+        end
+        endusing
+
+        if(^passed(a_justify)) then
+            just = a_justify
+        else
+            just = D_LEFT
+
+        using just select
+        (D_LEFT),
+            a_time = time_formatted
+        (D_RIGHT),
+        begin
+            len_time = ^size(a_time)
+            len = %trim(time_formatted)
+
+            if(len_time >= len) then
+            begin
+                clear a_time
+                a_time(len_time-len+1:len) = time_formatted
+            end
+            else
+                a_time = time_formatted
+        end
+        (),
+            a_time = time_formatted
+        endusing
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_fndfil
+
+opt in      a_filename      ,a              ;
+opt in      a_mode          ,a              ;
+opt         a_channel       ,n              ;
+opt in      a_base_channel  ,n              ;
+opt         a_io_mode       ,a              ;
+
+endparams
+
+.align
+record clr
+        f_io_mode       ,a D_MODE_SIZE          ;I/O mode
+        w_io_mode       ,a D_MODE_SIZE          ;I/O mode
+        file_spec       ,a255                   ;file specification
+        group f         ,a
+         node            ,a255
+         dev             ,a255
+         dir             ,a255
+         name            ,a255
+         ext             ,a30           ;file type
+        endgroup
+        group w         ,a
+         node            ,a255
+         dev             ,a255
+         dir             ,a255
+         name            ,a255
+         ext             ,a30           ;file type
+        endgroup
+
+.align
+record clr_i
+        chan            ,i4             ;channel
+        len             ,i4
+
+proc
+
+        clear clr, ^i(clr_i)
+
+        if(^passed(a_mode))
+        begin
+            w_io_mode = a_mode
+            upcase w_io_mode            ;uppercase mode
+            using w_io_mode select
+            ('SU'),
+                w_io_mode = 'U:I'
+            ('SI'),
+                w_io_mode = 'I:I'
+            endusing
+        end
+
+        ;try opening file, and get the actual filename (deals with DBLCASE)
+        u_open(chan, 'I', a_filename,,, len)
+        if(!len) then
+        begin
+            filnm(chan, file_spec, len)
+            u_close(chan)
+            parse(file_spec, 1, w.node, w.dev, w.dir, w.name, w.ext)
+        end
+        else
+        begin
+            parse(a_filename, 1, w.node, w.dev, w.dir, w.name, w.ext)
+        end
+
+        onerror syn_error
+
+        if(^passed(a_base_channel)) then
+            chan = a_base_channel
+        else
+            chan = 0
+
+        repeat
+        begin
+            chan += 1
+
+            if(%chopen(chan))
+            begin
+                filnm(chan, file_spec, len)
+                parse(file_spec, 1, f.node, f.dev, f.dir, f.name, f.ext)
+
+                if(f.dir == w.dir && f.name == w.name && f.ext == w.ext)
+                begin
+                    if(w_io_mode) then
+                    begin
+                        getfa(chan, 'OPM', f_io_mode)
+                        if(f_io_mode == w_io_mode)
+                            exitloop
+                    end
+                    else
+                        exitloop
+                end
+            end
+
+            if(chan >= 255)
+            begin
+                clear chan
+                exitloop
+            end
+        end
+
+        if(0)
+        begin
+syn_error,
+            clear chan
+        end
+
+        offerror
+
+        a_channel = chan
+
+        if (^passed(a_io_mode))
+            a_io_mode = f_io_mode
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_gblchn
+
+req in      a_chan          ,n          ; channel to promote to global
+
+endparams
+
+external common
+.include 'UTL:utklib.def'
+
+proc
+
+        io[a_chan].environment = -1     ;promote to global status
+                                        ; (environment -1)
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_getchn
+
+req out     a_alloc_chan    ,n          ;
+opt in      a_global        ,n          ;
+opt in      a_req_chan      ,n          ;
+
+endparams
+
+.include 'WND:gblctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record
+        chan            ,i4             ;channel
+
+proc
+
+        clear chan, a_alloc_chan
+
+        if(^passed(a_req_chan) &&
+        &  a_req_chan >= first_channel &&
+        &  a_req_chan <= last_channel)
+        begin
+            if(!io[a_req_chan].filename)
+                chan = a_req_chan
+        end
+
+        if(! chan)
+        begin
+            chan = first_channel
+            while(io[chan].filename && chan <= last_channel)
+                chan += 1
+            if (io[chan].filename)
+                throw_error($ERR_CHNEXC);too many files open
+        end
+
+        a_alloc_chan = chan             ;get a free channel
+
+        clear io[a_alloc_chan]
+
+        io[a_alloc_chan].filename = D_GETCHAN_FILE
+
+        if(^passed(a_global) && a_global) then
+            io[a_alloc_chan].environment = -1
+                                        ;promote to global status
+                                        ; (environment -1)
+        else
+            io[a_alloc_chan].environment = g_env_lvl
+                                        ;environment
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_getfilename ,^val
+
+req out     a_filename      ,a              ;
+req in      a_title         ,a              ;
+opt in      a_num_filters   ,n              ;
+opt in      a_filter_desc   ,a              ;
+opt in      a_filters       ,a              ;
+opt in      a_def_name      ,a              ;
+opt in      a_extension     ,a              ;
+opt in      a_input_column  ,n              ;
+opt in      a_select_column ,n              ;
+opt in      a_list_column   ,n              ;
+opt in      a_help_id       ,a              ;
+opt in      a_option        ,n              ;
+opt in      a_option2       ,n              ;
+opt in      a_option3       ,n              ;
+opt in      a_option4       ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_gettxt
+
+req in      a_facility      ,a              ; facility
+req in      a_text_number   ,n              ; text number
+req out     a_text          ,a              ; text
+opt out     a_text_length   ,n              ; text length
+
+endparams
+
+.align
+record txt_rec
+        group txt_key   ,a
+         txt_fac         ,a3            ;facility
+         txt_num         ,d5            ;number
+        endgroup
+        txt_mnem        ,a9             ;mnemonic
+        txt_type        ,a1             ;type E/W/F
+        txt_text        ,a200           ;text
+
+.align
+record clr_i
+        status          ,i4             ;status
+        chan            ,i4             ;channel
+
+proc
+
+        clear ^i(clr_i)
+
+        a_text = "No Text Available"
+
+        u_open(chan, 'I:I', 'DBLDIR:syntxt',,, status)
+        if (!status)
+        begin
+            txt_fac = a_facility
+            txt_num = a_text_number
+            status = $ERR_KEYNOT
+            read(chan, txt_rec, txt_key) [ERR=read_error]
+            clear status                ;return status
+            a_text = txt_text           ;error text
+read_error,
+            u_close(chan)
+        end
+
+        if (^passed(a_text_length))
+            a_text_length = %trimz(a_text)
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_getwnderr ,^val
+
+opt out      a_text          ,a              ;
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_minversion
+
+opt in      a_min_dtk       ,a              ;
+opt in      a_min_dbr       ,a              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_months
+
+.ifdef DBLv93
+req in      a_months        ,(*)a        ;
+.else
+req in      a_months        ,a           ;
+.endc
+endparams
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record
+        ctr             ,i4
+
+proc
+
+        for ctr from 1 thru 12
+            mths[ctr] = a_months(ctr)
+
+        upcase months
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_parseversion
+
+req in      a_version       ,a              ;
+req out     a_ver           ,n              ;
+req out     a_major_rev     ,n              ;
+req out     a_minor_rev     ,n              ;
+
+endparams
+
+record
+        stpos           ,i4
+        enpos           ,i4
+
+proc
+
+        clear a_ver, a_major_rev, a_minor_rev
+
+        enpos = %instr(1, a_version, '.')
+        if(enpos <= 1)
+            xreturn
+
+        stpos = 1
+        if(enpos > 1)
+            a_ver = a_version(stpos, enpos-1)
+
+        stpos = enpos+1
+        enpos = %instr(stpos, a_version, '.')
+        if(!enpos)
+        begin
+            if(stpos <= ^size(a_version))
+                a_major_rev = a_version(stpos, ^size(a_version))
+            return
+        end
+
+        if(enpos > stpos)
+            a_major_rev = a_version(stpos, enpos-1)
+
+        stpos = enpos + 1
+        if(stpos <= ^size(a_version))
+            a_minor_rev = a_version(stpos, ^size(a_version))
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_printquery ,^val
+
+req in      a_subfunction   ,n              ;
+req out     a_info_rec      ,a              ;
+
+endparams
+
+.align
+record info_rec
+        lpp             ,i4             ;lines per page
+        cpl             ,i4             ;characters per line
+        flags           ,i4             ;flags
+        unused          ,a20
+        printerid       ,a80            ;for pre-7.5 compatibility
+        driver          ,a32            ;printer driver name
+        extprinterid    ,a256           ;extended printer name and port(s)
+
+proc
+
+        throw_error()
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_printsetup ,^val
+
+endparams
+
+proc
+
+        throw_error()
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_rlschn
+
+req inout   a_channel       ,n              ; channel to release
+
+endparams
+
+external common
+.include 'UTL:utklib.def'
+
+proc
+
+        clear io[a_channel]             ;clear data
+
+        if (a_channel >= maxchn)
+        begin                         ;find new maxchn
+            while(maxchn && !io[maxchn].filename)
+                maxchn -= 1
+        end
+
+        onerror wrtlit
+        clear a_channel                 ;clear channel
+wrtlit,
+        offerror
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_version
+
+req out     a_version       ,a              ; version
+
+endparams
+
+proc
+
+        clear a_version
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;Non UI Toolkit routines
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine throw_error
+
+opt in      a_SynError      ,n              ;Synergy error number
+
+endparams
+
+proc
+
+        if(^passed(a_SynError) && a_SynError)
+            exite(a_SynError)
+
+        exite(921) ;$ERR_NETAPI
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine set_state
+
+req in      a_state_save    ,a              ; flags
+
+endparams
+
+.align
+record
+        ctr             ,i4
+
+        group state_save ,a25           ;must match WND:gblctl.def
+         g_flags        ,d10
+         g_dflag        ,d11
+                        ,d4
+        endgroup
+
+proc
+
+        state_save = a_state_save
+
+        for ctr from 1 thru 10
+        begin
+            g_flags(ctr:1) = (g_flags(ctr:1) != 0)
+            g_dflag(ctr:1) = (g_dflag(ctr:1) != 0)
+        end
+        g_dflag(11:1) = (g_dflag(11:1) != 0)
+
+        ;reset flags
+        flags(g_flags, 0)
+
+        ;reset dflag
+        dflag(g_dflag, 0)
+
+
+        state_save = a_state_save
+
+        ;set flags
+        flags(g_flags, 1)
+
+        ;set dflag
+        dflag(g_dflag, 1)
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

@@ -1,0 +1,64 @@
+main
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else ;DBLv9
+    stopStatus = %mainprog()
+.endc ;DBLv9
+    xcall flags(7000000, 1)
+    stop stopStatus
+end
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.include 'WND:tools.def'
+
+    record
+        netID           ,i4
+        xfsp_server     ,a* ,'localhost'
+        xfsp_port       ,i4 ,2356
+        clsid           ,i4
+
+proc
+    xcall u_start
+
+    xcall start_server(netID, xfsp_server, xfsp_port)
+    if(.not.netID)
+        freturn D_EXIT_FAILURE
+
+    call process_list
+
+    xcall stop_server(netID)
+
+    freturn D_EXIT_SUCCESS
+
+process_list,
+
+    ;create custom listclass for the required list
+    xcall l_class(clsid, "xfspClass",,,,,,,,,, 'list_load_method')
+
+    ;process the list with l_select (or other toolkit routine of your choice)
+
+
+    return
+end

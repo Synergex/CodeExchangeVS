@@ -1,0 +1,4663 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+; wtklib.dbl
+;
+; Contains UI toolkit routines that process the User Interface
+;
+; Change History
+;
+; 23-Jun-2000 William Hawkins   Initial version
+; 22-Apr-2010 William Hawkins   Updated routine signatures
+; 23-Jul-2010 William Hawkins   Added l_classinfo
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.if ^variant .ne. 1
+.include 'UTL:utklib.dbl'
+.endc
+
+.ifdef D_VMS
+.define D_RET_STATUS  1
+.endc
+
+.ifndef D_RET_STATUS
+.define D_RET_STATUS  0
+.endc
+
+.define D_FILENAME_SIZE  255                    ;filename size
+.define D_MODE_SIZE      3                      ;I/O mode size
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ax_input
+
+req in      a_tk_container_id   ,n              ;
+opt in      a_help_id           ,a              ;
+opt in      a_wait_time         ,n              ;
+opt in      a_menu_flag         ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;function ax_tkcall ,^val
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function ax_tkcid ,^val
+
+req in      a_tk_container_id   ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function ax_tkctlid ,^val
+
+req in      a_tk_container_id   ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;subroutine ax_tkget
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;function ax_tkgetint ,^val
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;;subroutine ax_tkset
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function ax_tksingle ,^val
+
+req in      a_tk_container_name ,a              ;
+req in      a_rows              ,n              ;
+req in      a_cols              ,n              ;
+req in      a_control_name      ,a              ;
+opt in      a_ocx_filename      ,a              ;
+opt in      a_license_string    ,a              ;
+opt in      a_prefix            ,a              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function ax_tkwin ,^val
+
+req in      a_tk_container_name ,a              ;
+req in      a_rows              ,n              ;
+req in      a_cols              ,n              ;
+opt out     a_ax_container_id   ,n              ;
+opt         a_arg5              ,n              ; undocumented
+
+endparams
+
+proc
+
+        throw_error()
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ax_wantskey, varargs
+
+req in      a_tk_container_id   ,n              ;
+req in      a_key_code          ,n              ;
+opt in      a_mapping_flag      ,n              ;
+opt in      a_key_code2         ,n              ;
+opt in      a_mapping_flag2     ,n              ;
+opt in      a_key_code3         ,n              ;
+opt in      a_mapping_flag3     ,n              ;
+opt in      a_key_code4         ,n              ;
+opt in      a_mapping_flag4     ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function grid_create    ,^val
+
+opt         a_rows              ,n              ;
+opt         a_cols              ,n              ;
+opt         a_license_string    ,a              ;
+opt         a_prefix            ,a              ;
+opt         a_control_name      ,a              ;
+opt         a_ocx_filename      ,a              ;
+
+proc
+
+        throw_error()
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine b_button
+
+req in              a_container_id  ,n          ; container id
+opt in mismatch     a_subfunction   ,n          ; subfunction
+opt in mismatch     a_name          ,n          ; button name
+opt in mismatch     a_arg4          ,n
+opt in              a_arg5          ,a
+opt in              a_arg6          ,a
+opt in              a_arg7          ,a
+opt in mismatch     a_arg8          ,n
+opt in mismatch     a_arg9          ,n
+opt in              a_arg10         ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine b_buttonset
+
+req in        a_container_id  ,n              ;
+opt in        a_placement     ,n              ; button placement
+opt in        a_per_row_col   ,n              ; buttons per col/col
+opt in        a_justification ,n              ; button justification
+opt in        a_button_name   ,a              ; default button
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function b_disable ,^val
+
+req in        a_container_id  ,n              ;
+req in        a_button_name   ,a              ;
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function b_enable ,^val
+
+req in        a_container_id  ,n              ;
+req in        a_button_name   ,a              ; button name
+opt in        a_input_only    ,n              ; enabled for input processing only
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function b_info ,^val ,varargs
+
+req in      a_window_id     ,n              ; window id
+req in      a_subfunction   ,n              ; subfunction
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function c_container ,^val, varargs
+
+req in      a_subfunction   ,n              ;
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine c_process
+
+req in        a_container_id  ,n              ;
+opt           a_method_data1  ,ANY            ; method data
+opt           a_method_data2  ,ANY            ; method data
+opt           a_method_data3  ,ANY            ; method data
+opt           a_method_data4  ,ANY            ; method data
+opt           a_method_data5  ,ANY            ; method data
+opt           a_method_data6  ,ANY            ; method data
+opt           a_method_data7  ,ANY            ; method data
+opt           a_method_data8  ,ANY            ; method data
+opt           a_method_data9  ,ANY            ; method data
+opt           a_method_data10 ,ANY            ; method data
+opt           a_method_data11 ,ANY            ; method data
+opt           a_method_data12 ,ANY            ; method data
+opt           a_method_data13 ,ANY            ; method data
+opt           a_method_data14 ,ANY            ; method data
+opt           a_method_data15 ,ANY            ; method data
+opt           a_method_data16 ,ANY            ; method data
+opt           a_method_data17 ,ANY            ; method data
+opt           a_method_data18 ,ANY            ; method data
+opt           a_method_data19 ,ANY            ; method data
+opt           a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function e_font ,^val
+
+req in        a_section       ,n              ; font section
+opt in        a_font_id       ,n              ; font id
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifdef DBLNET
+
+function e_info ,^val, varargs
+
+req in      a_subfunction   ,n              ; subfunction
+opt in      a_arg2          ,n
+opt mismatch a_arg3         ,(*)a
+opt in      a_arg4          ,n
+
+endparams
+
+.include 'WND:tools.def'
+.include 'WND:gblctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record clr_i
+        fstatus             ,i4     ;return value
+        env_level           ,i4     ;environment level
+        ctr                 ,i4     ;counter
+
+.align
+record clr
+        copy_state          ,a ^size(g_state_save)
+
+proc
+
+        clear ^i(clr_i)
+
+        using a_subfunction select
+        (D_CHANNEL_LEVEL),
+          begin
+            using io[a_arg2].environment select
+            (> 0),
+                fstatus = io[a_arg2].environment
+            (-1),
+                fstatus = D_GLOBAL
+            (< 0), ;already in use before toolkit started
+                fstatus = D_GLOBAL
+            (),
+                fstatus = D_FREE
+            endusing
+          end
+        (D_CHANNEL_MAX),
+          begin
+            freturn last_channel
+          end
+        (D_CHANNELS),
+          begin
+            if(^passed(a_arg4)) then
+                env_level = a_arg4
+            else
+                env_level = D_LOCAL
+
+            ctr = first_channel
+            while(io[ctr].filename && ctr <= last_channel)
+              begin
+                using env_level select
+                (> 0),
+                  begin
+                    if(io[ctr].environment == env_level)
+                      begin
+                        if(^passed(a_arg2) && a_arg2 >= fstatus)
+                            exitloop
+                        fstatus += 1
+                        if(^passed(a_arg3))
+                            a_arg3(fstatus) = io[ctr].filename
+                      end
+                  end
+                (D_ALL),
+                  begin
+                    if(io[ctr].environment != 0)
+                      begin
+                        if(^passed(a_arg2) && a_arg2 >= fstatus)
+                            exitloop
+                        fstatus += 1
+                        if(^passed(a_arg3))
+                            a_arg3(fstatus) = io[ctr].filename
+                      end
+                  end
+                (D_LOCAL),
+                  begin
+                    if(io[ctr].environment > 0)
+                      begin
+                        if(^passed(a_arg2) && a_arg2 >= fstatus)
+                            exitloop
+                        fstatus += 1
+                        if(^passed(a_arg3))
+                            a_arg3(fstatus) = io[ctr].filename
+                      end
+                  end
+                (D_GLOBAL),
+                  begin
+                    if(io[ctr].environment < 0)
+                      begin
+                        if(^passed(a_arg2) && a_arg2 >= fstatus)
+                            exitloop
+                        fstatus += 1
+                        if(^passed(a_arg3))
+                            a_arg3(fstatus) = io[ctr].filename
+                      end
+                  end
+                endusing
+                ctr += 1
+              end
+          end
+        (D_DSP_LEVEL),
+            nop
+        (D_ENV_LEVEL),
+          begin
+            fstatus = g_env_lvl
+          end
+        (D_LIST_LEVEL),
+            nop
+        (D_LISTS),
+            nop
+        (D_MAX_ENV_LEVEL),
+          begin
+            fstatus = g_maxenv
+          end
+        (D_METHOD),
+            nop
+        (D_MONTH_ABBREV),
+          begin
+            if(a_arg2 >= 1 && a_arg2 <= 12)
+              begin
+                a_arg3(1) = mths[a_arg2]
+                fstatus = 1
+              end
+          end
+        (D_MONTH_NUMBER),
+          begin
+            ctr = 12
+            while(ctr && mths[ctr] != ^a(a_arg2))
+                ctr -= 1
+            fstatus = ctr
+          end
+        (D_SECT_ROWS),
+            nop
+        (D_SECT_TEXT),
+            nop
+        (D_STATE),
+          begin
+            if(^passed(a_arg3)) then
+              begin
+                using ^argtype(a_arg3) select
+                (D_TYPE_D),
+                  begin
+                    try
+                        env_level = ^d(%atrim(a_arg3(1)))
+                    catch (ex)
+                        env_level = -1
+                    endtry
+                  end
+                (D_TYPE_I),
+                  begin
+                    try
+                        env_level = %integer(%atrim(a_arg3(1)))
+                    catch (ex)
+                        env_level = -1
+                    endtry
+                  end
+                (),
+                    env_level = -1
+                endusing
+              end
+            else
+                env_level = g_env_lvl
+
+            if(env_level < 0 || env_level > g_env_lvl)
+                throw_error($ERR_SUBSCR) ;Subscript error
+
+            ;save current environment state
+            copy_state = g_state_save
+
+            try
+                g_state_save = ^m(env[env_level+1].state, env_hdl)
+            catch (ex)
+                clear g_state_save
+            endtry
+
+            using a_arg2 select
+            (D_CBADVANCE),
+                fstatus = g_cbadvance
+            (D_CURSOR),
+                fstatus = g_cursor
+            (D_ECHO),
+                fstatus = g_flg_noech
+            (D_EURO),
+                fstatus = g_flg_euro
+            (D_INTR),
+                fstatus = g_flg_noint
+            (D_LOCKWAIT),
+                fstatus = g_dflg_lckwt
+            (D_LOWER),
+                fstatus = g_flg_lcok
+            (D_MSGWAIT),
+                fstatus = g_dflg_msgwt
+            (D_RETURNBTN),
+                fstatus = g_returnbtn
+            (D_VALSTCHG),
+                fstatus = g_valstchg
+            endusing
+
+            g_state_save = copy_state
+          end
+        (D_TOOLBAR_LEVEL),
+            nop
+        (D_TOOLBARS),
+            nop
+        (D_WINDOW_LEVEL),
+            nop
+        (D_WINDOW_TYPE),
+            nop
+        (D_WINDOWS),
+            nop
+        (),
+            nop
+        endusing
+
+        freturn fstatus
+
+endfunction
+
+.else ;DBLNET
+
+function e_info ,^val, varargs
+
+req in      a_subfunction   ,n              ; subfunction
+;opt in mismatch    a_arg2   ,n
+;opt inout mismatch a_arg3   ,(*)a
+;opt in      a_arg4          ,n
+
+endparams
+
+.include 'WND:tools.def'
+.include 'WND:gblctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record clr_i
+        fstatus             ,i4     ;return value
+        env_level           ,i4     ;environment level
+        ctr                 ,i4     ;counter
+
+.align
+record clr
+        copy_state          ,a ^size(g_state_save)
+
+proc
+
+        clear ^i(clr_i)
+
+        using a_subfunction select
+        (D_CHANNEL_LEVEL),
+          begin
+            using io[^argn(2)].environment select
+            (> 0),
+                fstatus = io[^argn(2)].environment
+            (-1),
+                fstatus = D_GLOBAL
+            (< 0), ;already in use before toolkit started
+                fstatus = D_GLOBAL
+            (),
+                fstatus = D_FREE
+            endusing
+          end
+        (D_CHANNEL_MAX),
+          begin
+            freturn last_channel
+          end
+        (D_CHANNELS),
+          begin
+            if(^passed(^argn(4))) then
+                env_level = ^argn(4)
+            else
+                env_level = D_LOCAL
+
+            ctr = first_channel
+            while(io[ctr].filename && ctr <= last_channel)
+              begin
+                using env_level select
+                (> 0),
+                  begin
+                    if(io[ctr].environment == env_level)
+                      begin
+                        if(^passed(^argn(2)) && ^argn(2) >= fstatus)
+                            exitloop
+                        fstatus += 1
+                        if(^passed(^argn(3)))
+                            ^arga(3)(fstatus) = io[ctr].filename
+                      end
+                  end
+                (D_ALL),
+                  begin
+                    if(io[ctr].environment != 0)
+                      begin
+                        if(^passed(^argn(2)) && ^argn(2) >= fstatus)
+                            exitloop
+                        fstatus += 1
+                        if(^passed(^argn(3)))
+                            ^arga(3)(fstatus) = io[ctr].filename
+                      end
+                  end
+                (D_LOCAL),
+                  begin
+                    if(io[ctr].environment > 0)
+                      begin
+                        if(^passed(^argn(2)) && ^argn(2) >= fstatus)
+                            exitloop
+                        fstatus += 1
+                        if(^passed(^argn(3)))
+                            ^arga(3)(fstatus) = io[ctr].filename
+                      end
+                  end
+                (D_GLOBAL),
+                  begin
+                    if(io[ctr].environment < 0)
+                      begin
+                        if(^passed(^argn(2)) && ^argn(2) >= fstatus)
+                            exitloop
+                        fstatus += 1
+                        if(^passed(^argn(3)))
+                            ^arga(3)(fstatus) = io[ctr].filename
+                      end
+                  end
+                endusing
+                ctr += 1
+              end
+          end
+        (D_DSP_LEVEL),
+            nop
+        (D_ENV_LEVEL),
+          begin
+            fstatus = g_env_lvl
+          end
+        (D_LIST_LEVEL),
+            nop
+        (D_LISTS),
+            nop
+        (D_MAX_ENV_LEVEL),
+          begin
+            fstatus = g_maxenv
+          end
+        (D_METHOD),
+            nop
+        (D_MONTH_ABBREV),
+          begin
+            if(^argn(2) >= 1 && ^argn(2) <= 12)
+              begin
+                ^arga(3) = mths[^argn(2)]
+                fstatus = 1
+              end
+          end
+        (D_MONTH_NUMBER),
+          begin
+            ctr = 12
+            while(ctr && mths[ctr] != ^arga(2))
+                ctr -= 1
+            fstatus = ctr
+          end
+        (D_SECT_ROWS),
+            nop
+        (D_SECT_TEXT),
+            nop
+        (D_STATE),
+          begin
+            if(^passed(^argn(3))) then
+              begin
+                if(^argn(3) != D_LOCAL) then
+                    env_level = ^argn(3)
+                else
+                    env_level = g_env_lvl
+              end
+            else
+                env_level = g_env_lvl
+            ;save current environment state
+
+            copy_state = g_state_save
+
+            onerror bad_env_lvl
+            g_state_save = ^m(env[env_level+1].state, env_hdl)
+            if(0)
+              begin
+bad_env_lvl,
+                clear g_state_save
+              end
+            offerror
+
+            using ^argn(2) select
+            (D_CBADVANCE),
+                fstatus = g_cbadvance
+            (D_CURSOR),
+                fstatus = g_cursor
+            (D_ECHO),
+                fstatus = g_flg_noech
+            (D_EURO),
+                fstatus = g_flg_euro
+            (D_INTR),
+                fstatus = g_flg_noint
+            (D_LOCKWAIT),
+                fstatus = g_dflg_lckwt
+            (D_LOWER),
+                fstatus = g_flg_lcok
+            (D_MSGWAIT),
+                fstatus = g_dflg_msgwt
+            (D_RETURNBTN),
+                fstatus = g_returnbtn
+            (D_VALSTCHG),
+                fstatus = g_valstchg
+            endusing
+
+            g_state_save = copy_state
+          end
+        (D_TOOLBAR_LEVEL),
+            nop
+        (D_TOOLBARS),
+            nop
+        (D_WINDOW_LEVEL),
+            nop
+        (D_WINDOW_TYPE),
+            nop
+        (D_WINDOWS),
+            nop
+        (),
+            nop
+        endusing
+
+        freturn fstatus
+
+endfunction
+
+.endc ;DBLNET
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine e_method, varargs
+
+req in              a_method_type       ,n
+opt in mismatch     a_method_name       ,n
+opt in              a_method_type2      ,n
+opt in mismatch     a_method_name2      ,n
+opt in              a_method_type3      ,n
+opt in mismatch     a_method_name3      ,n
+opt in              a_method_type4      ,n
+opt in mismatch     a_method_name4      ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine e_sect, varargs
+
+opt in        a_text          ,a              ; text
+opt in        a_arg2          ,n              ; text flag
+opt in        a_arg3          ,n              ; text flag
+opt in        a_arg4          ,n              ; text flag
+opt in        a_arg5          ,n              ; text flag
+opt in        a_arg6          ,n              ; text flag
+opt in        a_arg7          ,n              ; text flag
+opt in        a_arg8          ,n              ; text flag
+opt in        a_arg9          ,n              ; text flag
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine e_state, varargs
+
+opt in      a_arg1          ,n              ; argument
+opt in      a_arg2          ,n              ; argument
+opt in      a_arg3          ,n              ; argument
+opt in      a_arg4          ,n              ; argument
+opt in      a_arg5          ,n              ; argument
+opt in      a_arg6          ,n              ; argument
+opt in      a_arg7          ,n              ; argument
+opt in      a_arg8          ,n              ; argument
+opt in      a_arg9          ,n              ; argument
+
+endparams
+
+.include 'WND:tools.def'
+.include 'WND:gblctl.def'
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record
+        ctr             ,i4             ;counter
+        stat            ,d1             ;state (on/off)
+
+proc
+
+        ;get current flag settings
+        flags(g_flags, 2)
+        dflag(g_dflag, 2)
+
+        stat = 1                        ;default to D_ON
+
+        for ctr from 1 thru %numargs
+          begin
+            using ^argn(ctr) select
+            (D_ON),
+                stat = 1
+            (D_OFF),
+                stat = 0
+            (D_CBADVANCE),
+                g_cbadvance = stat      ;combo box advance context
+            (D_CURSOR),
+                g_cursor = stat         ;cursor visible (or not)
+            (D_ECHO),
+                g_flg_noech = stat      ;flags 5 no local echo
+            (D_EURO),
+                g_flg_euro = stat       ;flags 1 european formatting
+            (D_INTR),
+                g_flg_noint = stat      ;flags 8 no interupt character
+            (D_LOCKWAIT),
+                g_dflg_lckwt = stat     ;dflag 3 wait if record locked
+            (D_LOWER),
+                g_flg_lcok = stat       ;flags 2 lowercase ok
+            (D_MSGWAIT),
+                g_dflg_msgwt = stat     ;dflag 2 wait for message
+            (D_RETURNBTN),
+                g_returnbtn = stat      ;return activates default button
+            (D_VALSTCHG),
+                g_valstchg = stat       ;value status change immediately
+            endusing
+          end
+
+        ;save current environment state
+        ^m(env[g_env_lvl+1].state, env_hdl) = g_state_save
+
+        set_state(g_state_save)
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_activate, varargs
+
+req in      a_activation    ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_ctrcontext
+
+req in      a_id            ,n          ; id
+opt in      a_set_name      ,a          ; set name
+req in      a_reason        ,a          ; reason
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_disable
+
+req in              a_option        ,n
+opt in mismatch     a_wndid         ,n
+opt in              a_arg3          ,a
+opt in              a_arg4          ,a
+opt in              a_arg5          ,a
+opt in              a_arg6          ,a
+opt in              a_arg7          ,a
+opt in              a_arg8          ,a
+opt in              a_arg9          ,a
+opt in              a_arg10         ,a
+opt in              a_arg11         ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_display
+
+req in        a_window_id     ,n              ;
+opt in        a_set_name      ,a              ;
+req in mismatch a_data_area   ,n              ;
+opt in        a_field_spec1   ,a              ;
+opt in        a_field_spec2   ,a              ;
+opt in        a_field_spec3   ,a              ;
+opt in        a_field_spec4   ,a              ;
+opt in        a_field_spec5   ,a              ;
+opt in        a_field_spec6   ,a              ;
+opt in        a_field_spec7   ,a              ;
+opt in        a_field_spec8   ,a              ;
+opt in        a_field_spec9   ,a              ;
+opt in        a_method_data1  ,ANY            ; method data
+opt in        a_method_data2  ,ANY            ; method data
+opt in        a_method_data3  ,ANY            ; method data
+opt in        a_method_data4  ,ANY            ; method data
+opt in        a_method_data5  ,ANY            ; method data
+opt in        a_method_data6  ,ANY            ; method data
+opt in        a_method_data7  ,ANY            ; method data
+opt in        a_method_data8  ,ANY            ; method data
+opt in        a_method_data9  ,ANY            ; method data
+opt in        a_method_data10 ,ANY            ; method data
+opt in        a_method_data11 ,ANY            ; method data
+opt in        a_method_data12 ,ANY            ; method data
+opt in        a_method_data13 ,ANY            ; method data
+opt in        a_method_data14 ,ANY            ; method data
+opt in        a_method_data15 ,ANY            ; method data
+opt in        a_method_data16 ,ANY            ; method data
+opt in        a_method_data17 ,ANY            ; method data
+opt in        a_method_data18 ,ANY            ; method data
+opt in        a_method_data19 ,ANY            ; method data
+opt in        a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_dsparea
+
+opt         a_window_id     ,n                  ;
+opt         a_row           ,n
+opt         a_col           ,n
+opt         a_rows          ,n
+opt         a_cols          ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_dspfld
+
+req in        a_window_id     ,n              ;
+req in        a_field_name    ,a              ;
+req in mismatch  a_data       ,in             ;
+opt in        a_method_data1  ,ANY            ; method data
+opt in        a_method_data2  ,ANY            ; method data
+opt in        a_method_data3  ,ANY            ; method data
+opt in        a_method_data4  ,ANY            ; method data
+opt in        a_method_data5  ,ANY            ; method data
+opt in        a_method_data6  ,ANY            ; method data
+opt in        a_method_data7  ,ANY            ; method data
+opt in        a_method_data8  ,ANY            ; method data
+opt in        a_method_data9  ,ANY            ; method data
+opt in        a_method_data10 ,ANY            ; method data
+opt in        a_method_data11 ,ANY            ; method data
+opt in        a_method_data12 ,ANY            ; method data
+opt in        a_method_data13 ,ANY            ; method data
+opt in        a_method_data14 ,ANY            ; method data
+opt in        a_method_data15 ,ANY            ; method data
+opt in        a_method_data16 ,ANY            ; method data
+opt in        a_method_data17 ,ANY            ; method data
+opt in        a_method_data18 ,ANY            ; method data
+opt in        a_method_data19 ,ANY            ; method data
+opt in        a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_enable
+
+req in          a_arg1      ,n
+opt in mismatch a_arg2      ,n
+opt in          a_arg3      ,a
+opt in          a_arg4      ,a
+opt in          a_arg5      ,a
+opt in          a_arg6      ,a
+opt in          a_arg7      ,a
+opt in          a_arg8      ,a
+opt in          a_arg9      ,a
+opt in          a_arg10     ,a
+opt in          a_arg11     ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function i_flddim
+
+req in      a_window_id     ,n
+req in      a_field_spec    ,a
+
+endparams
+
+proc
+
+        freturn 1
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_fldinf
+
+req in      a_window_id     ,n
+opt         a_field_spec    ,a
+opt         a_field_number  ,n
+opt         a_empty         ,n
+opt         a_controls      ,a      ;see WND:fldinf.def
+opt         a_selection_id  ,n
+opt         a_enabled       ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_fldmod, varargs
+
+req in      a_window_id     ,n
+req in      a_field_spec    ,a
+opt in      a_length        ,n
+opt in      a_type          ,n
+opt in mismatch a_arg5          ,n
+opt in mismatch a_arg6          ,n
+opt in mismatch a_arg7          ,n
+opt in mismatch a_arg8          ,n
+opt in mismatch a_arg9          ,n
+opt in mismatch a_arg10         ,n
+opt in mismatch a_arg11         ,n
+opt in mismatch a_arg12         ,n
+opt in mismatch a_arg13         ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function i_fldprec ,^val
+
+req in      a_window_id     ,n
+req in      a_field_spec    ,a
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_fldsel
+
+req in      a_window_id     ,n
+req in      a_field_spec    ,a
+opt in      a_selection_id  ,n
+opt in      a_row_offset    ,n
+opt in      a_col_offset    ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function i_fldsize ,^val
+
+req in      a_window_id     ,n
+req in      a_field_spec    ,a
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function i_fldstrpos ,^val
+
+req in      a_window_id     ,n
+req in      a_field_spec    ,a
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_force
+
+opt in mismatch     a_new_data      ,n.
+opt out mismatch    a_old_data      ,n
+
+endparams
+
+proc
+
+        if(^passed(a_old_data))
+            clear a_old_data
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_frames
+
+req in      a_window_id     ,n
+opt in      a_setname       ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_getfld
+
+req in          a_window_id     ,n
+opt in          a_setname       ,a
+req in mismatch a_data_area     ,n
+req in          a_field_spec    ,a
+req out mismatch a_data         ,n
+
+endparams
+
+proc
+
+        using ^argtype(a_data) select
+        (D_TYPE_A),
+            clear ^a(a_data)
+        (),
+            clear a_data
+        endusing
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function i_getstring ,a
+
+req in          a_window_id     ,n
+req in mismatch a_ctrl_pointer  ,n
+opt             a_length        ,n
+
+endparams
+
+proc
+
+        if(^passed(a_length))
+            clear a_length
+
+        freturn " "
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function i_info ,^val
+
+req in      a_window_id     ,n
+req in      a_qualifier     ,n
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_init
+
+req in      a_window_id     ,n
+opt in      a_setname       ,a
+opt inout mismatch  a_data_area     ,n
+opt in      a_fieldname     ,a
+opt in      a_fieldname2    ,a
+opt in      a_fieldname3    ,a
+opt in      a_fieldname4    ,a
+opt in      a_fieldname5    ,a
+opt in      a_fieldname6    ,a
+opt in      a_fieldname7    ,a
+opt in      a_fieldname8    ,a
+opt in      a_fieldname9    ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_inpfld
+
+req in        a_window_id   ,n              ;
+req in        a_field_spec  ,a
+req inout mismatch      a_data_location ,n
+opt in        a_input_colid ,n
+opt in        a_sel_colid   ,n
+opt in        a_txt_colid   ,n
+opt in        a_dec_char    ,n
+opt in        a_reserved    ,n
+opt in        a_method_data1  ,ANY            ; method data
+opt in        a_method_data2  ,ANY            ; method data
+opt in        a_method_data3  ,ANY            ; method data
+opt in        a_method_data4  ,ANY            ; method data
+opt in        a_method_data5  ,ANY            ; method data
+opt in        a_method_data6  ,ANY            ; method data
+opt in        a_method_data7  ,ANY            ; method data
+opt in        a_method_data8  ,ANY            ; method data
+opt in        a_method_data9  ,ANY            ; method data
+opt in        a_method_data10 ,ANY            ; method data
+opt in        a_method_data11 ,ANY            ; method data
+opt in        a_method_data12 ,ANY            ; method data
+opt in        a_method_data13 ,ANY            ; method data
+opt in        a_method_data14 ,ANY            ; method data
+opt in        a_method_data15 ,ANY            ; method data
+opt in        a_method_data16 ,ANY            ; method data
+opt in        a_method_data17 ,ANY            ; method data
+opt in        a_method_data18 ,ANY            ; method data
+opt in        a_method_data19 ,ANY            ; method data
+opt in        a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_input
+
+req in        a_window_id           ,n      ;
+opt in        a_setname             ,a
+req inout mismatch    a_data_area   ,n
+opt in        a_input_colid         ,n
+opt in        a_sel_colid           ,n
+opt in        a_txt_colid           ,n
+opt in        a_no_termination      ,n
+opt in        a_dec_char            ,n
+opt in        a_reserved            ,n
+opt in        a_method_data1  ,ANY            ; method data
+opt in        a_method_data2  ,ANY            ; method data
+opt in        a_method_data3  ,ANY            ; method data
+opt in        a_method_data4  ,ANY            ; method data
+opt in        a_method_data5  ,ANY            ; method data
+opt in        a_method_data6  ,ANY            ; method data
+opt in        a_method_data7  ,ANY            ; method data
+opt in        a_method_data8  ,ANY            ; method data
+opt in        a_method_data9  ,ANY            ; method data
+opt in        a_method_data10 ,ANY            ; method data
+opt in        a_method_data11 ,ANY            ; method data
+opt in        a_method_data12 ,ANY            ; method data
+opt in        a_method_data13 ,ANY            ; method data
+opt in        a_method_data14 ,ANY            ; method data
+opt in        a_method_data15 ,ANY            ; method data
+opt in        a_method_data16 ,ANY            ; method data
+opt in        a_method_data17 ,ANY            ; method data
+opt in        a_method_data18 ,ANY            ; method data
+opt in        a_method_data19 ,ANY            ; method data
+opt in        a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_ldinp
+
+req           a_window_id     ,n              ;
+opt in        a_channel       ,n              ;
+req in        a_window_name   ,a              ;
+opt in        a_no_placement  ,n              ;
+opt           a_search        ,n              ;
+opt           a_error         ,n              ;
+opt           a_saved_name    ,a              ;
+
+endparams
+
+proc
+
+        clear a_window_id
+
+        if(^passed(a_search))
+            clear a_search
+
+        if(^passed(a_error)) then
+            a_error = $ERR_EOF
+        else
+            throw_error($ERR_EOF)
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_next
+
+req in      a_window_id     ,n
+opt in      a_setname       ,a
+opt in      a_field_spec    ,a
+opt mismatch    a_arg4      ,n          ;undocumented
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_prompt
+
+req in      a_window_id     ,n
+req in      a_field_spec    ,a
+req in      a_prompt        ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_putfld
+
+req in              a_window_id     ,n
+opt in              a_setname       ,a
+req out mismatch    a_data_area     ,n
+req in              a_field_spec    ,a
+req in mismatch     a_data          ,in
+
+opt in        a_method_data1  ,ANY            ; method data
+opt in        a_method_data2  ,ANY            ; method data
+opt in        a_method_data3  ,ANY            ; method data
+opt in        a_method_data4  ,ANY            ; method data
+opt in        a_method_data5  ,ANY            ; method data
+opt in        a_method_data6  ,ANY            ; method data
+opt in        a_method_data7  ,ANY            ; method data
+opt in        a_method_data8  ,ANY            ; method data
+opt in        a_method_data9  ,ANY            ; method data
+opt in        a_method_data10 ,ANY            ; method data
+opt in        a_method_data11 ,ANY            ; method data
+opt in        a_method_data12 ,ANY            ; method data
+opt in        a_method_data13 ,ANY            ; method data
+opt in        a_method_data14 ,ANY            ; method data
+opt in        a_method_data15 ,ANY            ; method data
+opt in        a_method_data16 ,ANY            ; method data
+opt in        a_method_data17 ,ANY            ; method data
+opt in        a_method_data18 ,ANY            ; method data
+opt in        a_method_data19 ,ANY            ; method data
+opt in        a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_readonly, varargs
+
+opt in          a_operation     ,n
+opt in mismatch a_subfunction   ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_setdel
+
+req in      a_window_id     ,n
+req in      a_setname       ,a
+req in      a_field_name_1  ,a
+opt in      a_field_name_2  ,a
+opt in      a_field_name_3  ,a
+opt in      a_field_name_4  ,a
+opt in      a_field_name_5  ,a
+opt in      a_field_name_6  ,a
+opt in      a_field_name_7  ,a
+opt in      a_field_name_8  ,a
+opt in      a_field_name_9  ,a
+opt out     a_status        ,n
+
+endparams
+
+proc
+
+        if(^passed(a_status))
+            clear a_status
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_setinf
+
+req in      a_window_id     ,n
+opt         a_setname       ,a
+opt         a_set_number    ,n
+opt         a_next_field    ,n
+opt         a_set_ctrls     ,a
+opt         a_state         ,n
+
+endparams
+
+proc
+
+        if(^passed(a_next_field))
+            clear a_next_field
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_snapshot
+
+req in      a_operation     ,n
+req in      a_window_id     ,n
+opt         a_snapshot      ,a
+opt         a_length        ,n
+opt         a_data          ,a
+
+opt in        a_method_data1  ,ANY            ; method data
+opt in        a_method_data2  ,ANY            ; method data
+opt in        a_method_data3  ,ANY            ; method data
+opt in        a_method_data4  ,ANY            ; method data
+opt in        a_method_data5  ,ANY            ; method data
+opt in        a_method_data6  ,ANY            ; method data
+opt in        a_method_data7  ,ANY            ; method data
+opt in        a_method_data8  ,ANY            ; method data
+opt in        a_method_data9  ,ANY            ; method data
+opt in        a_method_data10 ,ANY            ; method data
+opt in        a_method_data11 ,ANY            ; method data
+opt in        a_method_data12 ,ANY            ; method data
+opt in        a_method_data13 ,ANY            ; method data
+opt in        a_method_data14 ,ANY            ; method data
+opt in        a_method_data15 ,ANY            ; method data
+opt in        a_method_data16 ,ANY            ; method data
+opt in        a_method_data17 ,ANY            ; method data
+opt in        a_method_data18 ,ANY            ; method data
+opt in        a_method_data19 ,ANY            ; method data
+opt in        a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_txtpos
+
+req in      a_window_id     ,n
+req in      a_field_spec    ,a
+req in      a_type          ,n
+opt in      a_row           ,n
+opt in      a_col           ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine i_user
+
+req in      a_window_id     ,n
+req in      a_field_spec    ,a
+opt         a_data          ,a
+opt         a_new_data      ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_button
+
+req in      a_build_id      ,n
+req in      a_button_name   ,a
+opt in      a_type          ,n
+opt in      a_type_data     ,a
+opt in      a_button_method ,a
+opt in      a_method_elb    ,a
+opt in      a_select_char   ,a
+opt in mismatch a_arg8      ,n          ;undocumented
+opt in      a_arg9          ,a          ;undocumented
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_buttonset
+
+req in      a_build_id      ,n
+opt in      a_placement     ,n
+opt in      a_per_row_col   ,n
+opt in      a_justification ,n
+opt in      a_default_buttton ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_dsp_area
+
+req in      a_build_id      ,n
+req in      a_row           ,n
+req in      a_col           ,n
+req in      a_rows          ,n
+req in      a_cols          ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_end
+
+req in      a_build_id      ,n
+req out     a_window_id     ,n
+opt         a_chan          ,n
+opt         a_no_load       ,n
+
+endparams
+
+proc
+
+        clear a_window_id
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_field ,varargs
+
+req in      a_build_id      ,n
+req in      a_field_spec    ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_input
+
+req out     a_build_id      ,n
+req in      a_window_name   ,a
+req in      a_rows          ,n
+req in      a_cols          ,n
+opt in      a_no_log        ,n
+opt out     a_window_id     ,n
+opt in      a_arg7          ,n          ;undocumented
+
+endparams
+
+proc
+
+        clear a_build_id
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_local
+
+req in      a_build_id      ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_paint
+
+req in      a_build_id      ,n
+req in      a_paint_char    ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_rps_structure
+
+req in      a_build_id      ,n
+req in      a_rps_structure ,a
+opt in      a_rpsmfil       ,a
+opt in      a_rpstfil       ,a
+opt in      a_alias_name    ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_set
+
+req in      a_build_id      ,n
+req in      a_set_name      ,a
+opt in      a_structure_name,a
+opt in      a_num_flds      ,n
+opt in      a_fields        ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine ib_structure
+
+opt         a_build_id      ,n
+opt         a_structure_name,a
+opt         a_num_flds      ,n
+opt         a_fields        ,a
+opt         a_pos           ,n
+opt         a_offset        ,a
+opt         a_arg7          ,n          ;undocumented
+opt         a_arg8          ,n          ;undocumented
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_border, varargs
+
+req in      a_list_id       ,n
+opt in      a_subfunction   ,n
+opt in      a_name          ,n
+opt in      a_args          ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_button
+
+req in      a_list_id       ,n
+opt in mismatch a_arg2      ,n
+opt in mismatch a_arg3      ,n
+opt in mismatch a_arg4      ,n
+opt         a_arg5          ,a
+opt         a_arg6          ,a
+opt         a_arg7          ,a
+opt in mismatch a_arg8      ,n
+opt in mismatch a_arg9      ,n
+opt in      a_arg10         ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_buttonset
+
+req in      a_list_id       ,n
+opt in      a_placement     ,n
+opt in      a_per_row_col   ,n
+opt in      a_justification ,n
+opt in      a_button_name   ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function l_buttonstate ,^val
+
+req in      a_list_id       ,n
+req in      a_name          ,a
+opt in      a_new_state     ,n
+
+endparams
+
+proc
+
+        freturn 1
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_chr
+
+req out     a_char          ,a
+req in      a_list_id       ,n
+opt in      a_list_data     ,a
+opt in      a_disabled      ,n
+opt in      a_row           ,n
+opt in      a_col           ,n
+opt in      a_helpid        ,a
+opt in      a_wait_time     ,n
+
+opt in      a_method_data1  ,ANY            ; method data
+opt in      a_method_data2  ,ANY            ; method data
+opt in      a_method_data3  ,ANY            ; method data
+opt in      a_method_data4  ,ANY            ; method data
+opt in      a_method_data5  ,ANY            ; method data
+opt in      a_method_data6  ,ANY            ; method data
+opt in      a_method_data7  ,ANY            ; method data
+opt in      a_method_data8  ,ANY            ; method data
+opt in      a_method_data9  ,ANY            ; method data
+opt in      a_method_data10 ,ANY            ; method data
+opt in      a_method_data11 ,ANY            ; method data
+opt in      a_method_data12 ,ANY            ; method data
+opt in      a_method_data13 ,ANY            ; method data
+opt in      a_method_data14 ,ANY            ; method data
+opt in      a_method_data15 ,ANY            ; method data
+opt in      a_method_data16 ,ANY            ; method data
+opt in      a_method_data17 ,ANY            ; method data
+opt in      a_method_data18 ,ANY            ; method data
+opt in      a_method_data19 ,ANY            ; method data
+opt in      a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_class
+
+req out     a_class_id      ,n
+req in      a_class_name    ,a
+opt in      a_row           ,n
+opt in      a_col           ,n
+opt in      a_rows          ,n
+opt in      a_num_hdrs      ,n
+opt in      a_hdr_static    ,n
+opt in      a_num_ftrs      ,n
+opt in      a_ftr_static    ,n
+opt in      a_nonull        ,n
+opt in      a_snapshot      ,n
+opt in      a_load_method   ,a
+opt in      a_options       ,a
+opt         a_error         ,n
+opt in      a_arrive_method ,a
+opt in      a_leave_method  ,a
+opt in      a_dblclk_method ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_create
+
+req out     a_list_id       ,n
+req in      a_window_id     ,n
+opt mismatch a_list_data    ,n
+opt in      a_channel       ,n
+opt in      a_class         ,a
+opt in      a_row           ,n
+opt in      a_col           ,n
+opt in      a_no_placement  ,n
+opt in      a_disabled      ,n
+opt in      a_initial       ,n
+opt in      a_last          ,n
+opt         a_error         ,n
+
+endparams
+
+proc
+
+        clear a_list_id
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function l_classinfo    ,^val
+
+req in      a_list_id       ,n
+req in      a_info_type     ,n
+opt mismatch    a_arg3      ,n
+opt mismatch    a_arg4      ,n
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_ctrcontext
+
+req in      a_list_id       ,n
+req in      a_reason        ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_data
+
+req in      a_list_id       ,n
+req in      a_request       ,n
+req in      a_window_id     ,n
+opt         a_list_data     ,a
+opt         a_disabled      ,n
+req out     a_no_find       ,n
+
+opt in      a_method_data1  ,ANY            ; method data
+opt in      a_method_data2  ,ANY            ; method data
+opt in      a_method_data3  ,ANY            ; method data
+opt in      a_method_data4  ,ANY            ; method data
+opt in      a_method_data5  ,ANY            ; method data
+opt in      a_method_data6  ,ANY            ; method data
+opt in      a_method_data7  ,ANY            ; method data
+opt in      a_method_data8  ,ANY            ; method data
+opt in      a_method_data9  ,ANY            ; method data
+opt in      a_method_data10 ,ANY            ; method data
+opt in      a_method_data11 ,ANY            ; method data
+opt in      a_method_data12 ,ANY            ; method data
+opt in      a_method_data13 ,ANY            ; method data
+opt in      a_method_data14 ,ANY            ; method data
+opt in      a_method_data15 ,ANY            ; method data
+opt in      a_method_data16 ,ANY            ; method data
+opt in      a_method_data17 ,ANY            ; method data
+opt in      a_method_data18 ,ANY            ; method data
+opt in      a_method_data19 ,ANY            ; method data
+opt in      a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_delete
+
+req         a_list_id       ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_disable
+
+req in      a_list_id       ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_enable
+
+req in      a_list_id       ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_findspec
+
+req in      a_list_id       ,n
+opt in      a_string        ,a
+opt in      a_col           ,n
+opt in      a_length        ,n
+opt in      a_direction     ,n
+opt in      a_case          ,n
+opt in      a_type          ,n
+opt in      a_current       ,n
+opt in      a_wrap          ,n
+opt in      a_findsource    ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function l_findwnd ,^val
+
+req in      a_list_id       ,n
+req in      a_window_name   ,a
+req in      a_field_name    ,a
+opt in      a_prompt        ,a
+opt         a_search        ,n
+opt in      a_nofindspec    ,n
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_global
+
+req in      a_list_id       ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function l_icon ,^val
+
+req in      a_list_id       ,n
+req in      a_filename      ,a
+opt in      a_index         ,n
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_inpfld
+
+req in      a_list_id       ,n
+req in      a_field_name    ,a
+req inout mismatch a_field  ,n
+opt inout   a_list_data     ,a
+opt in      a_disabled      ,n
+opt in      a_inp_colid     ,n
+opt in      a_sel_colid     ,n
+opt in      a_edt_colid     ,n
+opt in      a_init_char     ,n
+
+opt in      a_method_data1  ,ANY            ; method data
+opt in      a_method_data2  ,ANY            ; method data
+opt in      a_method_data3  ,ANY            ; method data
+opt in      a_method_data4  ,ANY            ; method data
+opt in      a_method_data5  ,ANY            ; method data
+opt in      a_method_data6  ,ANY            ; method data
+opt in      a_method_data7  ,ANY            ; method data
+opt in      a_method_data8  ,ANY            ; method data
+opt in      a_method_data9  ,ANY            ; method data
+opt in      a_method_data10 ,ANY            ; method data
+opt in      a_method_data11 ,ANY            ; method data
+opt in      a_method_data12 ,ANY            ; method data
+opt in      a_method_data13 ,ANY            ; method data
+opt in      a_method_data14 ,ANY            ; method data
+opt in      a_method_data15 ,ANY            ; method data
+opt in      a_method_data16 ,ANY            ; method data
+opt in      a_method_data17 ,ANY            ; method data
+opt in      a_method_data18 ,ANY            ; method data
+opt in      a_method_data19 ,ANY            ; method data
+opt in      a_method_data20 ,ANY            ; method data
+opt         a_arg30         ,n              ;undocumented
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_input
+
+req in      a_list_id       ,n
+opt in      a_setname       ,a
+req in mismatch a_record    ,n
+opt inout   a_list_data     ,a
+opt in      a_disabled      ,n
+opt in      a_inp_colid     ,n
+opt in      a_sel_colid     ,n
+opt in      a_edt_colid     ,n
+opt in      a_no_termination,n
+opt in      a_init_char     ,n
+opt in      a_reserved      ,n
+
+opt in      a_method_data1  ,ANY            ; method data
+opt in      a_method_data2  ,ANY            ; method data
+opt in      a_method_data3  ,ANY            ; method data
+opt in      a_method_data4  ,ANY            ; method data
+opt in      a_method_data5  ,ANY            ; method data
+opt in      a_method_data6  ,ANY            ; method data
+opt in      a_method_data7  ,ANY            ; method data
+opt in      a_method_data8  ,ANY            ; method data
+opt in      a_method_data9  ,ANY            ; method data
+opt in      a_method_data10 ,ANY            ; method data
+opt in      a_method_data11 ,ANY            ; method data
+opt in      a_method_data12 ,ANY            ; method data
+opt in      a_method_data13 ,ANY            ; method data
+opt in      a_method_data14 ,ANY            ; method data
+opt in      a_method_data15 ,ANY            ; method data
+opt in      a_method_data16 ,ANY            ; method data
+opt in      a_method_data17 ,ANY            ; method data
+opt in      a_method_data18 ,ANY            ; method data
+opt in      a_method_data19 ,ANY            ; method data
+opt in      a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_method ,varargs
+
+req in          a_list_id   ,n
+req in          a_event     ,n
+opt in mismatch a_method    ,n
+opt in          a_event2    ,n
+opt in mismatch a_method2   ,n
+opt in          a_event3    ,n
+opt in mismatch a_method3   ,n
+opt in          a_event4    ,n
+opt in mismatch a_method4   ,n
+opt in          a_event5    ,n
+opt in mismatch a_method5   ,n
+opt in          a_event6    ,n
+opt in mismatch a_method6   ,n
+opt in          a_event7    ,n
+opt in mismatch a_method7   ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_next
+
+req in      a_list_id       ,n
+req in      a_next_item     ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_place
+
+req in      a_list_id       ,n
+opt in      a_row           ,n
+opt in      a_col           ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_process
+
+req in      a_list_id       ,n
+req         a_request       ,n
+opt mismatch    a_list_data     ,n
+opt         a_disabled      ,n
+
+opt in      a_method_data1  ,ANY            ; method data
+opt in      a_method_data2  ,ANY            ; method data
+opt in      a_method_data3  ,ANY            ; method data
+opt in      a_method_data4  ,ANY            ; method data
+opt in      a_method_data5  ,ANY            ; method data
+opt in      a_method_data6  ,ANY            ; method data
+opt in      a_method_data7  ,ANY            ; method data
+opt in      a_method_data8  ,ANY            ; method data
+opt in      a_method_data9  ,ANY            ; method data
+opt in      a_method_data10 ,ANY            ; method data
+opt in      a_method_data11 ,ANY            ; method data
+opt in      a_method_data12 ,ANY            ; method data
+opt in      a_method_data13 ,ANY            ; method data
+opt in      a_method_data14 ,ANY            ; method data
+opt in      a_method_data15 ,ANY            ; method data
+opt in      a_method_data16 ,ANY            ; method data
+opt in      a_method_data17 ,ANY            ; method data
+opt in      a_method_data18 ,ANY            ; method data
+opt in      a_method_data19 ,ANY            ; method data
+opt in      a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        a_request = D_LABORT
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_queue, varargs
+
+req in      a_list_id       ,n
+opt in      a_request       ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_remove
+
+req in      a_list_id       ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_resize
+
+req in      a_list_id       ,n
+opt in      a_rows          ,n
+opt in      a_cols          ,n
+opt in      a_arg4          ,n  ;undocumented
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_restart
+
+req in      a_list_id       ,n
+opt in      a_initial       ,n
+opt in      a_last          ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_returnkey, varargs
+
+req in      a_list_id       ,n
+opt in      a_key_code      ,n
+opt in      a_return        ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_sect, varargs
+
+req in      a_list_id       ,n
+opt in      a_text          ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_sectdraw
+
+req in      a_list_id       ,n
+req in      a_section       ,n
+opt in      a_direction     ,n
+req in      a_row           ,n
+req in      a_col           ,n
+req in      a_length        ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_select
+
+req in      a_list_id       ,n
+req         a_request       ,n
+opt mismatch    a_list_data     ,n
+opt in      a_disabled      ,n
+opt in      a_skip_disabled ,n
+opt in      a_find_prompt   ,a
+opt in      a_find_length   ,n
+opt         a_char          ,n
+opt in      a_sel_colid     ,n
+opt in      a_help_id       ,a
+opt in      a_pre_input_routine ,a
+opt in      a_find_window_id    ,n
+opt in      a_filndinit     ,n
+opt in      a_find_colid    ,n
+opt in      a_wait_time     ,n
+
+opt in      a_method_data1  ,ANY            ; method data
+opt in      a_method_data2  ,ANY            ; method data
+opt in      a_method_data3  ,ANY            ; method data
+opt in      a_method_data4  ,ANY            ; method data
+opt in      a_method_data5  ,ANY            ; method data
+opt in      a_method_data6  ,ANY            ; method data
+opt in      a_method_data7  ,ANY            ; method data
+opt in      a_method_data8  ,ANY            ; method data
+opt in      a_method_data9  ,ANY            ; method data
+opt in      a_method_data10 ,ANY            ; method data
+opt in      a_method_data11 ,ANY            ; method data
+opt in      a_method_data12 ,ANY            ; method data
+opt in      a_method_data13 ,ANY            ; method data
+opt in      a_method_data14 ,ANY            ; method data
+opt in      a_method_data15 ,ANY            ; method data
+opt in      a_method_data16 ,ANY            ; method data
+opt in      a_method_data17 ,ANY            ; method data
+opt in      a_method_data18 ,ANY            ; method data
+opt in      a_method_data19 ,ANY            ; method data
+opt in      a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function l_selstyle ,^val
+
+req in      a_list_id       ,n
+opt in      a_style         ,n
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_state
+
+req in      a_list_id       ,n
+req in      a_flags         ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_status ,varargs
+
+req in      a_list_id       ,n
+opt in      a_status_option ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function l_user ,^val
+
+req in      a_list_id       ,n
+req in      a_function      ,n
+req         a_data          ,a
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine l_view
+
+req in      a_list_id       ,n
+req in      a_column        ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_column, varargs
+
+req in        a_operation     ,n              ; menu column operation
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_defcol
+
+opt in mismatch  a_default  ,n              ; menu column
+opt out mismatch a_current  ,n              ; menu column
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_disable
+
+req in        a_operation     ,n              ; menu column operation
+req in mismatch    a_arg2     ,n              ;
+opt in mismatch    a_arg3     ,n              ;
+opt in mismatch    a_arg4     ,n              ;
+opt in mismatch    a_arg5     ,n              ;
+opt in mismatch    a_arg6     ,n              ;
+opt in mismatch    a_arg7     ,n              ;
+opt in mismatch    a_arg8     ,n              ;
+opt in mismatch    a_arg9     ,n              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_enable
+
+req in        a_operation     ,n              ; menu column operation
+req in mismatch    a_arg2     ,n              ;
+opt in mismatch    a_arg3     ,n              ;
+opt in mismatch    a_arg4     ,n              ;
+opt in mismatch    a_arg5     ,n              ;
+opt in mismatch    a_arg6     ,n              ;
+opt in mismatch    a_arg7     ,n              ;
+opt in mismatch    a_arg8     ,n              ;
+opt in mismatch    a_arg9     ,n              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function m_info ,^val
+
+req in        a_operation     ,n              ; menu column operation
+req in mismatch    a_arg2     ,n              ;
+opt mismatch       a_arg3     ,n              ;
+opt mismatch       a_arg4     ,n              ;
+opt mismatch       a_arg5     ,n              ;
+opt mismatch       a_arg6     ,n              ;
+opt mismatch       a_arg7     ,n              ;
+opt mismatch       a_arg8     ,n              ;
+opt mismatch       a_arg9     ,n              ;
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_keytxt
+
+req in        a_function_code ,n              ; function code
+req out       a_text          ,a              ; text
+opt out       a_length        ,n              ; length
+
+endparams
+
+proc
+
+        a_text = "Unknown"
+
+        if (^passed(a_length))
+            a_length = %trimz(a_text)
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_ldcol
+
+req out       a_col_id        ,n              ; column id
+opt in        a_chan          ,n              ; channel
+req in        a_column_name   ,a              ; column name
+opt in        a_no_placement  ,n              ; do not place
+opt inout     a_search        ,n              ; search and found
+opt out       a_error         ,n              ; error
+opt in        a_global        ,n              ; global flag
+opt in        a_saved_name    ,a              ; saved name
+
+endparams
+
+proc
+
+        clear a_col_id
+
+        if(^passed(a_error)) then
+            a_error = $ERR_EOF                ;Error  - End Of File
+        else
+            throw_error($ERR_EOF)
+
+        if(^passed(a_search))
+            a_search = 0
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function m_popup ,^val
+
+req in        a_col_id        ,n              ; column id
+opt in        a_coord_flags   ,n              ;
+opt in        a_coord_1       ,n              ;
+opt in        a_coord_2       ,n              ;
+opt in        a_wnd_id        ,n              ;
+opt in        a_input_string  ,a              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_process
+
+opt in        a_input_string  ,a              ;
+opt in        a_help_id       ,a              ;
+opt in        a_wait_time     ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_reset
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_rplent
+
+req inout     a_string        ,a              ; field(s) to be modified
+opt out       a_length        ,n              ; length of menu entries
+opt out       a_not_found     ,n              ; how many entries not found
+
+endparams
+
+proc
+
+        if(^passed(a_length))
+            a_length = 0
+
+        if(^passed(a_not_found))
+            a_not_found = 1
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_scinfo
+
+req in        a_operation     ,n              ; menu column operation
+req           a_shortcut      ,a              ; array of shortcut text
+req           a_entry         ,a              ; array of entry names
+opt           a_number        ,n              ; number of entries
+opt           a_text          ,a              ; array of text
+
+endparams
+
+proc
+
+        clear a_number
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function m_signal ,^val
+
+req           a_menu_signal   ,a              ; menu entry to signal
+opt in        a_operation     ,n              ;
+opt in        a_nouc          ,n              ; undocumented
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function m_text ,^val
+
+req in        a_col_id        ,n              ; menu entry to signal
+req in mismatch   a_entry     ,n              ; entry name (or row number)
+opt in        a_new_text      ,a              ; new menu entry text
+opt out       a_old_text      ,a              ; old menu entry text
+opt in        a_quick_select  ,a              ; new menu quick select character
+
+endparams
+
+proc
+
+        if(^passed(a_old_text))
+            clear a_old_text
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine m_user
+
+req in        a_entry         ,a              ; menu entry
+req out       a_user          ,a              ; user string
+
+endparams
+
+proc
+
+        clear a_user
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine mb_blank
+
+req inout   a_control       ,a              ; menu control string
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine mb_column
+
+req inout   a_control       ,a              ; menu control string
+req in      a_column_name   ,a              ;
+req in      a_column_text   ,a              ;
+opt in      a_global        ,n
+opt in      a_options       ,n
+opt in      a_disabled      ,n
+opt in      a_justification ,n
+opt in      a_quick_select  ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine mb_end
+
+req inout   a_control       ,a              ; menu control string
+req out     a_column_id     ,n              ; menu column id
+
+endparams
+
+proc
+
+        clear a_column_id
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine mb_entry
+
+req inout   a_control       ,a              ; menu control string
+req in      a_menu_entry    ,a              ;
+req in      a_text          ,a              ;
+opt in      a_shortcut      ,n              ;
+opt in      a_shortcut_text ,a              ;
+opt in      a_quick_select  ,a              ;
+opt in      a_justification ,n              ;
+opt in      a_disabled      ,n              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine mb_line
+
+req inout   a_control       ,a              ; menu control string
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine mb_list, varargs
+
+req inout   a_control       ,a              ; menu control string
+req in      a_list_name     ,a              ; list name
+req in      a_num_entries   ,n              ; number of entries
+req in      a_entry1        ,a              ; entry name
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine mb_text
+
+req inout   a_control       ,a              ; menu control string
+req in      a_text          ,a              ; menu text
+opt in      a_justification ,n              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine dotnet_tkaddctl
+
+.ifndef DBLNET
+req in      a_window_id     ,n
+req in      a_object        ,@DotNetObject
+opt in      a_flags         ,n
+.else ;DBLNET
+req in      a_window_id     ,n
+req in      a_object        ,@Object
+opt in      a_flags         ,n
+.endc ;DBLNET
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine dotnet_tkinput
+
+req in      a_window_id     ,n
+opt in      a_help_id       ,a
+opt in      a_wait_time     ,n
+opt in      a_menu_flag     ,n
+opt in      a_focus         ,n
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine dotnet_tkform
+
+.ifndef DBLNET
+req in      a_window_id     ,n
+req in      a_form          ,@DotNetObject
+.else ;DBLNET
+req in      a_window_id     ,n
+req in      a_form          ,@Object
+.endc ;DBLNET
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function dotnet_tkwin ,i
+
+.ifndef DBLNET
+req in      a_window_id     ,n
+req in      a_height        ,n
+req in      a_width         ,n
+req in      a_object        ,@DotNetObject
+opt in      a_flags         ,n
+.else ;DBLNET
+req in      a_window_id     ,n
+req in      a_height        ,n
+req in      a_width         ,n
+req in      a_object        ,@Object
+opt in      a_flags         ,n
+.endc ;DBLNET
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine s_selbld
+
+req           a_window_id     ,n              ; window id
+req in        a_window_name   ,a              ; window name
+req in        a_fields        ,n              ; number of fields
+req in        a_rows          ,n              ; number of rows per column
+req in        a_array_data    ,a              ; array of data
+opt in        a_type          ,n              ; array of entry types
+opt in        a_quick_select  ,a              ; array of entry quick select chars
+opt in        a_width         ,n              ; width of each column
+opt in        a_default_entry ,n              ; default entry number
+opt in        a_nopad         ,n              ; no space padding
+
+endparams
+
+proc
+
+        clear a_window_id
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine s_seldflt
+
+req in        a_window_id     ,n              ; window id
+opt in        a_default_entry ,n              ; default entry number
+opt           a_current_default ,n            ; current default
+
+endparams
+
+proc
+
+        if(^passed(a_current_default))
+            a_current_default = 1
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine s_select
+
+req in        a_window_id     ,n              ; window id
+opt in        a_initial_field ,n              ; number of initial field
+opt           a_field_data    ,a              ; selected field
+opt in        a_select_column ,n              ; selection column id
+opt           a_selected_field,n              ; selected field number
+opt in        a_help_id       ,a              ; help id
+opt in        a_wait_time     ,n              ; wait time
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine s_selectcb
+
+req in        a_window_id     ,n              ; window id
+req in        a_field_data    ,n              ; array of boolean flags
+opt           a_current_item  ,n              ; current item
+opt           a_select_column ,n              ; selection column id
+opt in        a_help_id       ,a              ; help id
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine s_selinf
+
+req in        a_window_id     ,n              ; window id
+req           a_entry_number  ,n              ; entry number
+req           a_entry_text    ,a              ; text
+opt           a_fields        ,n              ; number of fields
+opt in        a_numeric       ,n              ; entry text is numeric
+
+endparams
+
+proc
+
+        if(^passed(a_numeric) && a_numeric) then
+            clear ^d(a_entry_text)
+        else
+            clear a_entry_text
+
+        if(^passed(a_fields))
+            clear a_fields
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine s_selld
+
+req in        a_window_id     ,n              ; window id
+req in        a_array_data    ,a              ; array of data
+opt in        a_fields        ,n              ; number of fields
+opt in        a_first_entry   ,n              ; first field to load
+opt in        a_quick_select  ,a              ; array of entry quick select chars
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine s_updatecb
+
+req in        a_window_id     ,n              ; window id
+req in        a_num_flags     ,n              ; number of flags in array
+req in        a_field_data    ,n              ; array of boolean flags
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine t_edit
+
+req in      a_window_id     ,n              ; window id
+opt inout   a_row           ,n
+opt inout   a_column        ,n
+opt inout   a_insert        ,n
+opt inout   a_direction     ,n
+opt in      a_case          ,n
+opt in      a_colid1        ,n
+opt in      a_colid2        ,n
+opt in      a_colid3        ,n
+opt in      a_helpid        ,a
+opt inout   a_dec_value     ,n
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine t_getlin
+
+req in      a_window_id     ,n              ; window id
+req         a_lines         ,a
+req in      a_array_size    ,n
+req in      a_first_line    ,n
+req         a_lines_count   ,n
+
+endparams
+
+proc
+
+        clear a_lines, a_lines_count
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine t_puttxt
+
+req in      a_window_id     ,n              ; window id
+opt in      a_text          ,a
+opt in      a_array_size    ,n
+opt in      a_option1       ,n
+opt in      a_option2       ,n
+opt in      a_option3       ,n
+opt in      a_option4       ,n
+opt in      a_option5       ,n
+opt in      a_option6       ,n
+opt in      a_option7       ,n
+opt in      a_option8       ,n
+opt in      a_option9       ,n
+opt in      a_option10      ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine t_setup
+
+req in      a_window_id     ,n              ; window id
+opt in      a_init          ,n
+opt in      a_left_margin   ,n
+opt in      a_right_margin  ,n
+opt in      a_top_margin    ,n
+opt in      a_bottom_margin ,n
+opt in      a_paragraph     ,n
+opt in      a_origin_row    ,n
+opt in      a_rows          ,n
+opt in      a_columns       ,n
+opt in      a_option1       ,n
+opt in      a_option2       ,n
+opt in      a_option3       ,n
+opt in      a_option4       ,n
+opt in      a_option5       ,n
+opt in      a_option6       ,n
+opt in      a_option7       ,n
+opt in      a_option8       ,n
+opt in      a_option9       ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine t_txtrd
+
+req in      a_window_id     ,n              ; window id
+req in      a_entry_name    ,a
+req inout   a_control       ,n
+req out     a_text          ,a
+req in      a_array_size    ,n
+req out     a_lines_read    ,n
+
+endparams
+
+proc
+
+        clear a_text, a_lines_read
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine t_txtwrt
+
+req in      a_window_id     ,n              ; window id
+req in      a_entry_name    ,a
+req inout   a_control       ,n
+opt in      a_text          ,a
+opt in      a_array_size    ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine t_view
+
+req in      a_window_id     ,n              ; window id
+opt in      a_colid         ,n
+opt in      a_help_id       ,a
+opt out     a_unmapped_key  ,n
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine t_wndrd
+
+req in      a_channel       ,n
+req in      a_entry_name    ,a
+req in      a_window_id     ,n
+req out     a_status        ,n
+opt out     a_lines_loaded  ,n
+
+endparams
+
+proc
+
+        a_status = $ERR_EOF
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine t_wndwrt
+
+req in      a_channel       ,n
+req in      a_entry_name    ,a
+req in      a_window_id     ,n
+req inout   a_status        ,n
+opt out     a_lines_loaded  ,n
+
+endparams
+
+proc
+
+        a_status = $ERR_EOF
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function ts_process ,^val
+
+req in      a_tab_id        ,n              ; tab id
+
+opt         a_method_data1  ,ANY            ; method data
+opt         a_method_data2  ,ANY            ; method data
+opt         a_method_data3  ,ANY            ; method data
+opt         a_method_data4  ,ANY            ; method data
+opt         a_method_data5  ,ANY            ; method data
+opt         a_method_data6  ,ANY            ; method data
+opt         a_method_data7  ,ANY            ; method data
+opt         a_method_data8  ,ANY            ; method data
+opt         a_method_data9  ,ANY            ; method data
+opt         a_method_data10 ,ANY            ; method data
+opt         a_method_data11 ,ANY            ; method data
+opt         a_method_data12 ,ANY            ; method data
+opt         a_method_data13 ,ANY            ; method data
+opt         a_method_data14 ,ANY            ; method data
+opt         a_method_data15 ,ANY            ; method data
+opt         a_method_data16 ,ANY            ; method data
+opt         a_method_data17 ,ANY            ; method data
+opt         a_method_data18 ,ANY            ; method data
+opt         a_method_data19 ,ANY            ; method data
+opt         a_method_data20 ,ANY            ; method data
+
+endparams
+
+proc
+
+        throw_error()
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function ts_tabset ,^val
+
+req in          a_subfunction   ,n              ; subfunction
+req in mismatch a_arg2          ,n              ;
+opt mismatch    a_arg3          ,n              ;
+opt mismatch    a_arg4          ,n              ;
+opt mismatch    a_arg5          ,n              ;
+opt mismatch    a_arg6          ,n              ;
+opt mismatch    a_arg7          ,n              ;
+opt mismatch    a_arg8          ,n              ;
+opt mismatch    a_arg9          ,n              ;
+opt mismatch    a_arg10         ,n              ;
+
+endparams
+
+proc
+
+         freturn 1
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function tb_button ,^val, varargs
+
+req in        a_button_id     ,n              ; button id
+req in        a_mode          ,n              ; button mode
+
+endparams
+
+.include 'WND:toolbar.def'
+
+proc
+
+        freturn TB_FAILURE
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function tb_info ,^val, varargs
+
+req in        a_button_id     ,n              ; button id
+req in        a_subfunction   ,n              ; subfunction
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function tb_tkcreate ,^val
+
+opt in        a_orientation   ,n              ;
+opt in        a_width         ,n              ;
+opt in        a_height        ,n              ;
+opt in        a_noplace       ,n              ;
+opt in        a_global        ,n              ;
+
+endparams
+
+.include 'WND:toolbar.def'
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine tb_tkdel
+
+req         a_toolbar_id    ,n              ; toolbar id
+
+endparams
+
+.include 'WND:toolbar.def'
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine tb_tkglobal
+
+req in        a_toolbar_id    ,n              ; toolbar id
+
+endparams
+
+.include 'WND:toolbar.def'
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine tb_tklog
+
+req in        a_toolbar_id      ,n              ; toolbar id
+opt in        a_global          ,n
+
+endparams
+
+.include 'WND:toolbar.def'
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function tb_toolbar ,^val, varargs
+
+req in        a_function      ,n              ; function
+req in        a_toolbar_id    ,n              ; toolbar id
+opt in        a_orientation   ,n              ;
+opt in        a_width         ,n              ;
+opt in        a_height        ,n              ;
+
+endparams
+
+.include 'WND:toolbar.def'
+
+proc
+
+        freturn TB_FAILURE
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_abort
+
+req in        a_message1      ,a              ;
+opt in        a_message2      ,a              ;
+opt in        a_message3      ,a              ;
+opt in        a_message4      ,a              ;
+opt in        a_message5      ,a              ;
+
+endparams
+
+.align
+record
+        message         ,a 20*78
+
+proc
+
+        message = a_message1
+
+        if(^passed(a_message2))
+            message = message(1:%trim(message)) + '\n' + a_message2
+
+        if(^passed(a_message3))
+            message = message(1:%trim(message)) + '\n' + a_message3
+
+        if(^passed(a_message4))
+            message = message(1:%trim(message)) + '\n' + a_message4
+
+        if(^passed(a_message5))
+            message = message(1:%trim(message)) + '\n' + a_message5
+
+        u_message(message)
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_about
+
+req in        a_application   ,a              ;
+req in        a_version       ,a              ;
+req in        a_compiled      ,a              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_bar, varargs
+
+req in        a_action        ,n              ;
+opt in        a_var           ,n              ;
+opt in        a_var2          ,n              ;
+opt in        a_var3          ,n              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_charsb
+
+req in        a_operation     ,n              ;
+req           a_characters    ,a              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_chr
+
+req           a_character     ,a              ;
+opt in        a_window_id     ,n              ;
+opt in        a_row           ,n              ;
+opt in        a_col           ,n              ;
+opt in        a_help_id       ,a              ;
+opt in        a_wait_time     ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        clear a_character
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_createsb
+
+req           a_scroll_id     ,n              ;
+req in        a_name          ,a              ;
+req in        a_size          ,n              ;
+opt in        a_type          ,n              ;
+opt in        a_endpoints     ,n              ;
+
+endparams
+
+proc
+
+        clear a_scroll_id
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_ctrcontext
+
+req in      a_window_id     ,n
+req in      a_reason        ,a
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_debug
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_dialog
+
+req out       a_response      ,a              ;
+opt in        a_row           ,n              ;
+opt in        a_col           ,n              ;
+opt in        a_border        ,n              ;
+opt in        a_message1      ,a              ;
+opt in        a_message2      ,a              ;
+opt in        a_message3      ,a              ;
+opt in        a_message4      ,a              ;
+opt in        a_message5      ,a              ;
+opt in        a_message6      ,a              ;
+opt in        a_message7      ,a              ;
+opt in        a_message8      ,a              ;
+opt in        a_message9      ,a              ;
+opt in        a_message10     ,a              ;
+opt in        a_message11     ,a              ;
+opt in        a_message12     ,a              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        clear a_response
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_editkeys
+
+opt in        a_helpid        ,a              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_editrend
+
+opt in        a_filename      ,a              ;
+opt in        a_number        ,n              ;
+opt in        a_description   ,a              ;
+opt in        a_windows       ,n              ;
+opt in        a_areas         ,n              ;
+opt in        a_field_numbers ,n              ;
+opt in        a_help_id       ,a              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_flash
+
+opt in        a_channel       ,n              ;
+req in        a_window_name   ,a              ;
+opt out       a_window_id     ,n              ;
+opt out       a_flag          ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_fld
+
+opt           a_data          ,a              ;
+opt in        a_window_id     ,n              ;
+opt in        a_row           ,n              ;
+req in        a_col           ,n              ;
+opt in        a_paint         ,a              ;
+opt           a_len           ,n              ;
+opt           a_begin_pos     ,n              ;
+opt in        a_mode          ,n              ;
+opt in        a_help_id       ,a              ;
+opt in        a_wait_time     ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_gblwnd
+
+req in        a_window_id     ,n              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_helprend
+
+req in        a_window_id     ,n              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_htmlhelp ,^val
+
+req in  a_subfunction   ,n
+opt in mismatch     a_arg2      ,n
+opt in mismatch     a_arg3      ,n
+opt in mismatch     a_arg4      ,n
+opt in mismatch     a_arg5      ,n
+opt in mismatch     a_arg6      ,n
+opt in mismatch     a_arg7      ,n
+opt in mismatch     a_arg8      ,n
+opt in mismatch     a_arg9      ,n
+opt in mismatch     a_arg10     ,n
+opt in mismatch     a_arg11     ,n
+opt in mismatch     a_arg12     ,n
+opt in mismatch     a_arg13     ,n
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_icon ,^val
+
+req in        a_operation     ,n              ;
+req in        a_filename      ,a              ;
+req in        a_index         ,n              ;
+opt in        a_window_id     ,n              ;
+
+endparams
+
+proc
+
+        freturn 0
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_ldrend
+
+req in        a_channel       ,n              ;
+opt in        a_scheme        ,a              ;
+opt           a_status        ,n              ;
+
+endparams
+
+proc
+
+        if(^passed(a_status))
+            a_status = $ERR_FNF
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_ldwnd
+
+req out     a_window_id     ,n              ;
+opt in      a_channel       ,n              ;
+req in      a_window_name   ,a              ;
+opt in      a_no_placement  ,n              ;
+opt inout   a_search        ,n              ;
+opt out     a_err_num       ,n              ;
+opt in      a_saved_name    ,a              ;
+opt in      a_arg8          ,n              ;undocumented
+opt in      a_arg9          ,n              ;undocumented
+
+endparams
+
+proc
+
+        clear a_window_id
+        if(^passed(a_err_num)) then
+            a_err_num = $ERR_EOF
+        else
+            throw_error($ERR_EOF)
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_logwnd
+
+req in        a_window_id     ,n              ;
+opt in        a_global        ,n              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_message
+
+req in        a_message       ,a              ; message
+opt in        a_wait          ,n              ; wait flag
+opt in        a_wait2         ,n              ; wait flag
+
+endparams
+
+.include 'WND:tools.def'
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record
+        start           ,i4             ;start position in message
+        len             ,i4             ;len of mesage
+        pos             ,i4             ;position in message
+
+proc
+
+        ;write out the message
+        if(g_terminal && a_message)
+          begin
+            len = %trimz(a_message)
+            start = 1
+            while(pos = %instr(start, a_message, "\n"))
+              begin
+                if(start < pos)
+                    writes(g_terminal, a_message(start, pos-1))
+                start = pos+2
+              end
+            if(start <= len)
+                writes(g_terminal, a_message(start, len))
+          end
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_modrend
+
+opt in        a_number        ,n              ;
+opt in        a_descriptions  ,a              ;
+opt in        a_windows       ,n              ;
+opt in        a_areas         ,n              ;
+opt in        a_field_numbers ,n              ;
+opt in        a_help_id       ,a              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_msgbox ,^val
+
+req in        a_message       ,a              ; message
+opt in        a_style         ,n              ; message box style
+opt in        a_title         ,a              ; window title
+opt in        a_selcol        ,n              ; selection menu column id
+opt in        a_helpid        ,a              ; help id
+
+endparams
+
+.include 'WND:tools.def'
+
+external common
+.include 'UTL:utklib.def'
+
+.align
+record
+        status          ,i4             ;return status
+        btnmode         ,i4             ;button mode
+        button          ,i4             ;default button
+        start           ,i4             ;start position in message
+        len             ,i4             ;len of mesage
+        pos             ,i4             ;position in message
+
+proc
+
+        ;write out the message
+        if(g_terminal && a_message)
+          begin
+            len = %trimz(a_message)
+            start = 1
+            while(pos = %instr(start, a_message, "\n"))
+              begin
+                if(start < pos)
+                    writes(g_terminal, a_message(start, pos-1))
+                start = pos+2
+              end
+            if(start <= len)
+                writes(g_terminal, a_message(start, len))
+          end
+
+        btnmode = (a_style.band.^x(000F))
+        button = (a_style.band.^x(0F00))
+
+        ;signal "default" button
+        using btnmode select
+        (D_MOK),
+            status = D_MIDOK
+        (D_MOKCANCEL),
+          begin
+            using button select
+            (D_MDEFBUTTON1),
+                status = D_MIDOK
+            (D_MDEFBUTTON2),
+                status = D_MIDCANCEL
+            (),
+                status = D_MIDOK
+            endusing
+          end
+        (D_MABTRETIGN),
+          begin
+            using button select
+            (D_MDEFBUTTON1),
+                status = D_MIDABORT
+            (D_MDEFBUTTON2),
+                status = D_MIDRETRY
+            (D_MDEFBUTTON3),
+                status = D_MIDIGNORE
+            (),
+                status = D_MIDABORT
+            endusing
+          end
+        (D_MYESNOCANCEL),
+          begin
+            using button select
+            (D_MDEFBUTTON1),
+                status = D_MIDYES
+            (D_MDEFBUTTON2),
+                status = D_MIDNO
+            (D_MDEFBUTTON3),
+                status = D_MIDCANCEL
+            (),
+                status = D_MIDYES
+            endusing
+          end
+        (D_MYESNO),
+          begin
+            using button select
+            (D_MDEFBUTTON1),
+                status = D_MIDYES
+            (D_MDEFBUTTON2),
+                status = D_MIDNO
+            (),
+                status = D_MIDYES
+            endusing
+          end
+        (D_MRETRYCANCEL),
+          begin
+            using button select
+            (D_MDEFBUTTON1),
+                status = D_MIDRETRY
+            (D_MDEFBUTTON2),
+                status = D_MIDCANCEL
+            (),
+                status = D_MIDRETRY
+            endusing
+          end
+        (),
+            status = D_MIDOK
+        endusing
+
+        freturn status
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_popup
+
+opt in        a_channel       ,n              ;
+req in        a_window_name   ,a              ;
+opt inout     a_search        ,n              ;
+opt in        a_wait_bell     ,n              ;
+opt in        a_wait_error    ,n              ;
+opt out       a_error         ,n              ;
+opt in        a_help_id       ,n              ;
+
+endparams
+
+proc
+
+        throw_error()
+
+        if(^passed(a_error)) then
+            a_error = $ERR_EOF
+        else
+            throw_error($ERR_EOF)
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_redraw
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_rend ,varargs
+
+            a_operation     ,n                  ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_resize
+
+opt in      a_rows          ,n              ; rows
+opt in      a_cols          ,n              ; columns
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_rstrend
+
+opt in      a_filename      ,a              ;
+opt in      a_scheme        ,a              ;
+opt         a_status        ,n              ;
+
+endparams
+
+proc
+
+        if(^passed(a_status))
+            clear a_status
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_save
+
+req in      a_channel       ,n              ;
+req in      a_window_id     ,n              ;
+req in      a_window_name   ,a              ;
+opt out     a_error         ,n              ;
+
+endparams
+
+proc
+
+        if(^passed(a_error))
+            clear a_error
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_savelog
+
+req in      a_setting_name      ,a
+opt in mismatch a_value         ,n
+opt in      a_section           ,a
+opt in      a_all_users         ,n
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_savesettings
+
+opt in      a_flags             ,n
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_savrend
+
+opt in      a_filename      ,a              ;
+opt in      a_scheme        ,a              ;
+opt         a_status        ,n              ;
+opt in      a_flag          ,n              ;
+
+endparams
+
+proc
+
+        if(^passed(a_status))
+            a_status = 1
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_selpalette ,^val
+
+req in      a_initial       ,n              ; initial palette
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_storend
+
+req in      a_filename      ,n              ;
+opt in      a_scheme        ,a              ;
+opt         a_status        ,n              ;
+opt in      a_flag          ,n              ;
+
+endparams
+
+proc
+
+        if(^passed(a_status))
+            a_status = 1
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_text
+
+req in        a_channel       ,n              ;
+req in        a_facility      ,a              ;
+req in        a_message_num   ,n              ;
+req out       a_text          ,a              ;
+opt out       a_len           ,n              ;
+opt in        a_no_shortcuts  ,n              ;
+opt in mismatch a_parameter1  ,n              ;
+opt in mismatch a_parameter2  ,n              ;
+opt in mismatch a_parameter3  ,n              ;
+opt in mismatch a_parameter4  ,n              ;
+opt in mismatch a_parameter5  ,n              ;
+opt in mismatch a_parameter6  ,n              ;
+opt in mismatch a_parameter7  ,n              ;
+opt in mismatch a_parameter8  ,n              ;
+opt in mismatch a_parameter9  ,n              ;
+opt in mismatch a_parameter10 ,n              ;
+
+endparams
+
+proc
+
+        clear a_text
+        if(^passed(a_len))
+            clear a_len
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_update
+
+opt in      a_auto_update   ,n              ; auto update flag
+opt in      a_arg2          ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_updatesb
+
+req in      a_scroll_id     ,n              ;
+req in      a_maximum       ,n              ;
+req in      a_current       ,n              ;
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_wait
+
+opt in      a_wait          ,n              ; wait time
+opt in      a_arg2          ,n
+opt in      a_arg3          ,n
+opt in      a_arg4          ,n
+opt in      a_arg5          ,n
+
+endparams
+
+proc
+
+        throw_error()
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine u_window ,varargs
+
+req in      a_operation     ,n
+
+endparams
+
+proc
+
+        xreturn
+
+endsubroutine
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_wincells
+
+req in      a_type          ,n          ;D_ROWS or D_CELLS
+req in      a_window_id     ,n
+req in      a_pixels        ,n
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_wincolor ,^val
+
+req in      a_operation     ,n
+opt mismatch    a_arg2          ,n
+opt mismatch    a_arg3          ,n
+opt mismatch    a_arg4          ,n
+opt mismatch    a_arg5          ,n
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_winhelp ,^val
+
+opt in          a_window_id     ,n              ;
+req in          a_filename      ,a              ;
+req in          a_command       ,n              ;
+req in mismatch a_data          ,n              ;
+
+endparams
+
+proc
+
+        freturn FALSE
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_wininfo  ,^val
+
+req in          a_info          ,n
+opt mismatch    a_arg2          ,n
+opt mismatch    a_arg3          ,n
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_winmetrics   ,^val
+
+req in          a_metric        ,n
+opt mismatch    a_arg2          ,n
+opt mismatch    a_arg3          ,n
+opt mismatch    a_arg4          ,n
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_wndevents ,^val, varargs
+
+req in          a_subfunction   ,n
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_wndfont ,^val
+
+req in        a_subfunction   ,i
+opt mismatch  a_arg2          ,n
+opt mismatch  a_arg3          ,n
+opt mismatch  a_arg4          ,n
+opt mismatch  a_arg5          ,n
+opt mismatch  a_arg6          ,n
+opt mismatch  a_arg7          ,n
+opt mismatch  a_arg8          ,n
+
+endparams
+
+proc
+
+        freturn FALSE
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function u_wndstyle ,^val
+
+req in        a_style         ,n
+req in        a_option        ,n
+opt in        a_arg3          ,n
+
+endparams
+
+proc
+
+        freturn D_RET_STATUS
+
+endfunction
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

@@ -1,0 +1,118 @@
+;*******************************************************************************
+;
+; Title:        TestWinDir.dbl
+;
+; Description:  Test program for WinDir function
+;
+; Author:       Steve Ives, Synergex Professional Services Group
+;
+; Date:         19th August 2005
+;
+; Availability: Windows only
+;
+; Disclaimer:   This code is provided "as is" and without guarantee or warranty
+;               of any kind.  You may use the code freely, so long as this code
+;               header and disclaimer remains unchanged. In doing so you accept
+;               that neither the author or Synergex accept any responsibility
+;               for any damage or loss which may result from the use of the code
+;
+;*******************************************************************************
+
+.main TestWinDir
+
+.include "INC:WinDir.def"
+
+    record
+        tt          ,i4     ;Terminal channel
+        results     ,D_HANDLE   ;Memory handle containing data returned from WinDir
+        rescount    ,i4     ;Number of files returned in memory handle
+        count       ,i4     ;Loop counter
+        char        ,a1     ;Input character
+        filespec    ,a60    ;INput file spec
+
+    record output           ;Output buffer for screen display
+        name        ,a40
+        ,a1
+        size        ,a20
+        ,a2
+        ar          ,a1
+        ro          ,a1
+        hi          ,a1
+        sy          ,a1
+
+.proc
+
+    open(tt=1,o,"tt:")
+    xcall flags(7004020,1)
+
+.ifdef D_GUI
+.ifndef DBLNET
+
+    display(tt,"File spec: ")
+    reads(tt,filespec)
+
+    if (filespec)
+    begin
+        ;Get directory listing
+        if (!%WinDir(filespec,results,rescount,WINDIR$LOWERCASE,WINDIR$SORT_SIZE)) then
+            writes(tt,"No files found!")
+        else
+        begin
+            ;Any matching files?
+            if (!rescount) then
+                writes(tt,"No files found!")
+            else
+            begin
+                ;Iterate through the results and display them
+                for count from 1 thru rescount
+                begin
+                    output.name = WINDIR$FILENAME(results,count)
+                    output.size = %string(WINDIR$FILESIZE(results,count)) [RIGHT]
+                    if (WINDIR$ARCHIVE(results,count))
+                        output.ar = "A"
+                    if (WINDIR$READONLY(results,count))
+                        output.ar = "R"
+                    if (WINDIR$HIDDEN(results,count))
+                        output.ar = "H"
+                    if (WINDIR$SYSTEM(results,count))
+                        output.ar = "S"
+                    writes(tt,output)
+                end
+
+                ;Display summary
+                writes(tt,"")
+                writes(tt,%string(rescount) + " files found!")
+
+                ;Release the dynamic memory returned from WinDir
+                results = %mem_proc(DM_FREE,results)
+
+            end
+        end
+
+        ;Wait for a key press
+        writes(tt, "")
+        display(tt,"Press any key to continue : ")
+        accept(tt,char)
+
+    end
+
+.else ;DBLNET
+    writes(tt, "WinDir not implemented in Synergy .NET")
+    close tt
+    StopMessage()
+    stop D_EXIT_FAILURE
+.endc ;DBLNET
+
+.else ;D_GUI
+    writes(tt, "WinDir not implemented on non-Windows"
+    close tt
+    stop D_EXIT_FAILURE
+.endc ;D_GUI
+
+    close tt
+    stop D_EXIT_SUCCESS
+
+.end
+
+;*******************************************************************************
+
