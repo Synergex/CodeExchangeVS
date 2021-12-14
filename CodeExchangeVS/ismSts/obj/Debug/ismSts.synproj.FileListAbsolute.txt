@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\ismSts\bin\Debug\ismSts.exe
+C:\Development\CodeExchangeVS\ismSts\bin\Debug\ismSts.pdb
+C:\Development\CodeExchangeVS\ismSts\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\ismSts\obj\Debug\ismSts.exe
+C:\Development\CodeExchangeVS\ismSts\obj\Debug\ismSts.pdb

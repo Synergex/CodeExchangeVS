@@ -1,0 +1,24 @@
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(207):     .include "INC:LicensingDemo.dbl"
+%DBL-E-OPENIN2, Cannot open:  INC:LicensingDemo.dbl
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(506):     .include "INC:LicensingDemo.dbl"
+%DBL-E-OPENIN2, Cannot open:  INC:LicensingDemo.dbl
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(594):     .include "INC:LicensingDemo.dbl"
+%DBL-E-OPENIN2, Cannot open:  INC:LicensingDemo.dbl
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(604):         licenses    ,@ArrayList
+%DBL-W-ALGFLD, Alignment performed on field
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(803):     .include "INC:LicensingDemo.dbl"
+%DBL-E-OPENIN2, Cannot open:  INC:LicensingDemo.dbl
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(842):     .include "INC:LicensingDemo.dbl"
+%DBL-E-OPENIN2, Cannot open:  INC:LicensingDemo.dbl
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(896):     .include "INC:LicensingDemo.dbl"
+%DBL-E-OPENIN2, Cannot open:  INC:LicensingDemo.dbl
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(956):     .include "INC:LicensingDemo.dbl"
+%DBL-E-OPENIN2, Cannot open:  INC:LicensingDemo.dbl
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(987):     .include "INC:LicensingDemo.dbl"
+%DBL-E-OPENIN2, Cannot open:  INC:LicensingDemo.dbl
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(1076):     .include "INC:LicensingDemo.dbl"
+%DBL-E-OPENIN2, Cannot open:  INC:LicensingDemo.dbl
+%DBL-E-NOASM, No assembly file created
+
+Warnings:       1
+Errors:         9

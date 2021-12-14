@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\lct_lmf\bin\Debug\lct_lmf.exe
+C:\Development\CodeExchangeVS\lct_lmf\bin\Debug\lct_lmf.pdb
+C:\Development\CodeExchangeVS\lct_lmf\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\lct_lmf\obj\Debug\lct_lmf.exe
+C:\Development\CodeExchangeVS\lct_lmf\obj\Debug\lct_lmf.pdb

@@ -1,0 +1,7 @@
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(468):         data ix, int
+%DBL-W-HIDEW, ix hides a member of an enclosing scope
+"C:\Development\CodeExchange\LicensingToolkitExample\SynergyDemo\LicensingDemo.dbl"(635):         licenses    ,@ArrayList
+%DBL-W-ALGFLD, Alignment performed on field
+Warnings:       2
+
+

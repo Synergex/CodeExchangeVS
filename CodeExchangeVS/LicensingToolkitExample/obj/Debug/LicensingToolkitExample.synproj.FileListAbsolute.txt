@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\LicensingToolkitExample\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\LicensingToolkitExample\bin\Debug\LicensingToolkitExample.exe
+C:\Development\CodeExchangeVS\LicensingToolkitExample\bin\Debug\LicensingToolkitExample.pdb
+C:\Development\CodeExchangeVS\LicensingToolkitExample\obj\Debug\LicensingToolkitExample.exe
+C:\Development\CodeExchangeVS\LicensingToolkitExample\obj\Debug\LicensingToolkitExample.pdb
