@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\uspsWebService\bin\Debug\uspsWebService.exe
+C:\Development\CodeExchangeVS\uspsWebService\bin\Debug\uspsWebService.pdb
+C:\Development\CodeExchangeVS\uspsWebService\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\uspsWebService\obj\Debug\uspsWebService.exe
+C:\Development\CodeExchangeVS\uspsWebService\obj\Debug\uspsWebService.pdb

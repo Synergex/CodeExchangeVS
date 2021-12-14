@@ -1,0 +1,34 @@
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(4): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(64): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(272): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(480): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(645): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(675): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(792): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(943): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(1103): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(1206): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(1352): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(1384): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(1454): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(1521): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+"C:\Development\CodeExchange\synckodbc\synckodbc.dbl"(1693): .include 'INC:synckodbc.def'
+%DBL-E-OPENIN2, Cannot open:  INC:synckodbc.def
+%DBL-E-NOASM, No assembly file created
+
+Errors:        15
+

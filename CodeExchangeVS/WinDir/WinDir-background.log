@@ -1,0 +1,6 @@
+"C:\Development\CodeExchange\WinDir\TestWinDir.dbl"(23): .include "INC:WinDir.def"
+%DBL-E-OPENIN2, Cannot open:  INC:WinDir.def
+%DBL-E-NOASM, No assembly file created
+
+Errors:         1
+

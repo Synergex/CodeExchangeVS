@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\WinDir\bin\Debug\WinDir.exe
+C:\Development\CodeExchangeVS\WinDir\bin\Debug\WinDir.pdb
+C:\Development\CodeExchangeVS\WinDir\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\WinDir\obj\Debug\WinDir.exe
+C:\Development\CodeExchangeVS\WinDir\obj\Debug\WinDir.pdb

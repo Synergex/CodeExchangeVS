@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\url_encode\bin\Debug\url_encode.exe
+C:\Development\CodeExchangeVS\url_encode\bin\Debug\url_encode.pdb
+C:\Development\CodeExchangeVS\url_encode\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\url_encode\obj\Debug\url_encode.exe
+C:\Development\CodeExchangeVS\url_encode\obj\Debug\url_encode.pdb

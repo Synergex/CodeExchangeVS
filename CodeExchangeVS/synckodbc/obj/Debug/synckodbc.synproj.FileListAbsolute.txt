@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\synckodbc\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\synckodbc\bin\Debug\synckodbc.exe
+C:\Development\CodeExchangeVS\synckodbc\bin\Debug\synckodbc.pdb
+C:\Development\CodeExchangeVS\synckodbc\obj\Debug\synckodbc.exe
+C:\Development\CodeExchangeVS\synckodbc\obj\Debug\synckodbc.pdb
