@@ -1,0 +1,138 @@
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(36): import SynPSG.System
+%DBL-E-IMPORT, Namespace SynPSG.System not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(37): import SynPSG.System.IO
+%DBL-E-IMPORT, Namespace SynPSG.System.IO not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(38): import SynPSG.System.Net
+%DBL-E-IMPORT, Namespace SynPSG.System.Net not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(39): import SynPSG.System.Net.Mail
+%DBL-E-IMPORT, Namespace SynPSG.System.Net.Mail not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(40): import SynPSG.System.Net.Sockets
+%DBL-E-IMPORT, Namespace SynPSG.System.Net.Sockets not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(41): import SynPSG.System.Net.Mime
+%DBL-E-IMPORT, Namespace SynPSG.System.Net.Mime not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(42): import SynPSG.System.Text.encoding
+%DBL-E-IMPORT, Namespace SynPSG.System.Text.encoding not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(56):         private mTcpClient      ,@SynPSG.System.net.sockets.TcpClient
+%DBL-E-NVTF, Cannot resolve type for field mTcpClient
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(57):         private mNStream        ,@SynPSG.System.net.sockets.NetworkStream
+%DBL-E-NVTF, Cannot resolve type for field mNStream
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(164):             mTcpClient = new TcpClient(mHost, mPort)
+%DBL-E-NFND, TcpClient() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(165):             mNStream = mTcpClient.GetStream()
+%DBL-E-NFND, mTcpClient.GetStream() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(169):             mNStream.ReadTimeout = 1000
+%DBL-E-NFND, mNStream.ReadTimeout not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(198):                 mTcpClient.Close()
+%DBL-E-NFND, mTcpClient.Close() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(281):                 parts = StringUtil.Split(removeCRLF(respStr), ' ')
+%DBL-E-NFND, StringUtil.Split() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(296):         public method GetMessage ,@MailMessage
+%DBL-E-NVRTM, Cannot resolve return type for method GetMessage
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(299):             record
+%DBL-W-RECETY, Record is empty
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(300):                 msg             ,@MailMessage
+%DBL-E-NVTF, Cannot resolve type for field msg
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(304):                 mreturn ^NULL
+%DBL-E-TYPMISMCH, Type mismatch between unresolved and null
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(308):             msg = getPopMessage(MessageNumber, -1)
+%DBL-E-TYPMISMCH, Type mismatch between unresolved and unresolved
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(310):             mreturn msg
+%DBL-E-TYPMISMCH, Type mismatch between unresolved and unresolved
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(317):         public method Top ,@MailMessage
+%DBL-E-NVRTM, Cannot resolve return type for method Top
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(321):             record
+%DBL-W-RECETY, Record is empty
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(322):                 msg             ,@MailMessage
+%DBL-E-NVTF, Cannot resolve type for field msg
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(326):                 mreturn ^NULL
+%DBL-E-TYPMISMCH, Type mismatch between unresolved and null
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(330):             msg = getPopMessage(MessageNumber, NumberOfLines)
+%DBL-E-TYPMISMCH, Type mismatch between unresolved and unresolved
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(332):             mreturn msg
+%DBL-E-TYPMISMCH, Type mismatch between unresolved and unresolved
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(449):                 parts = StringUtil.Split(removeCRLF(respStr), ' ')
+%DBL-E-NFND, StringUtil.Split() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(514):         private method getPopMessage ,@MailMessage
+%DBL-E-NVRTM, Cannot resolve return type for method getPopMessage
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(529):                 encoding        ,TransferEncoding
+%DBL-E-NVTF, Cannot resolve type for field encoding
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(530):                 msg             ,@MailMessage
+%DBL-E-NVTF, Cannot resolve type for field msg
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(531):                 cType           ,@ContentType    ;message content type
+%DBL-E-NVTF, Cannot resolve type for field cType
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(532):                 mType           ,@ContentType    ;mime content type
+%DBL-E-NVTF, Cannot resolve type for field mType
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(535):             msg = new MailMessage()
+%DBL-E-NFND, MailMessage() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(539):             encoding = SynPSG.Net.Mime.TransferEncoding.SevenBit
+%DBL-E-NFND, SynPSG.Net.Mime.TransferEncoding.SevenBit not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(565):                             msg.From = new MailAddress(respStr(6,respStr.Length-2))
+%DBL-E-NFND, MailAddress() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(566):                             msg.Sender = msg.From
+%DBL-E-NFND, msg.From not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(572):                             msg.To.Add(new MailAddress(respStr(4,respStr.Length-2)))
+%DBL-E-NFND, msg.To.Add() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(577):                             msg.ReplyTo = new MailAddress(respStr(9,respStr.Length-2))
+%DBL-E-NFND, MailAddress() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(582):                             msg.Subject = respStr(10,respStr.Length-2)
+%DBL-E-NFND, msg.Subject not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(594):                         respStr = StringUtil.Replace(respStr, %char(9), ' ')
+%DBL-E-NFND, StringUtil.Replace() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(595):                         cType = new ContentType(respStr(14,respStr.Length-2))
+%DBL-E-NFND, ContentType() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(597):                         if(cType.MediaType.Contains('html'))
+%DBL-E-NFND, cType.MediaType.Contains() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(599):                         if(cType.Boundary.Length > 0)
+%DBL-E-NFND, cType.Boundary.Length not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(620):                                     data attStream ,@SynPSG.System.IO.MemoryStream
+%DBL-E-NVTF, Cannot resolve type for field attStream
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(622):                                     attStream = new MemoryStream(attachmentData)
+%DBL-E-NFND, MemoryStream() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(623):                                     msg.Attachments.Add(new Attachment((Stream)attStream, attachmentName, mType.MediaType))
+%DBL-E-NFND, msg.Attachments.Add() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(624):                                     attNum = msg.Attachments.Count - 1
+%DBL-E-NFND, msg.Attachments.Count not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(626):                                     msg.Attachments[attNum].TransferEncoding = encoding
+%DBL-E-NFND, msg.Attachments[].TransferEncoding not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(638):                             encoding = SynPSG.Net.Mime.TransferEncoding.SevenBit
+%DBL-E-NFND, SynPSG.Net.Mime.TransferEncoding.SevenBit not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(650):                             respStr = StringUtil.Replace(respStr, %char(9), ' ')
+%DBL-E-NFND, StringUtil.Replace() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(651):                             mType = new ContentType(respStr(14,respStr.Length-2))
+%DBL-E-NFND, ContentType() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(652):                             AttachmentName = mType.Name
+%DBL-E-NFND, mType.Name not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(662):                                         encoding = SynPSG.Net.Mime.TransferEncoding.Base64
+%DBL-E-NFND, SynPSG.Net.Mime.TransferEncoding.Base64 not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(677):                             msg.Body = msg.Body + respStr
+%DBL-E-NFND, msg.Body not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(682):                             (SynPSG.Net.Mime.TransferEncoding.Base64),
+%DBL-E-NFND, SynPSG.Net.Mime.TransferEncoding.Base64 not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(694):                         msg.Body = msg.Body + respStr
+%DBL-E-NFND, msg.Body not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(699):             mreturn msg
+%DBL-E-TYPMISMCH, Type mismatch between unresolved and unresolved
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(724):             while ((mByte=mNStream.ReadByte()) != -1 && byteCount < ^size(lineBuf))
+%DBL-E-NFND, mNStream.ReadByte() not found
+"C:\Development\CodeExchange\POP3mail\POP3client.dbc"(786):             mNStream.Write(sendMsg, 0, sendMsg.Length)
+%DBL-E-NFND, mNStream.Write() not found
+"C:\Development\CodeExchange\POP3mail\popmail.dbl"(1): import SynPSG.System.Net.Mail
+%DBL-E-IMPORT, Namespace SynPSG.System.Net.Mail not found
+"C:\Development\CodeExchange\POP3mail\popmail.dbl"(7):     msg             ,@MailMessage
+%DBL-E-NVTF, Cannot resolve type for field msg
+"C:\Development\CodeExchange\POP3mail\popmail.dbl"(57):         msg = pop.GetMessage(count)
+%DBL-E-TYPMISMCH, Type mismatch between unresolved and unresolved
+"C:\Development\CodeExchange\POP3mail\popmail.dbl"(58):         if(ttchan) writes(ttchan, "From "+msg.From.Address+" Subject "+msg.Subject+"  "+%string(msg.Attachments.Count)+" attachments")
+%DBL-E-NFND, msg.From.Address not found
+"C:\Development\CodeExchange\POP3mail\popmail.dbl"(59):         if(msg.Attachments.Count > 0)
+%DBL-E-NFND, msg.Attachments.Count not found
+"C:\Development\CodeExchange\POP3mail\popmail.dbl"(64):                 data attmnt ,@Attachment
+%DBL-E-NVTF, Cannot resolve type for field attmnt
+"C:\Development\CodeExchange\POP3mail\popmail.dbl"(65):                 data myAtt ,@MemoryStream
+%DBL-E-NVTF, Cannot resolve type for field myAtt
+%DBL-E-NOASM, No assembly file created
+
+Warnings:       2
+Errors:        64
+
+

@@ -1,0 +1,48 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!--<Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>-->
+    <Name>"POP3mail"</Name>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{62d543cd-aa99-44d5-aae5-85d0be9cedfe}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>POP3mail</RootNamespace>
+    <AssemblyName>POP3mail</AssemblyName>
+    <MainFile>Program.dbl</MainFile>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetPlatform>v4</TargetPlatform>
+    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
+    <DBL_qWarnLevel>3 - Don't display warnings levels higher than 3</DBL_qWarnLevel>
+    <DBL_qWarn>True</DBL_qWarn>
+    <DBLCmdOptions> -W3 -qstack</DBLCmdOptions>
+    <Language>Synergy</Language>
+    <DBL_unQulRecStm>Stack</DBL_unQulRecStm>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <IncludeDebugInformation>true</IncludeDebugInformation>
+    <OutputPath>bin\Debug\</OutputPath>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+    <DebugOptimize>Debug</DebugOptimize>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <IncludeDebugInformation>true</IncludeDebugInformation>
+    <OutputPath>bin\Release\</OutputPath>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="mscorlib" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="C:\Development\CodeExchange\POP3mail\POP3client.dbc" />
+    <Compile Include="C:\Development\CodeExchange\POP3mail\popmail.dbl" />
+    <Compile Include="C:\Development\CodeExchange\Utilities\StopMessage.dbl" />
+    <Compile Include="Properties\AssemblyInfo.dbl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="C:\Development\CodeExchange\POP3mail" />
+    <Folder Include="C:\Development\CodeExchange\Utilities" />
+    <Folder Include="Properties\" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\Synergex\VS2010\Synergex.SynergyDE.targets" />
+</Project>

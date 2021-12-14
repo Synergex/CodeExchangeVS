@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\PartialMatch\bin\Debug\PartialMatch.exe
+C:\Development\CodeExchangeVS\PartialMatch\bin\Debug\PartialMatch.pdb
+C:\Development\CodeExchangeVS\PartialMatch\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\PartialMatch\obj\Debug\PartialMatch.exe
+C:\Development\CodeExchangeVS\PartialMatch\obj\Debug\PartialMatch.pdb

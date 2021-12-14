@@ -1,0 +1,28 @@
+"C:\Development\CodeExchange\Registry\RegCreateKey.dbl"(40): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegDeleteKey.dbl"(43): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegDeleteValue.dbl"(39): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegEndSession.dbl"(37): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegGetBinary.dbl"(44): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegGetDword.dbl"(42): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegGetString.dbl"(42): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegSetBinary.dbl"(49): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegSetDword.dbl"(45): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegSetString.dbl"(45): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\RegStartSession.dbl"(38): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+"C:\Development\CodeExchange\Registry\test_registry.dbl"(60): .include "INC:registry.def"
+%DBL-E-OPENIN2, Cannot open:  INC:registry.def
+%DBL-E-NOASM, No assembly file created
+
+Errors:        12
+

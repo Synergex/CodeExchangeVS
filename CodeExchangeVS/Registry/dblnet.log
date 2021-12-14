@@ -1,0 +1,67 @@
+"C:\Development\CodeExchange\Registry\RegCreateKey.dbl"(58):     if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCreateKeyA",a_hive,^addr(key),^addr(kh))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegCreateKey.dbl"(64):             if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegFlushKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegCreateKey.dbl"(68):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCloseKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegDeleteKey.dbl"(57):     if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegDeleteKeyA",a_hive,^addr(key)))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegDeleteValue.dbl"(58):     if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegOpenKeyA",a_hive,^addr(key),^addr(kh))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegDeleteValue.dbl"(67):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegDeleteValueA",kh, ^addr(value)))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegDeleteValue.dbl"(72):             if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegFlushKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegDeleteValue.dbl"(76):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCloseKey",kh) .ne. REG_SUCCESS)
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetBinary.dbl"(66):     if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegOpenKeyA",a_hive,^addr(key),^addr(kh))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetBinary.dbl"(75):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegQueryValueExA",kh,^addr(value),null,^addr(type),null,^addr(size))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetBinary.dbl"(86):                 if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegQueryValueExA",kh,^addr(value),null,null,^addr(BINDATA(mh,1)),^addr(size))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetBinary.dbl"(105):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCloseKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetDword.dbl"(65):     if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegOpenKeyA",a_hive,^addr(key),^addr(kh))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetDword.dbl"(76):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegQueryValueExA",kh,^addr(value),null,^addr(type),^addr(data),^addr(size))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetDword.dbl"(93):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCloseKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetString.dbl"(64):     if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegOpenKeyA",a_hive,^addr(key),^addr(kh))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetString.dbl"(72):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegQueryValueExA",kh,^addr(value),null,^addr(type),null,^addr(size))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetString.dbl"(82):                 if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegQueryValueExA",kh,^addr(value),null,null,^addr(data),^addr(size))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegGetString.dbl"(104):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCloseKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetBinary.dbl"(69):     if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCreateKeyA",a_hive,^addr(key),^addr(kh))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetBinary.dbl"(80):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegSetValueExA",kh,^addr(value),null,type,^addr(BINDATA(a_data,1)),size))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetBinary.dbl"(89):             if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegFlushKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetBinary.dbl"(93):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCloseKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetDword.dbl"(66):     if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCreateKeyA",a_hive,^addr(key),^addr(kh))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetDword.dbl"(78):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegSetValueExA",kh,^addr(value),null,type,^addr(data),size))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetDword.dbl"(83):             if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegFlushKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetDword.dbl"(87):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCloseKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetString.dbl"(66):     if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCreateKeyA",a_hive,^addr(key),^addr(kh))) then
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetString.dbl"(82):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegSetValueExA",kh,^addr(value),null,type,^addr(data),size))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetString.dbl"(87):             if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegFlushKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+"C:\Development\CodeExchange\Registry\RegSetString.dbl"(91):         if (%dll_call(a_reghdl,DLL_TYPE_WINAPI,"RegCloseKey",kh))
+%DBL-E-NETSUPRT, dll_call not supported in .NET
+%DBL-E-NOASM, No assembly file created
+
+Errors:        31
+
+
