@@ -1,0 +1,99 @@
+;*****************************************************************************
+;
+; Title:        CopyHandle
+;
+; Description:  Copies the contents of one memory handle to another
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         1st June 2006
+;
+; Platforms:    All platforms
+;
+; Discussion:   This routine copies the comtents of one memory handle (passed
+;               in parameter 1) into a second memory handle (passed in parameter
+;               2). The size of the retruned handle will always be exactly the
+;               same as the original handle.
+;
+;               If the target handle contains a value then it is assumed that
+;               the handle is already associated with a valid region of memory
+;               and in this case that memory will be resized and used.  If the
+;               target handle has a value of 0 then a new static memory region
+;               will be allocated and used.
+;
+;               This routine will copy handles of any size.  If the handle to
+;               be copied is less than 64K in size then the handle will be
+;               copied in one go.  If the handle is larger than 64K then it
+;               will be copied in 64K "chunks".
+;
+;               It is always the responsibility of the calling routine to
+;               deallocate all memory handles.
+;
+;*****************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;*****************************************************************************
+;
+.subroutine CopyHandle
+
+    a_handle_in     ,i      ;Handle to copy (IN)
+    a_handle_out    ,i      ;New handle (OUT)
+
+.define D_MAXSIZE   65535   ;If we need to copy the data in "chunks" then this
+;is the size of a chunk.  The maximum size we can
+;address in Synergy is 1-byte less than 64K, so
+;the maximum chunk size is 65535
+    structure chunk
+        ,a D_MAXSIZE
+
+.align
+    stack record ivars
+        total_size      ,i4     ;Size of handle to be copied (bytes)
+        chunks          ,i4     ;How many chunks are needed?
+        count           ,i4     ;Loop counter
+        leftover        ,i4     ;Bytes left over after copying chunks
+
+.proc
+
+    clear ^i(ivars)
+
+    ;Get the size of the handle to be copied
+    total_size = %mem_proc(DM_GETSIZE,a_handle_in)
+
+    ;If the out handle is already allocated then resize the memory to the
+    ;size of the handle to be copied.  Otherwise allocate a new static handle
+    ;of that size.
+    if (a_handle_out) then
+        a_handle_out = %mem_proc(DM_RESIZ,total_size,a_handle_out)
+    else
+        a_handle_out = %mem_proc(DM_ALLOC|DM_STATIC,total_size)
+
+    ;If the data is less than 64K then we can copy it in one go
+    if (total_size<=D_MAXSIZE) then
+        ^m(a_handle_out) = ^m(a_handle_in)
+    else
+    begin
+
+        ;The data is 64K or larger, so we'll have to copy it in "chunks" of
+        ;less than 64K.
+
+        ;How many chunks will we need?
+        chunks = (total_size / D_MAXSIZE)
+
+        ;Copy the full chunks
+        for count from 1 thru chunks
+            ^m(chunk[count],a_handle_out) = ^m(chunk[count],a_handle_in)
+
+        ;And then copy any data remaining (less than a full chunk)
+        if (leftover=(total_size-((chunks*D_MAXSIZE))))
+            ^m(chunk[chunks+1](1:leftover),a_handle_out)
+&               = ^m(chunk[chunks+1](1:leftover),a_handle_in)
+    end
+
+    xreturn
+
+.end
+

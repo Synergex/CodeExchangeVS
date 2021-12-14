@@ -1,0 +1,14 @@
+;dummy mainline, to provide an example of using routines
+main
+.include 'WND:tools.def'
+record
+    wndid               ,i4
+proc
+    xcall u_start
+    if(wndid)
+    begin
+        xcall i_disable_set(wndid, 'ALL')
+        xcall i_enable_set(wndid, 'ALL')
+    end
+    xcall u_finish
+end

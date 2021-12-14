@@ -1,0 +1,27 @@
+main
+.include 'WND:tools.def'
+proc
+    try
+    begin
+        xcall u_start
+        xcall list_multi_select
+        xcall u_finish
+    end
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        xcall flags(7000000, 1)
+        stop D_EXIT_FAILURE
+    end
+    endtry
+
+    xcall flags(7000000, 1)
+    stop D_EXIT_SUCCESS
+end

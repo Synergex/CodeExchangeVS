@@ -1,0 +1,383 @@
+;=======================================================================;
+;  Copyright 2001 by Synergex International Corporation                 ;
+;                                                                       ;
+;  Synergex provides this software under a license and may only be      ;
+;  used in accordance with the terms and conditions of such             ;
+;  license and with the inclusion of the above Copyright notice.        ;
+;                                                                       ;
+;=======================================================================;
+;  Author:  William Hawkins                                             ;
+;           mailto: william.hawkins@synergex.com                        ;
+;                                                                       ;
+;=======================================================================;
+;
+;  Source:  list_multi_select.dbl
+;
+;=======================================================================;
+;
+; The routine demonstrates the use UI Toolkit lists to select more than
+; one item from a list.
+;
+; The following defines can be used to demonstrate different methods of
+; implementing this functionality.
+;
+; Use an ActiveX list (if not set, uses a UI Toolkit list)
+;;.define ACTIVEX_LIST  ,1
+;
+; Use L_INPUT (if not set, uses L_SELECT)
+;;.define USE_L_INPUT   ,1
+;
+; Use a checkbox field for include (if not set uses an "*" character)
+; NOTE: Checkbox's can only be used with L_INPUT ActiveX lists
+;;.define INC_CHECKBOX  ,1
+;
+;=======================================================================;
+
+.subroutine list_multi_select
+
+.include 'WND:tools.def'
+.include 'DBLDIR:windows.def'
+
+;this structure is used to hold a list of selected objects
+structure obj_list
+    obj                 ,a30
+
+; Input window record
+
+    record inp_rec                                  ;list input window
+.ifdef INC_CHECKBOX
+    include             ,d1
+.else
+    include             ,a1
+.endc ;INC_CHECKBOX
+    object              ,a ^size(obj_list.obj)
+
+;local records
+
+record clr_i
+    cls_id              ,i4                     ;listclass id
+    lst_id              ,i4                     ;list id
+    wndidp              ,i4                     ;input window id
+    colid               ,4i4                    ;menu columns
+    error               ,i4                     ;error
+    req                 ,i4                     ;list processor request
+    ctr                 ,i4                     ;counter
+    bld_id              ,i4                     ;build id for windows
+    list_max            ,i4                     ;number of elements in list
+    list_hdl            ,D_HANDLE               ;list array handle
+    list_cnt            ,i4                     ;# of entries in list array
+
+record clr
+    mbuffer             ,a1024                  ;menu column build buffer
+
+record
+    fields              ,2a30   ,'INCLUDE','OBJECT'
+
+.proc
+
+    clear clr, ^i(clr_i), inp_rec
+
+    xcall e_enter
+
+    xcall mb_column(mbuffer, 'GENERAL', "General  ")
+    xcall mb_entry(mbuffer, 'O_EXIT', "Exit")
+    xcall mb_entry(mbuffer, 'O_ABANDON', "Quit")
+    xcall mb_end(mbuffer, colid(4))
+
+    ;Load columns, but do not place
+    xcall mb_column(mbuffer, 'INP_COL', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'I_FRST', "First field")
+    xcall mb_entry(mbuffer, 'I_LAST', "Last field")
+    xcall mb_entry(mbuffer, 'I_NEXT', "Next field")
+    xcall mb_entry(mbuffer, 'I_PREV', "Prev field")
+    xcall mb_entry(mbuffer, 'E_LEFT', "Left 1 character")
+    xcall mb_entry(mbuffer, 'E_RIGHT', "Right 1 character")
+    xcall mb_entry(mbuffer, 'E_CDEL', "Delete character")
+    xcall mb_end(mbuffer, colid(1))
+
+    xcall mb_column(mbuffer, 'SEL_COL', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'S_DOWN', "Next item")
+    xcall mb_entry(mbuffer, 'S_UP', "Prev item")
+    xcall mb_end(mbuffer, colid(2))
+
+    xcall mb_column(mbuffer, 'LST_COL', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'S_DOWN', "Next item")
+    xcall mb_entry(mbuffer, 'S_UP', "Prev item")
+    xcall mb_entry(mbuffer, 'S_PGDN', "Next page")
+    xcall mb_entry(mbuffer, 'S_PGUP', "Prev page")
+    xcall mb_entry(mbuffer, 'S_TOP', "Top of list")
+    xcall mb_entry(mbuffer, 'S_BOTTOM', "Bottom of list")
+    xcall mb_end(mbuffer, colid(3))
+
+    ;create list input window
+    xcall ib_input(bld_id, 'LIST_WINDOW', 1, 33)
+
+.ifdef INC_CHECKBOX
+    xcall ib_field(bld_id, fields(1), D_FLD_TYPE, D_DECIMAL,
+    &              D_FLD_SIZE, ^size(inp_rec.include),
+    &              D_FLD_FPOS, 1, 2, D_FLD_CHECKBOX)
+.else
+    xcall ib_field(bld_id, fields(1), D_FLD_TYPE, D_ALPHA,
+    &              D_FLD_SIZE, ^size(inp_rec.include),
+    &              D_FLD_FPOS, 1, 2, D_FLD_BRK_RTRN)
+.endc ;INC_CHECKBOX
+
+    xcall ib_field(bld_id, fields(2), D_FLD_TYPE, D_ALPHA,
+    &              D_FLD_SIZE, ^size(inp_rec.object),
+    &              D_FLD_FPOS, 1, 4)
+
+.ifdef USE_L_INPUT
+    xcall ib_structure(bld_id, 'local', 2, fields)
+    xcall ib_set(bld_id, 'ALL', 'local', 2, fields)
+.ifdef ACTIVEX_LIST
+    xcall ib_set(bld_id, 'DATA', 'local', 1, fields)
+.else
+    ;need to make sure that set processing does not occur
+    ; by having more that one field
+    xcall ib_set(bld_id, 'DATA', 'local', 2, fields)
+.endc ;ACTIVEX_LIST
+.endc ;USE_L_INPUT
+
+    xcall ib_end(bld_id, wndidp)
+
+    ;create list class
+
+.ifdef ACTIVEX_LIST
+    xcall l_class(cls_id, 'list_lc', 1, 1, 10, 0, 0, 0,,,, 'object_lload',
+    &             'ACTIVEX', error,,, 'object_ldblclk')
+.else
+    xcall l_class(cls_id, 'list_lc', 1, 1, 10, 0, 0, 0,,,, 'object_lload',
+    &             , error,,, 'object_ldblclk')
+.endc ;ACTIVEX_LIST
+
+    ;create list
+    xcall l_create(lst_id, wndidp, inp_rec,, 'list_lc',,,,, 1, 2, error)
+
+    ;list title
+    xcall l_sect(lst_id, "Select Objects(s)", D_TITLE, D_CLEAR, D_LEFT)
+
+    req = D_LNOP
+
+    ;main loop
+    do  begin
+.ifdef USE_L_INPUT
+        xcall l_input(lst_id, 'DATA', inp_rec, inp_rec,, colid(1), colid(2),,
+        &             D_NOTERM)
+                                        ;process window
+        if (g_select) then
+            call mnu_cols               ;menu processing
+        else
+            begin
+            if(g_setsts) then
+                call brk_proc           ;break procssing
+            else
+                call set_proc           ;set processing
+            end
+.else
+        xcall l_select(lst_id, req, inp_rec)
+                                        ;process window
+        if (g_select) then
+            call mnu_cols               ;menu processing
+        else
+            begin
+            call selected               ;item selected
+            end
+.endc ;USE_L_INPUT
+        end
+    until(g_entnam.eq.'O_EXIT'.or.g_entnam.eq.'O_ABANDON')
+    clear g_entnam
+
+    xcall e_exit
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('SELECT'),
+        begin
+        call selected
+        end
+    ('O_EXIT'),
+        begin
+        ;Free memory (if used)
+        if(list_hdl)
+            list_hdl = %mem_proc(DM_FREE, list_hdl)
+        clear list_cnt
+
+        ;how many items in the list
+        xcall l_status(lst_id, D_LLASTITM, list_max)
+        if(list_max)
+            begin
+            ;go to the first item in the list
+            xcall l_process(lst_id, req=D_LTOP, inp_rec)
+            ctr = 1
+            while(ctr.le.list_max)
+                begin
+                ;is this object included
+                if(include)
+                    begin
+                    list_cnt += 1
+                    if(list_hdl) then
+                        begin
+                        list_hdl = %mem_proc(DM_RESIZ,
+                        &       list_cnt*^size(obj_list), list_hdl)
+                        end
+                    else
+                        begin
+                        list_hdl = %mem_proc(DM_ALLOC+DM_STATIC,
+                        &       ^size(obj_list))
+                        end
+                    ^m(obj_list[list_cnt].obj, list_hdl) = object
+                    end
+                ctr += 1
+                ;go the the next item in the list
+                xcall l_process(lst_id, req=D_LDOWN, inp_rec)
+                end
+            end
+
+        ;now we have a list of objects that were selected
+        if(list_cnt) then
+            begin
+            clear mbuffer
+
+            for ctr from 1 thru list_cnt
+                begin
+                object = ^m(obj_list[ctr].obj, list_hdl)
+
+                ;process object (by adding it into MBUFFER)
+                if(mbuffer) then
+                    mbuffer = %atrim(mbuffer) + ',' + object(1:4)
+                else
+                    mbuffer = object(1:4)
+
+                end
+
+            xcall u_message("You selected "+%atrim(mbuffer))
+
+            ;Free memory
+            list_hdl = %mem_proc(DM_FREE, list_hdl)
+            end
+        else
+            begin
+            xcall u_message("Nothing selected")
+            g_entnam = 'O_ABANDON'
+            end
+        end
+    ('O_ABANDON'),
+        nop
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+.ifdef USE_L_INPUT
+
+brk_proc,
+
+    using g_fldnam select
+    (fields(1)),
+        begin
+        call selected
+        end
+    (),
+        begin
+        xcall i_next(wndidp, 'DATA', '*FRST*')
+        end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    xcall i_next(wndidp, 'DATA', '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+.endc ;USE_L_INPUT
+
+selected,
+
+.ifdef INC_CHECKBOX
+    include = .not.include
+.else
+    if(include) then
+        clear include
+    else
+        include = "*"
+.endc
+
+    xcall i_dspfld(wndidp, 'include', include)
+
+.ifdef USE_L_INPUT
+    xcall i_next(wndidp, 'DATA', '*FRST*')
+.else
+    xcall i_next(wndidp, ,'*FRST*')
+.endc
+
+    return
+
+;----------------------------------------------------------------------------
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; List load method for objects
+
+.subroutine object_lload
+    a_listid    ,n          ; List id
+    a_req       ,n          ; Request flag
+    a_data      ,a          ; Item data
+    a_inpid     ,n          ; Input window id
+    a_disable   ,n          ; (Optional) Disable flag
+    a_index     ,n          ; Loading index
+
+.include "WND:tools.def"
+
+record data
+    include             ,a1
+    object              ,a30
+
+.proc
+
+    if(a_index .gt. 15)
+        goto nomore_items
+
+    clear data
+    object = a_index [LEFT]
+
+    xcall i_display(a_inpid,, data)
+    a_data = data
+    xreturn
+
+nomore_items,
+    a_req = D_LEOF
+    xreturn
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; List double-click method for objects
+
+.subroutine object_ldblclk ,reentrant
+    a_sts       ,n          ; Return status
+    a_listid    ,n          ; List ID
+    a_data      ,a          ; Item data
+    a_inpid     ,n          ; Input window ID
+    a_disabled  ,n          ; Disabled
+    a_itemindx  ,n          ; Item's index
+    a_row       ,n          ; Item's visible row
+
+.include "WND:tools.def"
+
+.proc
+    a_sts = TRUE
+    xcall m_signal("SELECT")
+    xreturn
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

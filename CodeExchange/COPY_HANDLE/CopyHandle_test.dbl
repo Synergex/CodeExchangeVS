@@ -1,0 +1,167 @@
+;*****************************************************************************
+;
+; Title:        CopyHandle_Test
+;
+; Description:  A test program for the CopyHandle routine
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         1st June 2006
+;
+; Platforms:    All platforms
+;
+;*****************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;*****************************************************************************
+;
+main CopyHandleTest
+
+    record
+        tt              ,i4     ;Terminal channel
+        OriginalHandle  ,D_HANDLE     ;Original handle to copy
+        NewHandle       ,D_HANDLE     ;New handle (copy of original)
+        error           ,i4     ;
+
+    external function
+        FileToHandle    ,^val
+
+.ifdef OS_VMS
+.define D_INFILE    "DBLDIR:bldism.exe"
+.else
+.define D_INFILE    "DBLDIR:bldism.dbr"
+.endc
+
+proc
+
+    open(tt=%syn_freechn,i,"tt:")
+
+    ;Load the contents of a file into a dynamic memory handle
+    error = %FileToHandle(D_INFILE,OriginalHandle)
+
+    ;Did it work
+    if (error) then
+        writes(tt,"file_to_handle failed, error " + %string(error))
+    else
+    begin
+
+        ;Report the size of the original handle
+        writes(tt,"Size of original handle: "+%string(%mem_proc(DM_GETSIZE,OriginalHandle)))
+
+        ;Copy the handle to a new handle
+        xcall CopyHandle(OriginalHandle,NewHandle)
+
+        ;And report the size of the new handle
+        writes(tt,"     Size of new handle: "+%string(%mem_proc(DM_GETSIZE,NewHandle)))
+
+        ;Deallocate both handles
+        OriginalHandle = %mem_proc(DM_FREE,OriginalHandle)
+        NewHandle = %mem_proc(DM_FREE,NewHandle)
+
+    end
+
+    close tt
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+
+    stop D_EXIT_SUCCESS
+
+end
+
+;*****************************************************************************
+;
+; Title:        FileToHandle
+;
+; Description:  Loads a file into a dynamic memory handle
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; Date:         1st June 2006
+;
+; Platforms:    All platforms
+;
+;*****************************************************************************
+;
+; This code is supplied as seen and without warranty or support, and is used
+; at your own risk. Neither the author or Synergex accept any responsability
+; for any loss or damage which may result from the use of this code.
+;
+;*****************************************************************************
+;
+function FileToHandle ,^VAL
+
+    a_file      ,a              ;File name to load (IN)
+    a_mh        ,i              ;Memory handle (IN/OUT)
+
+    stack record ivars
+        retval      ,i4             ;Routine return value
+        ch          ,i4             ;Input file channel
+        blocks      ,i4             ;Block counter
+        chars       ,i4             ;Size of last block (bytes)
+
+    structure block
+        ,a32768         ;Block size - how many bytes to read at once.
+        ;Must be less than 64K
+
+    stack record avars
+        buf         ,a^size(block)  ;IO Buffer
+
+proc
+
+    clear ^i(ivars), avars
+
+    ;Open input file
+    open(ch=%syn_freechn,i,a_file) [$ERR_FNF=nf,$ERR_PROTEC=pf,ERR=err]
+
+    ;Error checking for file open
+    if (0)
+    begin
+nf,     retval=1    ;File not found
+        exit
+pf,     retval=2    ;Protection violation
+        exit
+err,    retval=3    ;Other error
+    end
+
+    if (!retval)
+    begin
+        if (a_mh) then
+            clear ^i(^m(a_mh))
+        else
+            a_mh = %mem_proc(DM_ALLOC+DM_STATIC,1)
+
+        ;Read data from file in "block size" chunks
+        repeat
+        begin
+            clear buf
+            gets(ch,buf,ef)
+            blocks+=1
+            a_mh = %mem_proc(DM_RESIZ,^size(block)*blocks,a_mh)
+            ^m(block[blocks],a_mh)=buf
+        end
+
+        ;We hit EOF, save away the final buffer of data
+ef,     chars=%rsize
+        if (chars)
+        begin
+            blocks+=1
+            a_mh = %mem_proc(DM_RESIZ,^size(block)*blocks,a_mh)
+            ^m(block[blocks],a_mh)=buf
+
+            ;Resize handle to exact size of file.
+            a_mh = %mem_proc(DM_RESIZ,((^size(block)*(blocks-1))+(chars)),a_mh)
+        end
+
+    end
+
+    if retval!=1
+        close ch
+
+    freturn retval
+
+end
+

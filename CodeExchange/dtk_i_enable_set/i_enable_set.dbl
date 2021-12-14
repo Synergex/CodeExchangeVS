@@ -1,0 +1,69 @@
+;This function is a suppliment to the Synergy/UI toolkit API.  It accepts an
+;input window ID, and set name.  The routine then reads through the fields
+;within the set, and enables each field.
+;
+;The routine should be used in conjunction with the I_DISABLE_SET routine.
+;
+;       Author  Richard C. Morris
+;               Technical consultant
+;               Synergex.
+;
+;***************************************************************************
+;
+;The code herein is supplied as seen.  Although every attempt will be made
+;to correct any problems with the code, The author, nor the company can
+;accept any responsability for corruption, or loss of data caused by using
+;the routines included within this source code.
+;
+;***************************************************************************
+
+
+.subroutine i_enable_set
+a_winid,        n       ;passed window id
+a_set_name,     a       ;set name to process
+
+.include 'WND:tools.def'
+
+.include 'WND:system.def'
+.include 'WND:setinf.def'
+
+.align QUAD
+stack record
+  count,                i4		;loop counter
+  set_number,           i4		;ordinal set number
+  num_of_flds,          i4		;number of fields in the list
+
+  fld_name,             a30		;name of input field
+  fld_string,           a99		;list of field names
+
+.proc
+
+	xcall i_setinf(a_winid, a_set_name, set_number,, gs_fldset)
+
+	clear num_of_flds,fld_string
+
+	for count from 1 thru gs_setcnt
+	begin
+		clear fld_name
+		xcall i_fldinf(a_winid, fld_name, gs_setfldi(count))
+
+		incr num_of_flds
+		if num_of_flds.gt.9 .or.
+&			(%trim(fld_string)+%trim(fld_name)) .gt. 99
+		begin
+			xcall i_enable(a_winid, %atrim(fld_string))
+			num_of_flds=1
+			clear fld_string
+		end
+
+		if num_of_flds.eq.1
+		then fld_string=fld_name
+		else fld_string=%atrim(fld_string)+ ','+ fld_name
+
+	end
+
+	if fld_string.ne.'        ' xcall i_enable(a_winid, %atrim(fld_string))
+
+xreturn
+
+.end

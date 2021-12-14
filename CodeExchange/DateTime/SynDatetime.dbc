@@ -1,0 +1,849 @@
+;;**********************************************************************
+;;
+;; Title:       SynDateTime.dbc
+;;
+;; Type:        Class
+;;
+;; Description: Represents an instant in time, typically expressed as a
+;;              date and time of day.
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2010 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+
+namespace SynPSG.System
+
+    ;;;<summary>
+    ;;;Specifies the day of the week.
+    ;;;</summary>
+    ;;;<remarks>The value of the constants in the DayOfWeek enumeration
+    ;;;ranges from DayOfWeek.Sunday to DayOfWeek.Saturday. If cast to an
+    ;;;integer, its value ranges from zero (which indicates DayOfWeek.Sunday)
+    ;;;to six (which indicates DayOfWeek.Saturday).</remarks>
+    enum DayOfWeek
+        Sunday      ,0
+        Monday
+        Tuesday
+        Wednesday
+        Thursday
+        Friday
+        Saturday
+    endenum
+
+    public sealed class SynDateTime
+
+        private enum TimeValueType
+            Millisecond ,0
+            Second
+            Minute
+            Hour
+            Day
+            Month
+            Year
+        endenum
+
+        private record
+            group mDate     ,d
+                mYear           ,d4
+                mMonth          ,d2
+                mDay            ,d2
+            endgroup
+            group mTime     ,d
+                mHour           ,d2
+                mMinute         ,d2
+                mSecond         ,d2
+                mMillisecond    ,d6
+            endgroup
+        endrecord
+
+        ;;;<summary>
+        ;;;Overridden. Initializes a new instance of the SynDateTime structure.
+        ;;;</summary>
+        public method SynDateTime
+            endparams
+        proc
+            clear mDate, mTime
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the SynDateTime structure to the specified year, month, and day.
+        ;;;</summary>
+        ;;;<param name=year></param>
+        ;;;<param name=month></param>
+        ;;;<param name=day></param>
+        public method SynDateTime
+            in year     ,integer
+            in month    ,integer
+            in day      ,integer
+            endparams
+            this()
+        proc
+            mYear = year
+            mMonth = month
+            mDay = day
+            if dateInvalid()
+                throw new ArgumentOutOfRangeException("Year, Month, and Day parameters describe an un-representable SynDateTime.")
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the SynDateTime structure to the specified year, month, day, hour, minute, and second.
+        ;;;</summary>
+        ;;;<param name=year></param>
+        ;;;<param name=month></param>
+        ;;;<param name=day></param>
+        ;;;<param name=hour></param>
+        ;;;<param name=minute></param>
+        ;;;<param name=second></param>
+
+        public method SynDateTime
+            in year     ,integer
+            in month    ,integer
+            in day      ,integer
+            in hour     ,integer
+            in minute   ,integer
+            in second   ,integer
+            endparams
+            this(year,month,day)
+        proc
+            mHour = hour
+            mMinute = minute
+            mSecond = second
+            if dateInvalid()
+                throw new ArgumentOutOfRangeException("Hour, Minute, and Second parameters describe an un-representable SynDateTime.")
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the SynDateTime structure to the specified year, month, day, hour, minute, second, and millisecond.
+        ;;;</summary>
+        ;;;<param name=year></param>
+        ;;;<param name=month></param>
+        ;;;<param name=day></param>
+        ;;;<param name=hour></param>
+        ;;;<param name=minute></param>
+        ;;;<param name=second></param>
+        ;;;<param name=millisecond></param>
+        public method SynDateTime
+            in year         ,integer
+            in month        ,integer
+            in day          ,integer
+            in hour         ,integer
+            in minute       ,integer
+            in second       ,integer
+            in millisecond  ,integer
+            endparams
+            this(year,month,day,hour,minute,second)
+        proc
+            if (millisecond<0 || millisecond>999)
+                throw new ArgumentOutOfRangeException("Millisecond parameter describes an un-representable SynDateTime.")
+            mMillisecond = millisecond
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the SynDateTime structure to the specified Synergy decimal date.
+        ;;;</summary>
+        ;;;<param name=year>DecimalDate (d8 in YYYYMMDD format)</param>
+        public method SynDateTime
+            in decimalDate  ,d8
+            endparams
+            this(%integer(decimalDate(1:4)),%integer(decimalDate(5:2)),%integer(decimalDate(7:2)))
+        proc
+        endmethod
+
+        ;;;<summary>
+        ;;;Get the date
+        ;;;</summary>
+        public property Date    ,@SynDateTime
+            method get
+            proc
+                mreturn new SynDateTime(%integer(mYear),%integer(mMonth),%integer(mDay))
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the day
+        ;;;</summary>
+        public property Day     ,integer
+            method get
+            proc
+                mreturn %integer(mDay)
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the day of the week
+        ;;;</summary>
+        public property DayOfWeek   ,DayOfWeek
+            method get
+            proc
+                using %wkday(mDate) select
+                (1),    mreturn SynPSG.System.DayOfWeek.Sunday
+                (2),    mreturn SynPSG.System.DayOfWeek.Monday
+                (3),    mreturn SynPSG.System.DayOfWeek.Tuesday
+                (4),    mreturn SynPSG.System.DayOfWeek.Wednesday
+                (5),    mreturn SynPSG.System.DayOfWeek.Thursday
+                (6),    mreturn SynPSG.System.DayOfWeek.Friday
+                (7),    mreturn SynPSG.System.DayOfWeek.Saturday
+                endusing
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the day of the year
+        ;;;</summary>
+        public property DayOfYear   ,integer
+            method get
+            stack record
+                monthCtr    ,integer
+                totalDays   ,integer
+            endrecord
+            proc
+                totalDays=0
+                for monthCtr from 1 thru mMonth-1
+                    totalDays += DaysInMonth(%integer(mYear),monthCtr)
+                totalDays += mDay
+                mreturn totalDays
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the hour
+        ;;;</summary>
+        public property Hour    ,integer
+            method get
+            proc
+                mreturn mHour
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the millisecond
+        ;;;</summary>
+        public property Millisecond ,integer
+            method get
+            proc
+                mreturn mMillisecond
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the minute
+        ;;;</summary>
+        public property Minute  ,integer
+            method get
+            proc
+                mreturn mMinute
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the month
+        ;;;</summary>
+        public property Month   ,integer
+            method get
+            proc
+                mreturn %integer(mMonth)
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the current date and time and return as a new SynDateTime object
+        ;;;</summary>
+        public static property Now  ,@SynDateTime
+            method get
+            stack record
+                sysDate             ,a20
+                intYear             ,i4
+                intMonth            ,i4
+                intDay              ,i4
+                intHour             ,i4
+                intMinute           ,i4
+                intSecond           ,i4
+                intMilli            ,i4
+            endrecord
+            proc
+                sysDate = Synergex.SynergyDE.datetime
+                intYear = sysDate(1:4)
+                intMonth = sysDate(5:2)
+                intDay = sysDate(7:2)
+                intHour = sysDate(9:2)
+                intMinute = sysDate(11:2)
+                intSecond = sysDate(13:2)
+                intMilli = sysDate(15:3)
+                mreturn new SynDateTime(intYear,intMonth,intDay,intHour,intMinute,intSecond,intMilli)
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the second
+        ;;;</summary>
+        public property Second  ,integer
+            method get
+            proc
+                mreturn mSecond
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the current date only, and return as a new SynDateTime object
+        ;;;</summary>
+        public static property Today    ,@SynDateTime
+            method get
+            stack record
+                group curDate   ,d
+                    curYear     ,d4
+                    curMonth    ,d2
+                    curDay      ,d2
+                endgroup
+            endrecord
+            proc
+                curDate = %ndate
+                mreturn new SynDateTime(%integer(curYear),%integer(curMonth),%integer(curDay))
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Get the year
+        ;;;</summary>
+        public property Year    ,integer
+            method get
+            proc
+                mreturn %integer(mYear)
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Returns a date in YYYYMMDD format
+        ;;;</summary>
+        public property SynDate     ,d8
+            method get
+            proc
+                mreturn mDate
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Adds the specified number of days to the value of this instance.
+        ;;;</summary>
+        public method AddDays   ,@SynDateTime
+            req in decValue     ,decimal
+            endparams
+        proc
+            mreturn (addTime(decValue, TimeValueType.Day))
+        endmethod
+
+        ;;;<summary>
+        ;;;Adds the specified number of hours to the value of this instance.
+        ;;;</summary>
+        public method AddHours      ,@SynDateTime
+            req in decValue         ,decimal
+            endparams
+        proc
+
+            mreturn (addTime(decValue, TimeValueType.Hour))
+        endmethod
+
+        ;;;<summary>
+        ;;;Adds the specified number of milliseconds to the value of this instance.
+        ;;;</summary>
+        public method AddMilliseconds   ,@SynDateTime
+            req in decValue             ,decimal
+            endparams
+        proc
+            mreturn (addTime(decValue, TimeValueType.Millisecond))
+        endmethod
+
+        ;;;<summary>
+        ;;;Adds the specified number of minutes to the value of this instance.
+        ;;;</summary>
+        public method AddMinutes    ,@SynDateTime
+            req in decValue         ,decimal
+            endparams
+        proc
+            mreturn (addTime(decValue, TimeValueType.Minute))
+        endmethod
+
+        ;;;<summary>
+        ;;;Adds the specified number of months to the value of this instance.
+        ;;;</summary>
+        public method AddMonths     ,@SynDateTime
+            req in intValue         ,integer
+            endparams
+        stack record
+            mNewYear    ,i4
+            mNewMonth   ,i4
+        endrecord
+        proc
+            mNewYear = mYear
+            mNewMonth = mMonth + intValue
+            if (mNewMonth>12 || mNewMonth<-12)
+            begin
+                mNewYear += (mNewMonth/12)
+                mNewMonth -= (mNewMonth/12)*12
+            end
+            if (mNewMonth<1)
+            begin
+                mNewYear -= 1
+                mNewMonth += 12
+            end
+            if (mDay > DaysInMonth(mNewYear, mNewMonth))
+                mDay = DaysInMonth(mNewYear, mNewMonth)
+            mreturn new SynDateTime(mNewYear,mNewMonth,%integer(mDay),%integer(mHour),%integer(mMinute),%integer(mSecond),%integer(mMillisecond))
+        endmethod
+
+        ;;;<summary>
+        ;;;Adds the specified number of seconds to the value of this instance.
+        ;;;</summary>
+        public method AddSeconds    ,@SynDateTime
+            req in decValue         ,decimal
+            endparams
+        proc
+            mreturn (addTime(decValue, TimeValueType.Second))
+        endmethod
+
+        ;;;<summary>
+        ;;;Adds the specified number of years to the value of this instance.
+        ;;;</summary>
+        public method AddYears  ,@SynDateTime
+            req in intValue     ,integer
+            endparams
+        proc
+            if (mMonth==2 && mDay==29)
+                if !(isLeapYear(%integer(mYear)+intValue))
+                    mDay = 28
+            mreturn new SynDateTime(%integer(mYear)+intValue,%integer(mMonth),%integer(mDay),%integer(mHour),%integer(mMinute),%integer(mSecond),%integer(mMillisecond))
+        endmethod
+
+        ;;;<summary>
+        ;;;Return the number of days in the month
+        ;;;</summary>
+        ;;;<param name=year>Pass the required year</param>
+        ;;;<param name=month>Pass the required month</param>
+        ;;;<returns>Integer value containing the number of days</returns>
+        public static method DaysInMonth    ,integer
+            in year                         ,integer
+            in month                        ,integer
+            endparams
+
+        proc
+            if (month<1 || month>12 || year<1 || year>9999)
+                throw new ArgumentOutOfRangeException("Month and Year parameters describe an un-representable date.")
+            using month select
+            (2),
+                if IsLeapYear(year) then
+                    mreturn 29
+                else
+                    mreturn 28
+            (4,6,9,11),
+                mreturn 30
+            endusing
+            mreturn 31
+        endmethod
+
+        ;;;<summary>
+        ;;;check if the year is a leap year
+        ;;;</summary>
+        ;;;<param name=year>Pass the reuqired year</param>
+        ;;;<return>Boolean value indicating if the passed year is a leap year</return>
+        public static method IsLeapYear ,boolean
+            in year                     ,integer
+            endparams
+        proc
+            if ((year/4)*4==year)
+            begin
+                ;; only century years divisable by 400 are leap years
+                if(((year/100)*100==year) && ((year/400)*400!=year))
+                    mreturn false
+                mreturn true
+            end
+            mreturn false
+        endmethod
+
+        ;;;<summary>
+        ;;;Convert the date to a long time format
+        ;;;</summary>
+        ;;;<return>Long date format</return>
+        public method ToLongDateString  ,string
+            endparams
+        proc
+            if dateInvalid()
+                throw new ArgumentOutOfRangeException("Un-representable SynDateTime instance.")
+            mreturn this.DayNames(mDate) + ", "
+            &   + this.MonthNames(mMonth) + " " + %string(mDay,'XX') + ", " + %string(mYear,'XXXX')
+        endmethod
+
+        ;;;<summary>
+        ;;;Convert the date to a long time format
+        ;;;</summary>
+        ;;;<return>Long time format</return>
+        public method ToLongTimeString  ,string
+            endparams
+        proc
+            using mHour select
+            (0),
+                mreturn "12" + this.TimeSeperator() + %string(mMinute,'XX') + this.TimeSeperator() + %string(mSecond,'XX') + " " + this.AMDesignator()
+            (1 thru 11),
+                mreturn %string(mHour) + this.TimeSeperator() + %string(mMinute,'XX') + this.TimeSeperator() + %string(mSecond,'XX') + " " + this.AMDesignator()
+            (12),
+                mreturn "12" + this.TimeSeperator() + %string(mMinute,'XX') + this.TimeSeperator() + %string(mSecond,'XX') + " " + this.PMDesignator()
+            (13 thru 23),
+                mreturn %string((mHour-12)) + this.TimeSeperator() + %string(mMinute,'XX') + this.TimeSeperator() + %string(mSecond,'XX') + " " + this.PMDesignator()
+            endusing
+            throw new ArgumentOutOfRangeException("Un-representable SynDateTime instance.")
+        endmethod
+
+        ;;;<summary>
+        ;;;Convert the date to a short date format
+        ;;;</summary>
+        ;;;<return>Short date format</return>
+        public method ToShortDateString ,string
+            endparams
+        proc
+            mreturn %string(mMonth) + this.DateSeperator() + %string(mDay) + this.DateSeperator() + %string(mYear,'XXXX')
+        endmethod
+
+        ;;;<summary>
+        ;;;Convert the date to a short time format
+        ;;;</summary>
+        ;;;<return>Short time format</return>
+        public method ToShortTimeString ,string
+            endparams
+        proc
+            using mHour select
+            (0),
+                mreturn "12" + this.TimeSeperator() + %string(mMinute,'XX') + " " + this.AMDesignator()
+            (1 thru 11),
+                mreturn %string(mHour) + this.TimeSeperator() + %string(mMinute,'XX') + " " + this.AMDesignator()
+            (12),
+                mreturn "12" + this.TimeSeperator() + %string(mMinute,'XX') + " " + this.PMDesignator()
+            (13 thru 23),
+                mreturn %string((mHour-12)) + this.TimeSeperator() + %string(mMinute,'XX') + " " + this.PMDesignator()
+            endusing
+            throw new ArgumentOutOfRangeException("Un-representable SynDateTime instance.")
+        endmethod
+
+        ;;;<summary>
+        ;;;Overridden. Converts the value of this instance to its equivalent string representation.
+        ;;;</summary>
+        ;;;<return>A string representation of value of this instance.</return>
+        new public method ToString  ,string
+            endparams
+        proc
+            mreturn this.ToShortDateString() + " " + this.ToLongTimeString()
+        endmethod
+
+        ;;;<summary>
+        ;;;Overridden. Converts the value of this instance to its equivalent string representation based
+        ;;;on the specified format.
+        ;;;</summary>
+        ;;;<return>A string representation of value of this instance.</return>
+        public method ToString  ,string
+            req in dateFormat   ,string
+            endparams
+        proc
+            if dateInvalid()
+                throw new ArgumentOutOfRangeException("Un-representable SynDateTime instance.")
+            using dateFormat select
+            ("d"),
+                mreturn this.ToShortDateString()
+            ("D"),
+                mreturn this.ToLongDateString()
+            ("f"),
+                mreturn this.ToLongDateString() + " " + this.ToShortTimeString()
+            ("F"),
+                mreturn this.ToLongDateString() + " " + this.ToLongTimeString()
+            ("g"),
+                mreturn this.ToShortDateString() + " " + this.ToShortTimeString()
+            ("G"),
+                mreturn this.ToShortDateString() + " " + this.ToLongTimeString()
+            ("m","M"),
+                mreturn this.MonthNames(mMonth) + " " + %string(mDay,'XX')
+            ("r", "R"),
+                nop
+            ("s"),
+                ;TODO: Figure out the timezone string creations and replace the * with proper value
+                mreturn %string(mYear,'XXXX') + this.DateSeperator() + %string(mMonth,'XX') + this.DateSeperator() + %string(mDay,'XX') +
+                &   "*" + %string(mHour,'XX') + this.TimeSeperator() + %string(mMinute,'XX') + this.TimeSeperator() + %string(mSecond,'XX')
+            ("t"),
+                mreturn this.ToShortTimeString()
+            ("T"),
+                mreturn this.ToLongTimeString()
+            ("u","U"),
+                nop
+            ("y","Y"),
+                mreturn this.MonthNames(mMonth) + ", " + %string(mYear,'XXXX')
+            endusing
+            throw new ArgumentOutOfRangeException("Invalid DateTime conversion")
+        endmethod
+
+        ;;******************************************************************************
+        ;;
+        ;; private methods
+        ;;
+        ;;******************************************************************************
+        private method dateInvalid  ,boolean
+        proc
+            if (mHour<0 || mHour>23 || mMinute<0 || mMinute>59 || mSecond<0 || mSecond>59)
+                mreturn %true
+            if (!mYear && !mMonth && !mDay)
+                mreturn false
+            if (mYear<0 || mYear>9999 || mMonth<1 || mMonth>12 || mDay<1 || mDay>31)
+                mreturn true
+            using mMonth select
+            (4,6,9,11),
+                if (mDay>30)
+                    mreturn true
+            (2),
+                if IsLeapYear(%integer(mYear)) then
+                    if (mDay>29)
+                        mreturn true
+                else
+                    if (mDay>28)
+                        mreturn true
+            endusing
+            mreturn false
+        endmethod
+
+        private method addTime  ,@SynDateTime
+            valueToAdd  ,decimal
+            valueType   ,TimeValueType
+            endparams
+        stack record timesToAdd
+            wholeDays   ,i4
+            wholeHours  ,i4
+            wholeMinutes,i4
+            wholeSeconds,i4
+            wholeMillis ,i4
+        endrecord
+        stack record wrkVars
+            group workDate  ,d8
+                Year    ,d4
+                Month   ,d2
+                Day     ,d2
+            endgroup
+            workValue   ,decimal
+            workType    ,TimeValueType
+        endrecord
+
+        proc
+            init timesToAdd
+            init wrkVars
+
+            ;; No need to worry about months or years here; those routines are handled separately.
+            ;; Days need to remain "clean" for use with the %ndate and %jperiod function until
+            ;; later in the routine, but the calculations for Hours, Minutes, Seconds and
+            ;; Milliseconds should all be initialized to the current SynDateTime's value(s).
+            wholeHours = mHour
+            wholeMinutes = mMinute
+            wholeSeconds = mSecond
+            wholeMillis = mMillisecond
+
+            workValue = valueToAdd
+            workType = valueType
+
+            ;; Iterate through this loop from largest (days) to least (milliseconds) time
+            ;; increments, adjusting the work values as we go.
+            do
+            begin
+                if !(workValue)
+                    exitloop
+
+                using workType select
+                (TimeValueType.Millisecond),
+                begin
+                    ;; If there is a fractional value here, round it to the nearest millisecond.
+                    if (workValue - %int(workValue)) >= 0.5
+                        wholeMillis += 1
+                    wholeMillis += %int(valueToAdd)
+                end
+                (TimeValueType.Second),
+                begin
+                    wholeSeconds += %int(workValue)
+                    workValue -= %int(workValue)
+                    workValue *= 1000
+                    workType = TimeValueType.Millisecond
+                end
+                (TimeValueType.Minute),
+                begin
+                    wholeMinutes += %int(workValue)
+                    workValue -= %int(workValue)
+                    workValue *= 60
+                    workType = TimeValueType.Second
+                end
+                (TimeValueType.Hour),
+                begin
+                    wholeHours += %int(workValue)
+                    workValue -= %int(workValue)
+                    workValue *= 60
+                    workType = TimeValueType.Minute
+                end
+                (TimeValueType.Day),
+                begin
+                    wholeDays += %int(workValue)
+                    workValue -= %int(workValue)
+                    workValue *= 24
+                    workType = TimeValueType.Hour
+                end
+                endusing
+                end
+            until (workType == TimeValueType.Millisecond)
+
+            ;; Now work in the opposite direction (from least time increment to greatest), creating
+            ;; valid values for each and adding the remainder to the next-highest time increment.
+            ;; For instance, if we have 79123 milliseconds, add 123 milliseconds and apply the
+            ;; remaining 79000 milliseconds as 79 seconds (which will in turn be converted to
+            ;; one minute and 19 seconds.
+            if (wholeMillis > 999)
+            begin
+                wholeSeconds += (wholeMillis/1000)
+                wholeMillis -= (wholeMillis/1000)*1000
+            end
+
+            if (wholeSeconds > 59)
+            begin
+                wholeMinutes += (wholeSeconds/60)
+                wholeSeconds -= (wholeSeconds/60)*60
+            end
+
+            if (wholeMinutes > 59)
+            begin
+                wholeHours += (wholeMinutes/60)
+                wholeMinutes -= (wholeMinutes/60)*60
+            end
+
+            if (wholeHours > 23)
+            begin
+                wholeDays += (wholeHours/24)
+                wholeHours -= (wholeHours/24)*24
+            end
+
+            if (wholeDays) then
+                workDate = %ndate(%jperiod(mDate)+wholeDays)
+            else
+                workDate = mDate
+
+            ;; Return our new SynDateTime based on the work variables we've modified
+            mreturn new SynDateTime(%integer(workDate.Year),%integer(workDate.Month),%integer(workDate.Day),
+            &   wholeHours,wholeMinutes,wholeSeconds,wholeMillis)
+        endmethod
+
+    ;;--------------------------------------------------------------------
+        private method MonthNames       ,a
+            req in  aMonth              ,n
+            endparams
+            literal
+                longMonth       ,12a9   ,'January  ','February ','March    '
+                &                       ,'April    ','May      ','June     '
+                &                       ,'July     ','August   ','September'
+                &                       ,'October  ','November ','December '
+            endliteral
+        proc
+            if(aMonth < 1 || aMonth > 12)
+                mreturn ' '
+            mreturn %atrim(longMonth(aMonth))
+        endmethod
+    ;;--------------------------------------------------------------------
+        private method AbbreviatedMonthNames    ,a
+            req in  aMonth                      ,n
+            endparams
+            literal
+                shortMonth      ,12a3   ,'Jan','Feb','Mar','Apr','May','Jun'
+                &                       ,'Jul','Aug','Sep','Oct','Nov','Dec'
+            endliteral
+        proc
+            if(aMonth < 1 || aMonth > 12)
+                mreturn ' '
+            mreturn %atrim(shortMonth(aMonth))
+        endmethod
+    ;;--------------------------------------------------------------------
+        private method DayNames         ,a
+            req in  aDate               ,n
+            endparams
+            literal
+                longDow         ,7a9    ,'Sunday   ','Monday   ','Tuesday  '
+                &                       ,'Wednesday','Thursday ','Friday   '
+                &                       ,'Saturday '
+            endliteral
+            record
+                group myDate    ,d
+                    year        ,d4
+                    mon         ,d2
+                    day         ,d2
+                endgroup
+            endrecord
+        proc
+            myDate = aDate
+            mreturn %atrim(longDow(%wkday(myDate)))
+        endmethod
+    ;;--------------------------------------------------------------------
+        private method AbbreviatedDayNames  ,a
+            req in  aDate                   ,n
+            endparams
+            literal
+                shortDow        ,9a3    ,'Sun','Mon','Tue','Wed','Thu','Fri'
+                &                       ,'Sat'
+            endliteral
+            record
+                group myDate    ,d
+                    year        ,d4
+                    mon         ,d2
+                    day         ,d2
+                endgroup
+            endrecord
+        proc
+            myDate = aDate
+            mreturn %atrim(shortDow(%wkday(myDate)))
+        endmethod
+    ;;--------------------------------------------------------------------
+        private method DateSeperator        ,a
+            endparams
+        proc
+            mreturn '/'
+        endmethod
+    ;;--------------------------------------------------------------------
+        private method TimeSeperator        ,a
+            endparams
+        proc
+            mreturn ':'
+        endmethod
+    ;;--------------------------------------------------------------------
+        private method AMDesignator         ,a
+            endparams
+        proc
+            mreturn 'AM'
+        endmethod
+    ;;--------------------------------------------------------------------
+        private method PMDesignator         ,a
+            endparams
+        proc
+            mreturn 'PM'
+        endmethod
+    ;;--------------------------------------------------------------------
+
+   endclass
+
+endnamespace
+

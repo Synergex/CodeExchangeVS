@@ -1,0 +1,26 @@
+import SynPSG.System
+
+main
+    record
+        newDate     ,@SynDateTime
+        oldDate     ,@SynDateTime
+        testYear    ,i4
+    endrecord
+
+proc
+    open(1,O,'TT:')
+    oldDate = SynDateTime.Now
+    writes(1,'Today is '+oldDate.ToLongDateString())
+    testYear = oldDate.Year
+    writes(1,'The year is '+%string(oldDate.Year,'XXXX'))
+    newDate = oldDate.AddYears(5)
+    writes(1,"Adding 5 years to today's date results in "+newDate.ToShortDateString())
+    newDate = oldDate.AddMonths(37)
+    writes(1,"Adding 37 months to today's date results in "+newDate.ToShortDateString())
+    newDate = oldDate.AddDays(1.5)
+    writes(1,"Adding 1.5 days to today's date results in "+newDate.ToShortDateString()+" "+newDate.ToLongTimeString())
+    close 1
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+endmain
