@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{BBD0F5D1-1CC4-42FD-BA4C-A96779C64378}") = "HTTPquerystring", "HTTPquerystring.synproj", "{BB109C62-A166-4054-B4F7-F01806066F04}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BB109C62-A166-4054-B4F7-F01806066F04}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BB109C62-A166-4054-B4F7-F01806066F04}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BB109C62-A166-4054-B4F7-F01806066F04}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BB109C62-A166-4054-B4F7-F01806066F04}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

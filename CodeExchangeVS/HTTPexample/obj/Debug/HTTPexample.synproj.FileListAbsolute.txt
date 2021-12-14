@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\HTTPexample\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\HTTPexample\bin\Debug\HTTPexample.exe
+C:\Development\CodeExchangeVS\HTTPexample\bin\Debug\HTTPexample.pdb
+C:\Development\CodeExchangeVS\HTTPexample\obj\Debug\HTTPexample.exe
+C:\Development\CodeExchangeVS\HTTPexample\obj\Debug\HTTPexample.pdb

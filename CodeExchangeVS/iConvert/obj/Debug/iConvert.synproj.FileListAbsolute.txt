@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\iConvert\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\iConvert\bin\Debug\iConvert.exe
+C:\Development\CodeExchangeVS\iConvert\bin\Debug\iConvert.pdb
+C:\Development\CodeExchangeVS\iConvert\obj\Debug\iConvert.exe
+C:\Development\CodeExchangeVS\iConvert\obj\Debug\iConvert.pdb

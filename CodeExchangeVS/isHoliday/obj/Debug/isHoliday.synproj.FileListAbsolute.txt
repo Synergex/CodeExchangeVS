@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\isHoliday\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\isHoliday\bin\Debug\isHoliday.exe
+C:\Development\CodeExchangeVS\isHoliday\bin\Debug\isHoliday.pdb
+C:\Development\CodeExchangeVS\isHoliday\obj\Debug\isHoliday.exe
+C:\Development\CodeExchangeVS\isHoliday\obj\Debug\isHoliday.pdb

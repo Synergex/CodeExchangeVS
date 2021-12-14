@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\HTTPquerystring\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\HTTPquerystring\bin\Debug\HTTPquerystring.exe
+C:\Development\CodeExchangeVS\HTTPquerystring\bin\Debug\HTTPquerystring.pdb
+C:\Development\CodeExchangeVS\HTTPquerystring\obj\Debug\HTTPquerystring.exe
+C:\Development\CodeExchangeVS\HTTPquerystring\obj\Debug\HTTPquerystring.pdb

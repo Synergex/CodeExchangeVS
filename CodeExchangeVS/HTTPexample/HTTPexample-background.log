@@ -1,0 +1,41 @@
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(12): .include 'INC:http.def'
+%DBL-E-OPENIN2, Cannot open:  INC:http.def
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(112):     record control_data
+%DBL-W-RECETY, Record is empty
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(113): .include 'INC:http_ctrl.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:http_ctrl.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(114): .include 'INC:http_inp_rec.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:http_inp_rec.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(582): .include 'INC:http_ctrl.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:http_ctrl.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(583): .include 'INC:http_inp_rec.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:http_inp_rec.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(684): .include 'INC:http_ctrl.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:http_ctrl.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(685): .include 'INC:http_inp_rec.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:http_inp_rec.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(830): .include 'INC:http_inp_rec.rec' ; The data_area argument passed to the
+%DBL-E-OPENIN2, Cannot open:  INC:http_inp_rec.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(832): .include 'INC:http_ctrl.rec'    ; Method data
+%DBL-E-OPENIN2, Cannot open:  INC:http_ctrl.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(884): .include 'INC:http_inp_rec.rec' ; The data_area argument passed to the
+%DBL-E-OPENIN2, Cannot open:  INC:http_inp_rec.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(886): .include 'INC:http_ctrl.rec'    ; Method data
+%DBL-E-OPENIN2, Cannot open:  INC:http_ctrl.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(941): .include 'INC:http_inp_rec.rec' ; The data_area argument passed to the
+%DBL-E-OPENIN2, Cannot open:  INC:http_inp_rec.rec
+"C:\Development\CodeExchange\HTTPexample\http.dbl"(943): .include 'INC:http_ctrl.rec'    ; Method data
+%DBL-E-OPENIN2, Cannot open:  INC:http_ctrl.rec
+"C:\Development\CodeExchange\HTTPexample\http_client.dbl"(10): .include 'INC:http.def'
+%DBL-E-OPENIN2, Cannot open:  INC:http.def
+"C:\Development\CodeExchange\HTTPexample\http_client.dbl"(228):     record
+%DBL-W-RECETY, Record is empty
+"C:\Development\CodeExchange\HTTPexample\http_client.dbl"(229):         msg         ,a D_SIZ_RECV_MSG ;For displaying buffer
+%DBL-E-NFND, D_SIZ_RECV_MSG not found
+"C:\Development\CodeExchange\HTTPexample\http_server_shutdown.dbl"(10): .include 'INC:http.def'
+%DBL-E-OPENIN2, Cannot open:  INC:http.def
+%DBL-E-NOASM, No assembly file created
+
+Warnings:       2
+Errors:        16
+
