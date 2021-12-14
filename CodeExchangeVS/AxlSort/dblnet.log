@@ -1,0 +1,69 @@
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(229):     cbid = %rcb_create(%numargs, DRCB_REPLICATE)
+%DBL-E-NFND, DRCB_REPLICATE not found
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(230):     xcall rcb_setfnc(cbid, "l_data")
+%DBL-E-NETSUPRT, rcb_setfnc not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(231):     xcall rcb_insarg(cbid, 2, req)
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(232):     xcall rcb_insarg(cbid, 3, inpid)
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(233):     xcall rcb_insarg(cbid, 4, data)
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(234):     xcall rcb_insarg(cbid, 5)
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(235):     xcall rcb_insarg(cbid, 6, null)
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(237):     xcall rcb_call(cbid)        ;Call L_DATA to get current item
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(280):     cbid = %rcb_create(%numargs, DRCB_REPLICATE)
+%DBL-E-NFND, DRCB_REPLICATE not found
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(281):     xcall rcb_setfnc(cbid, "l_process")
+%DBL-E-NETSUPRT, rcb_setfnc not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(282):     xcall rcb_insarg(cbid, 2, req)
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(283):     xcall rcb_insarg(cbid, 3, data)
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(284):     xcall rcb_insarg(cbid, 4)
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(286):     xcall rcb_call(cbid)        ;Call L_PROCESS with D_LFIND
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(309):     xcall rcb_call(cbid)            ;Ask for the first record
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(317):         xcall rcb_call(cbid)        ;Call L_DATA again, with D_LNEXT
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(328):     xcall rcb_setfnc(cbid, M_SORTCTL(g_hndl, sc_lmethod))
+%DBL-E-NETSUPRT, rcb_setfnc not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(330):     xcall rcb_setarg(cbid, data, 3)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(331):     xcall rcb_setarg(cbid, inpid, 4)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(332):     xcall rcb_setarg(cbid, null = 0, 5) ;Disabled flag, which we'll ignore
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(333):     xcall rcb_setarg(cbid, ndx, 6)
+%DBL-E-NETSUPRT, rcb_setarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(335):     xcall rcb_call(cbid)            ;Call the load method
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(340):         xcall rcb_call(cbid)        ;Call load method again
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(803):         cbid = %rcb_create(%numargs, DRCB_REPLICATE);Copy argument block
+%DBL-E-NFND, DRCB_REPLICATE not found
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(804):         xcall rcb_insarg(cbid, 1, msgbuf)       ;Insert buffer argument
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(805):         xcall rcb_insarg(cbid, 2, msglen)       ;Insert length argument
+%DBL-E-NETSUPRT, rcb_insarg not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(806):         xcall rcb_setfnc(cbid, "s_bld")     ;Call s_bld
+%DBL-E-NETSUPRT, rcb_setfnc not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(807):         xcall rcb_call(cbid)            ;Call it
+%DBL-E-NETSUPRT, rcb_call not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(911):     xcall ax_call(a_ctlid, "GetHeaderCell", a_col, text)
+%DBL-E-NETSUPRT, ax_call not supported in .NET
+"C:\Development\CodeExchange\axlsort\axlsort.dbl"(917):         xcall ax_call(a_ctlid, "SetHeaderCell", a_col, %atrim(text))
+%DBL-E-NETSUPRT, ax_call not supported in .NET
+"C:\Development\CodeExchange\axlsort\testsort.dbl"(32): function mainprog ,i
+%DBL-E-RETRQD, FRETURN missing in mainprog
+"C:\Development\CodeExchange\axlsort\testsort.dbl"(103):     xcall ax_set(ctlid, "RowMode", TRUE)
+%DBL-E-NETSUPRT, ax_set not supported in .NET
+%DBL-E-NOASM, No assembly file created
+
+Errors:        32
+
+

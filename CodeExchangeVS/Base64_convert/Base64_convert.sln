@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{BBD0F5D1-1CC4-42FD-BA4C-A96779C64378}") = "Base64_convert", "Base64_convert.synproj", "{516EFA2A-419A-4A02-A198-60DA5C53DD8F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{516EFA2A-419A-4A02-A198-60DA5C53DD8F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{516EFA2A-419A-4A02-A198-60DA5C53DD8F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{516EFA2A-419A-4A02-A198-60DA5C53DD8F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{516EFA2A-419A-4A02-A198-60DA5C53DD8F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

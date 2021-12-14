@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\addSourceControl\bin\Debug\addSourceControl.exe
+C:\Development\CodeExchangeVS\addSourceControl\bin\Debug\addSourceControl.pdb
+C:\Development\CodeExchangeVS\addSourceControl\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\addSourceControl\obj\Debug\addSourceControl.exe
+C:\Development\CodeExchangeVS\addSourceControl\obj\Debug\addSourceControl.pdb

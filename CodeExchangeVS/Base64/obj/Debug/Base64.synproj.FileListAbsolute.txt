@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\Base64\bin\Debug\Base64.exe
+C:\Development\CodeExchangeVS\Base64\bin\Debug\Base64.pdb
+C:\Development\CodeExchangeVS\Base64\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\Base64\obj\Debug\Base64.exe
+C:\Development\CodeExchangeVS\Base64\obj\Debug\Base64.pdb
