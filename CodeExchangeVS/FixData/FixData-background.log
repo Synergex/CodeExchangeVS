@@ -1,0 +1,40 @@
+"C:\Development\CodeExchange\FixData\fixdata.dbl"(46): .include 'INC:FixData.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:FixData.rec
+"C:\Development\CodeExchange\FixData\fixdata.dbl"(951): .include 'INC:FixData.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:FixData.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(12): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(36):         rpsmfile        ,a D_FILENAME_SIZE      ;RPSMAIN
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(37):         rpstfile        ,a D_FILENAME_SIZE      ;RPSTEXT
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(255): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(275): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(525): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(641): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(671): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(745): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(783): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(784): .include 'INC:FixData.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:FixData.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(877): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(878): .include 'INC:fixdata.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(883):         file_name           ,a ^size(fil_array)
+%DBL-E-NFND, fil_array not found
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(1004): .include 'INC:fixdata.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata.rec
+"C:\Development\CodeExchange\FixData\FixData_test.dbl"(1038): .include 'INC:fixdata_test.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:fixdata_test.rec
+%DBL-E-NOASM, No assembly file created
+
+Errors:        18
+

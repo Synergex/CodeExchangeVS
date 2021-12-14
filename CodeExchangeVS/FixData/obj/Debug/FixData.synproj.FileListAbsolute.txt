@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\FixData\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\FixData\bin\Debug\FixData.exe
+C:\Development\CodeExchangeVS\FixData\bin\Debug\FixData.pdb
+C:\Development\CodeExchangeVS\FixData\obj\Debug\FixData.exe
+C:\Development\CodeExchangeVS\FixData\obj\Debug\FixData.pdb

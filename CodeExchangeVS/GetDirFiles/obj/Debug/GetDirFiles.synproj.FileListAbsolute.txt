@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\GetDirFiles\bin\Debug\GetDirFiles.exe
+C:\Development\CodeExchangeVS\GetDirFiles\bin\Debug\GetDirFiles.pdb
+C:\Development\CodeExchangeVS\GetDirFiles\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\GetDirFiles\obj\Debug\GetDirFiles.exe
+C:\Development\CodeExchangeVS\GetDirFiles\obj\Debug\GetDirFiles.pdb

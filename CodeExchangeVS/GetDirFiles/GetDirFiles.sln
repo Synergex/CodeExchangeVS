@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{BBD0F5D1-1CC4-42FD-BA4C-A96779C64378}") = "GetDirFiles", "GetDirFiles.synproj", "{D28CB82C-CDB1-4F6F-8D60-8FA9564FC052}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D28CB82C-CDB1-4F6F-8D60-8FA9564FC052}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D28CB82C-CDB1-4F6F-8D60-8FA9564FC052}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D28CB82C-CDB1-4F6F-8D60-8FA9564FC052}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D28CB82C-CDB1-4F6F-8D60-8FA9564FC052}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

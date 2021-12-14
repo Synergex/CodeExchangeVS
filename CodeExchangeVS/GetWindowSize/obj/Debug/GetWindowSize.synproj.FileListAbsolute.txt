@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\GetWindowSize\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\GetWindowSize\bin\Debug\GetWindowSize.exe
+C:\Development\CodeExchangeVS\GetWindowSize\bin\Debug\GetWindowSize.pdb
+C:\Development\CodeExchangeVS\GetWindowSize\obj\Debug\GetWindowSize.exe
+C:\Development\CodeExchangeVS\GetWindowSize\obj\Debug\GetWindowSize.pdb

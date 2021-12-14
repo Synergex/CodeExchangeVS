@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{BBD0F5D1-1CC4-42FD-BA4C-A96779C64378}") = "FixData", "FixData.synproj", "{0856CBD1-BA51-4E79-ACD9-319E6B93802E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0856CBD1-BA51-4E79-ACD9-319E6B93802E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0856CBD1-BA51-4E79-ACD9-319E6B93802E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0856CBD1-BA51-4E79-ACD9-319E6B93802E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0856CBD1-BA51-4E79-ACD9-319E6B93802E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

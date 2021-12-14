@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\FindNPchars\bin\Debug\FindNPchars.exe
+C:\Development\CodeExchangeVS\FindNPchars\bin\Debug\FindNPchars.pdb
+C:\Development\CodeExchangeVS\FindNPchars\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\FindNPchars\obj\Debug\FindNPchars.exe
+C:\Development\CodeExchangeVS\FindNPchars\obj\Debug\FindNPchars.pdb
