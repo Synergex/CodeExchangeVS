@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\SMTPmail\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\SMTPmail\bin\Debug\SMTPmail.exe
+C:\Development\CodeExchangeVS\SMTPmail\bin\Debug\SMTPmail.pdb
+C:\Development\CodeExchangeVS\SMTPmail\obj\Debug\SMTPmail.exe
+C:\Development\CodeExchangeVS\SMTPmail\obj\Debug\SMTPmail.pdb

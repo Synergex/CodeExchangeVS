@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\SocketExamples\bin\Debug\SocketExamples.exe
+C:\Development\CodeExchangeVS\SocketExamples\bin\Debug\SocketExamples.pdb
+C:\Development\CodeExchangeVS\SocketExamples\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\SocketExamples\obj\Debug\SocketExamples.exe
+C:\Development\CodeExchangeVS\SocketExamples\obj\Debug\SocketExamples.pdb

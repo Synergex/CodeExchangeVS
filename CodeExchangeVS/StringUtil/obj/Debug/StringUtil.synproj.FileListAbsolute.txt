@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\StringUtil\bin\Debug\StringUtil.exe
+C:\Development\CodeExchangeVS\StringUtil\bin\Debug\StringUtil.pdb
+C:\Development\CodeExchangeVS\StringUtil\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\StringUtil\obj\Debug\StringUtil.exe
+C:\Development\CodeExchangeVS\StringUtil\obj\Debug\StringUtil.pdb
