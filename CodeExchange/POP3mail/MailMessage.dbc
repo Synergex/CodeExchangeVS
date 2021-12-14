@@ -1,0 +1,246 @@
+;;**********************************************************************
+;;
+;; Title:       MailMessage.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System
+import SynPSG.System.IO
+import SynPSG.System.Net.Mail
+import SynPSG.System.Net.Sockets
+import SynPSG.System.Net.Mime
+
+namespace SynPSG.System.Net.Mail
+    public enum MailPriority
+        High
+        Low
+        Normal
+    endenum
+
+    class MailMessage
+        mFrom           ,@MailAddress
+        mSender         ,@MailAddress
+        mTo             ,@MailAddressCollection
+        mCC             ,@MailAddressCollection
+        mBcc            ,@MailAddressCollection
+        mReplyTo        ,@MailAddress
+        mAttachments    ,@AttachmentCollection
+        mSubject        ,string
+        mBody           ,string
+        mIsBodyHtml     ,int
+        mPriority       ,MailPriority
+
+        ;;;<summary>
+        ;;;Initializes an empty instance of the MailMessage class.
+        ;;;</summary>
+        public method MailMessage
+        proc
+            mTo = new MailAddressCollection()
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MailMessage class by using the specified MailAddress class objects.
+        ;;;</summary>
+        public method MailMessage
+            in from     ,@MailAddress
+            in to       ,@MailAddress
+            endparams
+            this()
+        proc
+            mFrom = from
+            mTo.Add(to)
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MailMessage class by using the specified String class objects.
+        ;;;</summary>
+        public method MailMessage
+            in from     ,string
+            in to       ,string
+            endparams
+            this()
+        proc
+            mFrom = new mailAddress(from)
+            mTo.Add(new mailAddress(to))
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MailMessage class.
+        ;;;</summary>
+        public method MailMessage
+            in from     ,string
+            in to       ,string
+            in subject  ,string
+            in body     ,string
+            endparams
+            this(from,to)
+        proc
+            mSubject = subject
+            mBody = body
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public property To, @MailAddressCollection
+            method get
+            proc
+                mreturn mTo
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Bcc, @MailAddressCollection
+            method get
+            proc
+                if (mBcc==^null)
+                    mBcc = New MailAddressCollection()
+                mreturn mBcc
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property CC, @MailAddressCollection
+            method get
+            proc
+                if (mCC==^null)
+                    mCC = New MailAddressCollection()
+                mreturn mCC
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property From, @MailAddress
+            method get
+            proc
+                mreturn mFrom
+            endmethod
+            method set
+            proc
+                mFrom = value
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Subject, string
+            method get
+            proc
+                mreturn mSubject
+            endmethod
+            method set
+            proc
+                mSubject = value
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Body, string
+            method get
+            proc
+                mreturn mBody
+            endmethod
+            method set
+            proc
+                mBody = value
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property ReplyTo, @MailAddress
+            method get
+            proc
+                mreturn mReplyTo
+            endmethod
+            method set
+            proc
+                mReplyTo = value
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Attachments,    @AttachmentCollection
+            method get
+            proc
+                if mAttachments==^null
+                    mAttachments = new AttachmentCollection()
+                mreturn mAttachments
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property IsBodyHtml, int
+            method get
+            proc
+                mreturn mIsBodyHtml
+            endmethod
+            method set
+            proc
+                mIsBodyHtml = value
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Priority,   MailPriority
+            method get
+            proc
+                mreturn mPriority
+            endmethod
+            method set
+            proc
+                mPriority = value
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Sender, @MailAddress
+            method get
+            proc
+                mreturn mSender
+            endmethod
+            method set
+            proc
+                mSender = value
+            endmethod
+        endproperty
+
+    endclass
+
+endnamespace

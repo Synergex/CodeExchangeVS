@@ -1,0 +1,450 @@
+;;**********************************************************************
+;;
+;; Title:       FileStream.dbc
+;;
+;; Type:        Class (extends Stream class)
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System.IO
+
+namespace SynPSG.System.IO
+    public class FileStream extends Stream
+        mFileMode      ,FileMode
+        mName          ,string
+        mCanRead       ,boolean
+        mCanSeek       ,boolean
+        mCanWrite      ,boolean
+        mLength        ,integer
+        mPosition      ,integer
+        pChan          ,integer
+
+        ;;********************************************************************
+
+        ;;;<summary>Initializes a new instance of the FileStream class with the specified path and creation mode.</summary>
+        ;;;<param name="path">A relative or absolute path for the file that the current FileStream object will encapsulate.</param>
+        ;;;<param name="mode">A FileMode constant that determines how to open or create the file.</param>
+        ;;;<exception cref="ArgumentException">path is an empty string (""),contains only white space, or contains one or more invalid characters.</exception>
+        ;;;<exception cref="ApplicationException">The file cannot be found, such as when mode is FileMode.Truncate or FileMode.Open, and the file specified by path does not exist. The file must already exist in these modes.</exception>
+        ;;;<exception cref="ApplicationException">An I/O error occurs, such as specifying FileMode.CreateNew and the file specified by path already exists.</exception>
+        public method FileStream
+            in path ,string
+            in mode ,FileMode
+        proc
+            if (path.Length==0)
+                throw new ArgumentException("A path parameter is required.")
+            using mode select
+            (FileMode.Append),
+            begin
+                open(pChan=%syn_freechn,a,path) [$ERR_FNF=nf,$ERR_PROTEC=pf,ERR=er]
+                mCanRead = %false
+                mCanSeek = %false
+                mCanWrite = %true
+            end
+            (FileMode.Create),
+            begin
+                open(pChan=%syn_freechn,o,path) [$ERR_FNF=nf,$ERR_PROTEC=pf,ERR=er]
+                mCanRead = %false
+                mCanSeek = %false
+                mCanWrite = %true
+            end
+            (FileMode.CreateNew),
+            begin
+                open(pChan=%syn_freechn,o,path) [$ERR_FNF=nf,$ERR_PROTEC=pf,ERR=er]
+                mCanRead = %false
+                mCanSeek = %false
+                mCanWrite = %true
+            end
+            (FileMode.Open),
+            begin
+                open(pChan=%syn_freechn,i,path) [$ERR_FNF=nf,$ERR_PROTEC=pf,ERR=er]
+                mCanRead = %true
+                mCanSeek = %true
+                mCanWrite = %true
+            end
+            (FileMode.Truncate),
+            begin
+                open(pChan=%syn_freechn,o,path) [$ERR_FNF=nf,$ERR_PROTEC=pf,ERR=er]
+                mCanRead = %false
+                mCanSeek = %false
+                mCanWrite = %true
+            end
+            endusing
+
+            if (0)
+            nf, throw new ApplicationException("File not found or invalid path name.")
+            if (0)
+            begin
+            pf, throw new ApplicationException("IO protection violation.")
+                if (pChan)
+                    close pChan
+                clear pChan
+            end
+            if (0)
+            begin
+            er, throw new ApplicationException("IO exception.")
+                if (pChan)
+                    close pChan
+                clear pChan
+            end
+
+            mName = path
+            mFileMode = mode
+            mPosition = 1
+
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        method ~FileStream
+        proc
+            if pChan
+                close pChan
+            clear pChan
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets a value indicating whether the current stream supports reading.</summary>
+        public override property CanRead    ,boolean
+            method get
+            proc
+                mreturn mCanRead
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets a value indicating whether the current stream supports seeking.</summary>
+        public override property CanSeek    ,boolean
+            method get
+            proc
+                mreturn mCanSeek
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets a value that determines whether the current stream can 
+        ;;; time out.</summary>
+        public override property CanTimeout    ,boolean
+            method get
+            proc
+                mreturn false
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets a value indicating whether the current stream supports seeking.</summary>
+        public override property CanWrite   ,boolean
+            method get
+            proc
+                mreturn mCanWrite
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets the length in bytes of the stream.</summary>
+        public override property Length ,integer
+            method get
+            proc
+                mreturn mLength
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Name    ,string
+            method get
+            proc
+                mreturn mName
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets the position within the current stream.</summary>
+        public override property Position   ,integer
+            method get
+            proc
+                mreturn mPosition
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets a value, in miliseconds, that determines how 
+        ;;; long the stream will attempt to read before timing out.</summary>
+        public override property ReadTimeout   ,integer
+            method get
+            proc
+                throw new ApplicationException("Invalid Operation")
+            endmethod
+            method set
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets a value, in miliseconds, that determines how 
+        ;;; long the stream will attempt to write before timing out.</summary>
+        public override property WriteTimeout   ,integer
+            method get
+            proc
+                throw new ApplicationException("Invalid Operation")
+            endmethod
+            method set
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public override method BeginRead    ,void
+        proc
+            throw new ApplicationException("BeginRead not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public override method BeginWrite    ,void
+        proc
+            throw new ApplicationException("BeginWrite not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        public override method Close ,void
+            endparams
+        proc
+            if (pChan)
+                close pChan
+            clear pChan
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Releases all resources used by the Stream.</summary>
+        public override method Dispose    ,void
+        proc
+            throw new ApplicationException("Dispose not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Releases the unmanaged resources used by the Stream and 
+        ;;; optionally releases the managed resources.</summary>
+        public override method Dispose    ,void
+            req in disposing    ,boolean
+            endparams
+        proc
+            throw new ApplicationException("Dispose(boolean) not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Clears all buffers for this stream and
+        ;;;causes any buffered data to be written to the underlying device.</summary>
+        public override method Flush    ,void
+        proc
+            throw new ApplicationException("Flush not implemented")
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public override method EndRead    ,void
+        proc
+            throw new ApplicationException("EndRead not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public override method EndWrite    ,void
+        proc
+            throw new ApplicationException("EndWrite not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override method Read  ,integer
+            req out buffer  ,a
+            req in offset   ,integer
+            req in count    ,integer
+        proc
+            if (offset<0 || (offset+count)>^size(buffer) || count<=0)
+                throw new ApplicationException("Argument out of range.")
+            if (!mCanRead)
+                throw new ApplicationException("Stream does not support reading.")
+            if (!pChan || !%chopen(pChan))
+                throw new ApplicationException("The stream object has been closed.")
+            gets(pChan,buffer(offset+1,count),ef)
+            mPosition = offset+1+count
+            ;; If NOT end of file, returns the number of bytes read.
+            ;; If End of File reached, returns zero
+        ef, mreturn %rsize
+
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Reads a byte from the stream and advances the position 
+        ;;; within the stream by one byte, or returns -1 if at the end of the
+        ;;; stream.</summary>
+        public override method ReadByte    ,integer
+            endparams
+            record
+                buffer      ,a1
+            endrecord
+        proc
+            if (!mCanRead)
+                throw new ApplicationException("Stream does not support reading.")
+            if (!pChan || !%chopen(pChan))
+                throw new ApplicationException("The stream object has been closed.")
+            gets(pChan,buffer,ef)
+            mPosition += 1
+            mreturn %decml(buffer)
+                
+        ef,
+            mreturn -1
+        endmethod
+
+        ;;********************************************************************
+        
+        ;;;<summary>Sets the position within the current stream.</summary>
+        public override method Seek ,integer
+            in offset   ,integer
+            in origin   ,SeekOrigin
+            endparams
+            stack record
+                m_loc   ,integer
+            endrecord
+            proc
+                if (!canSeek)
+                    throw new ApplicationException("FileStream does not support seeking.")
+                using origin select
+                (SeekOrigin.fromBegin),
+                    m_loc = 1
+                (SeekOrigin.fromCurrent),
+                    m_loc = mPosition
+                (SeekOrigin.fromEnd),
+                    m_loc = mLength
+                endusing
+                if (m_loc+offset<1)
+                    throw new ArgumentException("Attempted seeking before the beginning of the string.")
+                if (!pChan || !%chopen(pChan))
+                    throw new ApplicationException("The stream object has been closed.")
+                mreturn (mPosition=m_loc+offset)
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Sets the length of the current stream.</summary>
+        public override method SetLength    ,void
+            in length   ,integer
+            endparams
+        proc
+            throw new ApplicationException("SetLength not implemented")
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Write, void
+            buffer          ,string
+            offset          ,int
+            count           ,int
+            endparams
+        proc
+            if (buffer==^null)
+                throw new System.ArgumentNullException("Buffer is a null reference.")
+            if (offset<0 || offset>buffer.length || count<0 || (offset+count)>buffer.length)
+                throw new System.ArgumentOutOfRangeException()
+            if (!pChan || !%chopen(pChan))
+                throw new ApplicationException("The stream object has been closed.")
+            puts(pChan,buffer(offset+1:count))
+            mPosition += count
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Writes a sequence of 
+        ;;; bytes to the current stream and advances the current position within
+        ;;; this stream by the number of bytes written.</summary>
+        public override method Write    ,void
+            req in buffer   ,a
+            req in offset   ,integer
+            req in count    ,integer
+            endparams
+            record
+                bufferLen   ,integer
+        proc
+            bufferLen = ^size(buffer)
+            if (offset<0 || offset>bufferLen || count<0 || (offset+count)>bufferLen)
+                throw new System.ArgumentOutOfRangeException()
+            if (!pChan || !%chopen(pChan))
+                throw new ApplicationException("The stream object has been closed.")
+            puts(pChan,buffer(offset+1:count))
+            mPosition += count
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Writes a byte to the current position in the stream and 
+        ;;;advances the position within the stream by one byte.</summary>
+        public override method WriteByte    ,void
+            in value   ,integer
+            endparams
+        proc
+            if (!pChan || !%chopen(pChan))
+                throw new ApplicationException("The stream object has been closed.")
+            this.write(%char(value), 0, 1)
+            mPosition += 1
+            mreturn
+        endmethod
+
+    endclass
+
+endnamespace

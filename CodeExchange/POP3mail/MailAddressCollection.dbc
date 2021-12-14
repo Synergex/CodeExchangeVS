@@ -1,0 +1,175 @@
+;;**********************************************************************
+;;
+;; Title:       MailAddressCollection.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System
+import SynPSG.System.IO
+import SynPSG.System.net.mail
+import SynPSG.System.Net.Sockets
+import System.collections
+import SynPSG.System.Net.Mime
+
+namespace SynPSG.System.net.mail
+    class MailAddressCollection
+        private mAddressCollection  ,@ArrayList
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Initializes an empty instance of the MailAddressCollection class.
+        ;;;</summary>
+        public method MailAddressCollection
+            endparams
+        proc
+            mAddressCollection = New ArrayList()
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Add a list of e-mail addresses to the collection.
+        ;;;</summary>
+        public method Add   ,i
+            in addresses    ,string
+            endparams
+        record
+            tempAddress ,@MailAddress
+            email       ,string
+            begpos      ,i4
+            endpos      ,i4
+        endrecord
+        proc
+            begpos=2
+            while %instr(begpos,addresses,",",endpos)
+            begin
+                email = addresses(begpos-1,endpos-1)
+                tempAddress = new MailAddress(email)
+                mAddressCollection.Add((Object)tempAddress)
+                begpos=endpos+2
+            end
+            if !(endpos=%trimz(addresses))
+                throw new applicationexception("Invalid email address list passed.")
+            email = addresses(begpos-1,endpos)
+            tempAddress = new MailAddress(email)
+            mreturn mAddressCollection.Add((Object)tempAddress)
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Adds an object to the end of the Collection.
+        ;;;</summary>
+        public method Add   ,i
+            in item         ,@MailAddress
+            endparams
+        proc
+            mreturn mAddressCollection.Add((Object)item)
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Return the total count of mail address objects in the collection
+        ;;;</summary>
+        public property Count   ,integer
+            method get
+            proc
+                mreturn mAddressCollection.Count
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Returns a string representation of the e-mail addresses in this MailAddressCollection object.
+        ;;;</summary>
+        new public method ToString  ,string
+            endparams
+        record
+            addresses   ,string
+            tempAddress ,@MailAddress
+            ctr         ,i4
+        endrecord
+        proc
+            init addresses
+            for ctr from 1 thru mAddressCollection.Count
+            begin
+                tempAddress = (MailAddress)mAddressCollection[ctr-1]
+                if (ctr == 1)
+                then
+                    addresses = tempAddress.Address
+                else
+                    addresses = addresses(1:%trim(addresses))+","+tempAddress.Address
+            end
+
+            mreturn addresses
+
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Method to clear the entire collection
+        ;;;</summary>
+        public method Clear ,void
+            endparams
+        proc
+            mAddressCollection.Clear()
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Indexer to expose the typed collection to the outside world
+        ;;;</summary>
+        public property Indexer ,@MailAddress
+            required in index   ,i4
+            endparams
+
+            method get
+            proc
+                mreturn (MailAddress)mAddressCollection[index]
+            endmethod
+
+            method set
+            proc
+                mAddressCollection[index]=(Object)value
+            endmethod
+
+        endproperty
+
+    endclass
+
+endnamespace

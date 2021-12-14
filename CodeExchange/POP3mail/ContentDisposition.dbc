@@ -1,0 +1,157 @@
+;;**********************************************************************
+;;
+;; Title:       ContentDisposition.dbc
+;;
+;; Type:        Class
+;;
+;; Description: Represents a MIME protocol Content-Disposition header.
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System
+
+namespace SynPSG.System.Net.Mime
+    public class ContentDisposition
+        mDispositionType   ,string
+        mCreationDate      ,@SynDatetime
+        mFileName          ,string
+        mModificationDate  ,@SynDatetime
+        mReadDate          ,@SynDatetime
+        mSize              ,integer
+
+        ;;;<summary>Initializes a new instance of the ContentDisposition class with a
+        ;;;DispositionType of Attachment.</summary>
+        public method ContentDisposition
+            endparams
+        proc
+            mDispositionType = "Attachment"
+        endmethod
+
+        ;;;<param>Disposition:
+        ;;;A string that contains the Content Disposition value</param>
+        public method ContentDisposition
+            in disposition  ,string
+        proc
+            if (disposition.Length==0)
+                throw new ArgumentException("This property cannot be set to an empty string.")
+            mDispositionType = disposition
+        endmethod
+
+        ;;;<summary>Gets or sets the creation date for a file attachment.</summary>
+        public property CreationDate,   @SynDatetime
+            method get
+            proc
+                if (mCreationDate==^null)
+                    mCreationDate = new SynDatetime()
+                mreturn mCreationDate
+            endmethod
+            method set
+            proc
+                mCreationDate = value
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets or sets the disposition type for an e-mail attachment.</summary>
+        public property DispositionType,    string
+            method get
+            proc
+                mreturn mDispositionType
+            endmethod
+            method set
+            proc
+                mDispositionType = value
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets or sets the suggested file name for an e-mail attachment.</summary>
+        public property FileName,   string
+            method get
+            proc
+                mreturn mFileName
+            endmethod
+            method set
+            proc
+                mFileName = value
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets or sets a Boolean value that determines the disposition type
+        ;;;(Inline or Attachment) for an e-mail attachment.</summary>
+        public property Inline, boolean
+            method get
+            proc
+                mreturn (mDispositionType.ToLower() == "inline")
+            endmethod
+            method set
+            proc
+                if (value==%true) then
+                    mDispositionType = "inline"
+                else
+                    mDispositionType = "attachment"
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets or sets the modification date for a file attachment.</summary>
+        public property ModificationDate,   @SynDatetime
+            method get
+            proc
+                mreturn mModificationDate
+            endmethod
+            method set
+            proc
+                mModificationDate = value
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets or sets the read date for a file attachment.</summary>
+        public property ReadDate,   @SynDatetime
+            method get
+            proc
+                mreturn mReadDate
+            endmethod
+            method set
+            proc
+                mReadDate = value
+            endmethod
+        endproperty
+
+        ;;;<summary>Gets or sets the size of a file attachment.</summary>
+        public property Size,   integer
+            method get
+            proc
+                mreturn mSize
+            endmethod
+            method set
+            proc
+                mSize = value
+            endmethod
+        endproperty
+
+    endclass
+
+endnamespace

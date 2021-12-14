@@ -1,0 +1,575 @@
+;;**********************************************************************
+;;
+;; Title:       MemoryStream.dbc
+;;
+;; Type:        Class (extends Stream class)
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System.IO
+
+namespace SynPSG.System.IO
+    public class MemoryStream extends Stream
+        mHandle         ,D_HANDLE
+        mCanRead        ,boolean
+        mCanSeek        ,boolean
+        mCanWrite       ,boolean
+        mCapacity       ,integer
+        mLength         ,integer
+        pPosition       ,integer
+        pPublic         ,boolean
+        pResizable      ,boolean
+        pClosed         ,boolean
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MemoryStream class with an 
+        ;;; expandable capacity initialized to zero.
+        ;;;</summary>
+        public method MemoryStream
+            endparams
+        proc
+            MemoryStreamDefaults()
+            mCapacity = 1
+            mHandle = %mem_proc(DM_ALLOC+DM_STATIC+DM_NULL,mCapacity)
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MemoryStream class.
+        ;;;</summary>
+        public method MemoryStream
+            req in byteArray    ,string
+            endparams
+        proc
+            MemoryStreamDefaults()
+            mCapacity = byteArray.Length
+            mHandle = %mem_proc(DM_ALLOC+DM_STATIC+DM_NULL,mCapacity)
+            MemoryStreamPopulate(byteArray, 1, byteArray.Length)
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MemoryStream class.
+        ;;;</summary>
+        public method MemoryStream
+            req in capacity ,integer
+            endparams
+        proc
+            MemoryStreamDefaults()
+            mCapacity = capacity
+            mHandle = %mem_proc(DM_ALLOC+DM_STATIC+DM_NULL,mCapacity)
+            pPublic = %true
+            pResizable = %true
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MemoryStream class.
+        ;;;</summary>
+        public method MemoryStream
+            req in byteArray    ,string
+            req in writeable    ,boolean
+            endparams
+        proc
+            MemoryStreamDefaults()
+            mCapacity = byteArray.Length
+            mHandle = %mem_proc(DM_ALLOC+DM_STATIC+DM_NULL,mCapacity)
+            mCanWrite = writeable
+            MemoryStreamPopulate(byteArray, 1, byteArray.Length)
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MemoryStream class.
+        ;;;</summary>
+        public method MemoryStream
+            req in byteArray    ,string
+            req in index        ,integer
+            req in count        ,integer
+            endparams
+        proc
+            MemoryStreamDefaults()
+            mCapacity = count
+            mHandle = %mem_proc(DM_ALLOC+DM_STATIC+DM_NULL,mCapacity)
+            MemoryStreamPopulate(byteArray, index, count)
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MemoryStream class.
+        ;;;</summary>
+        public method MemoryStream
+            req in byteArray    ,string
+            req in index        ,integer
+            req in count        ,integer
+            req in writeable    ,boolean
+            endparams
+        proc
+            MemoryStreamDefaults()
+            mCapacity = count
+            mHandle = %mem_proc(DM_ALLOC+DM_STATIC+DM_NULL,mCapacity)
+            mCanWrite = writeable
+            MemoryStreamPopulate(byteArray, index, count)
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the MemoryStream class.
+        ;;;</summary>
+        public method MemoryStream
+            req in byteArray    ,string
+            req in index        ,integer
+            req in count        ,integer
+            req in writeable    ,boolean
+            req in publiclyVisible  ,boolean
+            endparams
+        proc
+            MemoryStreamDefaults()
+            mCapacity = count
+            mHandle = %mem_proc(DM_ALLOC+DM_STATIC+DM_NULL,mCapacity)
+            mCanWrite = writeable
+            pPublic = publiclyVisible
+            MemoryStreamPopulate(byteArray, index, count)
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes default state of the MemoryStream class.
+        ;;;</summary>
+        private method MemoryStreamDefaults ,void
+            endparams
+        proc
+            mCapacity = 0
+            mHandle = 0
+            mCanRead = %true
+            mCanWrite = %true
+            mCanSeek = %true
+            mLength = 0
+            pPosition = 1
+            pPublic = %false
+            pResizable = %false
+            pClosed = %false
+        endmethod
+
+        ;;;<summary>
+        ;;;Populates the memory stream with data from a string
+        ;;;</summary>
+        private method MemoryStreamPopulate ,void
+            req in byteArray    ,string
+            req in index        ,integer
+            req in count        ,integer
+            endparams
+            structure struct
+                fld     ,a1
+            endstructure
+        proc
+        if(byteArray.Length >= index) then 
+        begin
+            mLength = byteArray.Length - index + 1
+            if(mLength > count)
+                mLength = count
+            ^m(struct.fld(1:mLength),mHandle) = byteArray(index:mLength)
+        end
+        else
+            mLength = 0
+        mreturn
+        endmethod
+        
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        method ~MemoryStream
+        proc
+            if (mHandle)
+                mHandle=%mem_proc(DM_FREE,mHandle)
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Gets a value indicating whether the current stream supports reading.
+        ;;;</summary>
+        public override property CanRead    ,boolean
+            method get
+            proc
+                mreturn mCanRead
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Gets a value indicating whether the current stream supports seeking.
+        ;;;</summary>
+        public override property CanSeek    ,boolean
+            method get
+            proc
+                mreturn mCanSeek
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets a value that determines whether the current stream can 
+        ;;; time out.</summary>
+        public override property CanTimeout    ,boolean
+            method get
+            proc
+                mreturn false
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override property CanWrite   ,boolean
+            method get
+            proc
+                mreturn mCanWrite
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override property Length    ,integer
+            method get
+            proc
+                mreturn mLength
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override property Position   ,integer
+            method get
+            proc
+                mreturn pPosition
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets a value, in miliseconds, that determines how 
+        ;;; long the stream will attempt to read before timing out.</summary>
+        public override property ReadTimeout   ,integer
+            method get
+            proc
+                throw new ApplicationException("Invalid Operation")
+            endmethod
+            method set
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets a value, in miliseconds, that determines how 
+        ;;; long the stream will attempt to write before timing out.</summary>
+        public override property WriteTimeout   ,integer
+            method get
+            proc
+                throw new ApplicationException("Invalid Operation")
+            endmethod
+            method set
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public override method BeginRead    ,void
+        proc
+            throw new ApplicationException("BeginRead not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public override method BeginWrite    ,void
+        proc
+            throw new ApplicationException("BeginWrite not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override method Close    ,void
+        proc
+            pClosed = %true
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Releases all resources used by the Stream.</summary>
+        public override method Dispose    ,void
+        proc
+            throw new ApplicationException("Dispose not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Releases the unmanaged resources used by the Stream and 
+        ;;; optionally releases the managed resources.</summary>
+        public override method Dispose    ,void
+            req in disposing    ,boolean
+            endparams
+        proc
+            throw new ApplicationException("Dispose(boolean) not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public override method EndRead    ,void
+        proc
+            throw new ApplicationException("EndRead not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public override method EndWrite    ,void
+        proc
+            throw new ApplicationException("EndWrite not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override method Flush    ,void
+        proc
+            nop ;doesn't need to do anything
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public method GetBuffer  ,string
+            endparams
+            structure struct
+                fld     ,a1
+            endstructure
+        proc
+            if (!pPublic)
+                throw new ApplicationException("Unauthorized access exception")
+            if (!mHandle)
+                throw new ApplicationException("Object Disposed Exception")
+
+            if(mLength < 1)
+                mreturn ""
+            
+            mreturn ^m(struct.fld(1,mLength), mHandle)
+
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override method Read  ,integer
+            req out buffer  ,a
+            req in offset   ,integer
+            req in count    ,integer
+            endparams
+            structure struct
+                fld     ,a1
+            endstructure
+            record
+                ctr     ,integer
+            endrecord
+        proc
+            if (offset<0 || (offset+count)>^size(buffer) || count<=0)
+                throw new ApplicationException("Argument out of range.")
+            if (!mCanRead)
+                throw new ApplicationException("Stream does not support reading.")
+            if (pClosed || !mHandle)
+                throw new ApplicationException("Object Disposed Exception")
+
+            if (pPosition > mLength)
+                mreturn 0
+
+            if(count > pPosition + mLength - 1) then 
+                ctr = pPosition + mLength - 1
+            else
+                ctr = count
+            buffer(offset+1,count) = ^m(struct.fld(pPosition:ctr), mHandle)
+            pPosition += ctr
+
+            ;; if NOT end of file, return the number of bytes read
+            mreturn ctr
+
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override method ReadByte  ,integer
+            endparams
+            structure struct
+                fld     ,a1
+            endstructure
+        proc
+            if (!mCanRead)
+                throw new ApplicationException("Stream does not support reading.")
+            if (pClosed || !mHandle)
+                throw new ApplicationException("Object Disposed Exception")
+
+            if (pPosition > mLength)
+                mreturn -1
+
+            pPosition += 1
+
+            mreturn %decml(^m(struct[pPosition].fld, mHandle))
+
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override method Seek ,integer
+            in offset   ,integer
+            in origin   ,SeekOrigin
+            endparams
+        stack record
+            m_loc   ,integer
+        endrecord
+        proc
+            using origin select
+            (SeekOrigin.fromBegin),
+                m_loc = 1
+            (SeekOrigin.fromCurrent),
+                m_loc = pPosition
+            (SeekOrigin.fromEnd),
+                m_loc = mLength
+            endusing
+            if (m_loc+offset<1 || m_loc+offset>mLength)
+                throw new ApplicationException("Invalid start to seek origin.")
+            if (pClosed || !mHandle)
+                throw new ApplicationException("Object Disposed Exception")
+            mreturn (pPosition=m_loc+offset)
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override method SetLength    ,void
+            in length   ,integer
+            endparams
+            structure struct
+                fld     ,a1
+            endstructure
+        proc
+            if ((!pResizable && length>mCapacity) || length<0)
+                throw new ApplicationException("Stream is not resizable and specified length exceeds defined capacity.")
+            if (!mCanWrite)
+                throw new ApplicationException("Stream does not support writing.")
+            if (!mHandle)
+                throw new ApplicationException("Object Disposed Exception")
+            if(length > mCapacity)
+            begin
+                mCapacity = length
+                mHandle = %mem_proc(DM_RESIZ.bor.DM_NULL, mCapacity, mHandle)
+            end
+            if(length < mCapacity)
+            begin
+                fill(%char(0), ^m(struct.fld(length+1, mCapacity), mHandle))
+                if(pPosition > length)
+                    pPosition = length+1
+            end
+            mLength = length
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override method Write    ,void
+            req out buffer  ,a
+            req in offset   ,integer
+            req in count    ,integer
+            endparams
+            structure struct
+                fld     ,a1
+            endstructure
+        proc
+            if (offset<0 || (offset+count)>^size(buffer) || count<=0)
+                throw new ApplicationException("Argument out of range.")
+            if (!mCanWrite)
+                throw new ApplicationException("Stream does not support writing.")
+            if (pClosed || !mHandle)
+                throw new ApplicationException("Object Disposed Exception")
+
+            if (mCapacity < pPosition+count-1)
+                SetLength(pPosition+count-1)
+
+            ^m(struct.fld(pPosition:count), mHandle) = buffer(offset+1,count)
+            pPosition += count
+
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;</summary>
+        public override method WriteByte    ,void
+            req out buffer  ,integer
+            endparams
+            structure struct
+                fld     ,a1
+            endstructure
+        proc
+            if (!mCanWrite)
+                throw new ApplicationException("Stream does not support writing.")
+            if (pClosed || !mHandle)
+                throw new ApplicationException("Object Disposed Exception")
+
+            if (mCapacity < pPosition)
+                SetLength(pPosition)
+
+            ^m(struct.fld(pPosition:1), mHandle) = %char(buffer)
+            pPosition += 1
+
+            mreturn
+        endmethod
+
+    endclass
+
+endnamespace

@@ -1,0 +1,882 @@
+;;**********************************************************************
+;;
+;; Title:       POP3client.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      William Hawkins, Synergex Professional Services Group
+;;
+;; Copyright    © 2010 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System
+import SynPSG.System.IO
+import SynPSG.System.Net
+import SynPSG.System.Net.Mail
+import SynPSG.System.Net.Sockets
+import SynPSG.System.Net.Mime
+import SynPSG.System.Text.encoding
+
+.define CRLF    %char(13)+%char(10)
+.define CR      %char(13)
+.define LF      %char(10)
+
+namespace SynPSG.Core.Utilities.Mail
+
+    public class Pop3Client
+        private mHost           ,string
+        private mPort           ,integer
+        private mUser           ,string
+        private mPassword       ,string
+        private mDigest         ,string
+        private mTcpClient      ,@SynPSG.System.net.sockets.TcpClient
+        private mNStream        ,@SynPSG.System.net.sockets.NetworkStream
+        private mDebugFile      ,string
+        private mChan           ,i4
+        private mConnected      ,boolean
+        
+        ;;;<summary>
+        ;;;Initializes a new instance of the PopClient class
+        ;;;</summary>
+        public method Pop3Client
+            in host             ,string
+            endparams
+        proc
+            if (host.length == 0) then
+                mHost = "localhost"
+            else
+                mHost = host
+            mPort = 110
+        endmethod
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the PopClient class
+        ;;;</summary>
+        public method Pop3Client
+            in host             ,string
+            in port             ,integer
+            endparams
+        proc
+            if (host.length == 0) then
+                mHost = "localhost"
+            else
+                mHost = host
+            if (port <= 0 && port < 65535) then
+                mPort = 110
+            else
+                mPort = port
+        endmethod
+        
+        
+        ;;;<summary>
+        ;;;</summary>
+        public property Host ,string
+            method get
+            proc
+                mreturn mHost
+            endmethod
+            method set
+            proc
+                mHost = value
+            endmethod
+        endproperty
+        
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Port ,integer
+            method get
+            proc
+                mreturn mPort
+            endmethod
+            method set
+            proc
+                mPort = value
+            endmethod
+        endproperty
+        
+
+        ;;;<summary>
+        ;;;</summary>
+        public property User ,string
+            method get
+            proc
+                mreturn mUser
+            endmethod
+            method set
+            proc
+                mUser = value
+            endmethod
+        endproperty
+        
+        
+        ;;;<summary>
+        ;;;</summary>
+        public property Password ,string
+            method get
+            proc
+                mreturn mPassword
+            endmethod
+            method set
+            proc
+                mPassword = value
+            endmethod
+        endproperty
+        
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Connect ,void
+            endparams
+            record
+                respCode        ,integer
+                respStr         ,string
+            endrecord
+        proc
+            if(mHost == ^NULL || mHost.Length < 1)
+                mreturn
+            if(mPort < 1 || mPort > 65535)
+                mreturn
+            mTcpClient = new TcpClient(mHost, mPort)
+            mNStream = mTcpClient.GetStream()
+            mConnected = true
+            
+            ;; Set the timeout to 1 second
+            mNStream.ReadTimeout = 1000
+
+            ;;Get initial response from the server. 
+            DebugOutput('<host connect> ----------------------------------------------------------------'+CRLF)
+
+            respCode = getPopLine(respStr)
+            if(!respCode)
+            begin
+                data pos    ,i4
+                data pos2   ,i4
+                
+                ;;Get timestamp from response
+                pos = %instr(1, respStr, '<')
+                pos2 = %instr(pos+1, respStr, '>')
+                if(pos && pos2)
+                begin
+                    ;;mDigest = Convert.ToMD5(respStr(pos,pos2))
+                end
+            end
+        endmethod
+        
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Disconnect, void
+        proc
+            if(mConnected == true)
+            begin
+                DebugOutput('<host disconnect> -------------------------------------------------------------'+CRLF)
+                mTcpClient.Close()
+            end
+            clear mTcpClient
+            mConnected = false
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Logon to POP3 server
+        ;;;</summary>
+        public method Logon ,integer
+            in user             ,string
+            in password         ,string
+            endparams
+            record
+                respCode        ,integer
+            endrecord
+        proc
+            if(mConnected == false)
+                mreturn 1
+            sendPopMessage('USER '+user)
+            if(respCode = getPopLine())
+                mreturn respCode
+            sendPopMessage('PASS '+password)
+            respCode = getPopLine()
+            if(respCode = getPopLine())
+                mreturn respCode
+            mUser = user
+            mPassword = password
+            mreturn 0
+        endmethod
+        
+        
+        ;;;<summary>
+        ;;;Use APOP logon (assuming we got an appropriate digest from connect()
+        ;;;</summary>
+        public method Logon ,integer
+            req in  user        ,string
+            endparams
+            record
+                respCode        ,integer
+            endrecord
+        proc
+            if(mConnected == false || mDigest == ^NULL || mDigest.Length < 1)
+                mreturn 1
+            sendPopMessage('APOP '+user+' '+mDigest)
+            respCode = getPopLine()
+            mreturn respCode
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Logoff from POP3 server
+        ;;;</summary>
+        public method Logoff, void
+            endparams
+        proc
+            sendPopMessage('QUIT')
+            getPopLine()
+            clear mUser, mPassword
+        endmethod
+        
+        
+        ;;;<summary>
+        ;;;Get the number of mail messages
+        ;;;</summary>
+        public method NumberOfMessages ,integer
+            endparams
+            record
+                pos             ,i4
+                numMsg          ,i4
+                parts           ,[#]string
+                respCode        ,integer
+                respStr         ,string
+            endrecord
+        proc
+            if(mConnected == false)
+                mreturn 0
+            clear numMsg
+            sendPopMessage('STAT')
+            respCode = getPopLine(respStr)
+            if(!respCode)
+            begin
+                parts = StringUtil.Split(removeCRLF(respStr), ' ')
+                if(parts[2] != ^NULL)
+                begin
+;                    if(parts[2].Length > 0)
+                    if(parts[2])
+                        numMsg = parts[2]
+                end
+            end
+            mreturn numMsg
+        endmethod
+
+
+        ;;;<summary>
+        ;;;get the requested mail message
+        ;;;</summary>
+        public method GetMessage ,@MailMessage
+            req in MessageNumber    ,integer
+            endparams
+            record
+                msg             ,@MailMessage
+            endrecord
+        proc
+            if(mConnected == false)
+                mreturn ^NULL
+            
+            sendPopMessage('RETR '+%string(MessageNumber))
+            
+            msg = getPopMessage(MessageNumber, -1)
+            
+            mreturn msg
+        endmethod
+
+        
+        ;;;<summary>
+        ;;;Get the headers and the first n lines of the selected message
+        ;;;</summary>
+        public method Top ,@MailMessage
+            req in MessageNumber    ,integer
+            req in NumberOfLines    ,integer
+            endparams
+            record
+                msg             ,@MailMessage
+            endrecord
+        proc
+            if(mConnected == false)
+                mreturn ^NULL
+
+            sendPopMessage('TOP '+%string(MessageNumber))
+
+            msg = getPopMessage(MessageNumber, NumberOfLines)
+
+            mreturn msg
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Delete the requested mail message
+        ;;;</summary>
+        public method DeleteMessage ,integer
+            req in MessageNumber    ,integer
+            endparams
+            record
+                respCode        ,integer
+            endrecord
+        proc
+            if(mConnected == false)
+                mreturn 1
+            sendPopMessage('DELE '+%string(MessageNumber))
+            respCode = getPopLine()
+            mreturn respCode
+        endmethod
+        
+        
+        ;;;<summary>
+        ;;;Reset all messages marked for deletion, so they are not deleted
+        ;;;</summary>
+        public method ResetDelete ,integer
+            endparams
+            record
+                respCode        ,integer
+            endrecord
+        proc
+            sendPopMessage('RSET')
+            respCode = getPopLine()
+            mreturn respCode
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Don't do anything
+        ;;;</summary>
+        public method Noop ,integer
+            endparams
+            record
+                respCode        ,integer
+            endrecord
+        proc
+            sendPopMessage('NOOP')
+            respCode = getPopLine()
+            mreturn respCode
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Scan listing for all messages (doesn't return anything useful yet)
+        ;;;e.g. 
+        ;;; LIST
+        ;;; 1 202
+        ;;; 2 12345
+        ;;; 3 90
+        ;;;</summary>
+        public method ScanList ,integer
+            endparams
+            record
+                respCode        ,integer
+                respStr         ,string
+                innerText       ,string
+            endrecord
+        proc
+            sendPopMessage('LIST')
+            repeat
+            begin
+                respCode = getPopLine(respStr)
+                if(respCode != 0)
+                    exitloop
+                innerText = innerText + respStr
+            end
+            mreturn respCode
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Scan listing of selected message
+        ;;;e.g. 
+        ;;; LIST 2
+        ;;; +OK 2 12345
+        ;;;</summary>
+        public method ScanList ,integer
+            req in MessageNumber    ,integer
+            endparams
+            record
+                respCode        ,integer
+            endrecord
+        proc
+            sendPopMessage('LIST '+%string(MessageNumber))
+            respCode = getPopLine()
+            mreturn respCode
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Scan listing of selected message
+        ;;;</summary>
+        public method ScanList ,integer
+            req in MessageNumber    ,integer
+            req out MessageSize     ,integer
+            endparams
+            record
+                respCode        ,integer
+                respStr         ,string
+                parts           ,[#]string
+            endrecord
+        proc
+            clear MessageSize
+            sendPopMessage('LIST '+%string(MessageNumber))
+            respCode = getPopLine()
+            if(!respCode)
+            begin
+                parts = StringUtil.Split(removeCRLF(respStr), ' ')
+                if(parts[3] != ^NULL)
+                begin
+;                    if(parts[3].Length > 0)
+                    if(parts[3])
+                        MessageSize = parts[3]
+                end
+            end
+            mreturn respCode
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Unique ID listing (doesn't return anything useful yet)
+        ;;;e.g. 
+        ;;; UIDL
+        ;;; 1 whqtswO00WBw418f9t5JxYwZ
+        ;;; 2 QhdPYR:00WBw1Ph7x7
+        ;;;</summary>
+        public method UIDL ,integer
+            endparams
+            record
+                respCode        ,integer
+                respStr         ,string
+                innerText       ,string
+            endrecord
+        proc
+            sendPopMessage('UIDL')
+            repeat
+            begin
+                respCode = getPopLine(respStr)
+                if(respCode != 0)
+                    exitloop
+                innerText = innerText + respStr
+            end
+            mreturn respCode
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Unique ID listing
+        ;;;e.g. 
+        ;;; UIDL 2
+        ;;; +OK 2 QhdPYR:00WBw1Ph7x7
+        ;;;</summary>
+        public method UIDL ,integer
+            req in MessageNumber    ,integer
+            endparams
+            record
+                respCode        ,integer
+            endrecord
+        proc
+            sendPopMessage('UIDL '+%string(MessageNumber))
+            respCode = getPopLine()
+            mreturn respCode
+        endmethod
+
+
+        ;;;<summary>
+        ;;;Get the headers and the first n lines of the selected message
+        ;;;</summary>
+        ;;;<comment>
+        ;;;This routine only support 1 mime section (as determined by the header
+        ;;; section)  Other mime content is treated as plain text.  
+        ;;;</comment>
+        private method getPopMessage ,@MailMessage
+            req in MessageNumber    ,integer
+            req in NumberOfLines    ,integer
+            endparams
+            record
+                respCode        ,integer
+                respStr         ,string
+                inHeader        ,boolean    ;processing mail header
+                bodyLines       ,integer    ;number of body lines processed
+                mimePart        ,integer    ;1-mime header, 2-mime data
+                multipart       ,integer    ;multipart email
+                mboundary       ,string     ;mime boundary
+                innerText       ,string
+                attachmentName  ,string
+                attachmentData  ,string
+                encoding        ,TransferEncoding
+                msg             ,@MailMessage
+                cType           ,@ContentType    ;message content type
+                mType           ,@ContentType    ;mime content type
+            endrecord
+        proc
+            msg = new MailMessage()
+
+            inHeader = true
+
+            encoding = SynPSG.Net.Mime.TransferEncoding.SevenBit
+            
+            repeat
+            begin
+                respCode = getPopLine(respStr)
+                if(respCode != 0)
+                    exitloop
+                if(bodyLines >= NumberOfLines && NumberOfLines >= 0)
+                    nextloop
+                
+                innerText = innerText + respStr
+
+                if(inHeader == true) then
+                begin
+                    ;;blank line terminates email header section
+                    if(respstr == CRLF)
+                    begin
+                        inHeader = false
+                        nextloop
+                    end
+
+                    using respStr select
+                    ('From:'),
+                    begin
+                        if(respStr.Length > 7)
+                        begin
+                            msg.From = new MailAddress(respStr(6,respStr.Length-2))
+                            msg.Sender = msg.From
+                        end
+                    end
+                    ('To:'),
+                    begin
+                        if(respStr.Length > 5)
+                            msg.To.Add(new MailAddress(respStr(4,respStr.Length-2)))
+                    end
+                    ('Reply-To:'),
+                    begin
+                        if(respStr.Length > 10)
+                            msg.ReplyTo = new MailAddress(respStr(9,respStr.Length-2))
+                    end
+                    ('Subject:'),
+                    begin
+                        if(respStr.Length > 9)
+                            msg.Subject = respStr(10,respStr.Length-2)
+                    end
+                    ('Content-Type:'),
+                    begin
+                        data strLen ,integer
+                        while((strLen=isContinuation(respStr)) && respCode == 0)
+                        begin
+                            data nextStr ,string
+                            respCode = getPopLine(nextStr)
+                            if(respCode == 0 && respStr.Length > 2)
+                            respStr = string.Concat(respStr(1,strLen),nextStr)
+                        end
+                        respStr = StringUtil.Replace(respStr, %char(9), ' ')
+                        cType = new ContentType(respStr(14,respStr.Length-2))
+
+                        if(cType.MediaType.Contains('html'))
+                            msg.IsBodyHtml = true
+                        if(cType.Boundary.Length > 0)
+                        begin
+                            multipart = 1
+                            mboundary = cType.Boundary
+                        end
+                    end
+                    endusing
+                end
+                else
+                begin
+                    if(multipart) then 
+                    begin
+                        using respStr select
+                        ('--'+mboundary+'--'),
+                        begin
+                            if(mboundary == ^NULL || mboundary.Length < 1)
+                            exit
+                            if(mimePart == 2) 
+                            begin
+                                if(attachmentName != ^NULL && attachmentName.Length > 0)
+                                begin
+                                    data attStream ,@SynPSG.System.IO.MemoryStream
+                                    data attNum ,integer
+                                    attStream = new MemoryStream(attachmentData)
+                                    msg.Attachments.Add(new Attachment((Stream)attStream, attachmentName, mType.MediaType))
+                                    attNum = msg.Attachments.Count - 1
+                                    ;;override default encoding (which is Base64)
+                                    msg.Attachments[attNum].TransferEncoding = encoding
+                                end
+                                clear mimePart
+                            end
+                        end
+                        ('--'+mboundary),
+                        begin
+                            if(mboundary == ^NULL || mboundary.Length < 1)
+                            exit
+                            ;mime boundary
+                            mimePart = 1
+                            clear attachmentName, attachmentData
+                            encoding = SynPSG.Net.Mime.TransferEncoding.SevenBit
+                        end
+                        ('Content-Type:'),
+                        begin
+                            data strLen ,integer
+                            while((strLen=isContinuation(respStr)) && respCode == 0)
+                            begin
+                                data nextStr ,string
+                                respCode = getPopLine(nextStr)
+                                if(respCode == 0 && respStr.Length > 2)
+                                respStr = string.Concat(respStr(1,strLen),nextStr)
+                            end
+                            respStr = StringUtil.Replace(respStr, %char(9), ' ')
+                            mType = new ContentType(respStr(14,respStr.Length-2))
+                            AttachmentName = mType.Name
+                        end
+                        ('Content-Transfer-Encoding: '),
+                        begin
+                            if(mimePart == 1)
+                            begin
+                                if(respStr.Length > 29)
+                                begin
+                                    using respStr(28,respStr.Length-2) select
+                                    ('base64'),
+                                        encoding = SynPSG.Net.Mime.TransferEncoding.Base64
+                                    endusing
+                                end
+                            end
+                        end
+                        (CRLF),
+                        begin
+                            if(mimePart == 1)
+                                mimePart = 2
+                        end
+                        endusing
+                        
+                        using mimePart select
+                        (0),
+                        begin
+                            msg.Body = msg.Body + respStr
+                        end
+                        (2),
+                        begin
+                            using encoding select
+                            (SynPSG.Net.Mime.TransferEncoding.Base64),
+                                if(respStr.Length > 2)
+                                    attachmentData = attachmentData + respStr(1, respStr.Length-2)
+                            (),
+                                attachmentData = attachmentData + respStr
+                            endusing
+                        end
+                        endusing
+                    end
+                    else
+                    begin
+                        bodyLines += 1
+                        msg.Body = msg.Body + respStr
+                    end
+                end
+            end
+
+            mreturn msg
+        endmethod
+
+
+        ;;;<summary>
+        ;;;</summary>
+        private method getPopLine ,integer
+            req out popResponse     ,string
+            endparams
+            stack record vars
+                lineBuf             ,a1024
+                byteCount           ,i4
+                mByte               ,i1
+                respCode            ,integer
+            endrecord
+        proc
+            if(mConnected == false)
+            begin
+                popResponse = '-ERR'
+                mreturn 1
+            end
+            clear lineBuf, byteCount
+
+            ;; Read one byte at a time from the stream, so that we can identify
+            ;; when a LineFeed has been passed
+            while ((mByte=mNStream.ReadByte()) != -1 && byteCount < ^size(lineBuf))
+            begin
+                lineBuf(byteCount+=1:1) = %char(mByte)
+                if(%char(mByte) == LF)
+                    exitloop
+            end
+
+            DebugOutput('R '+%atrim(lineBuf))
+
+            if(byteCount > 0) then
+            begin
+                popResponse = lineBuf(1:byteCount)
+                using lineBuf(1:byteCount) select
+                ('+OK'),
+                    respCode = 0
+                ('-ERR'),
+                    respCode = 1
+                ('.'+CRLF), ;;multiline terminator
+                    respCode = -1
+                ;(LF),
+                ;   respCode = -2
+                (), ;multi-line response (assume ok)
+                    respCode = 0
+                endusing
+            end
+            else
+            begin 
+                clear popResponse
+                respCode = 1
+            end
+            mreturn respCode
+        endmethod
+        
+
+        ;;;<summary>
+        ;;;</summary>
+        private method getPopLine ,integer
+            endparams
+            stack record
+                respStr             ,string
+            endrecord
+        proc
+            mreturn getPopLine(respStr)
+        endmethod
+
+
+        ;;;<summary>
+        ;;;</summary>
+        private method sendPopMessage, void
+            req in popMsg       ,string
+            endparams
+            record
+                sendMsg         ,string
+            endrecord
+        proc
+            if(mConnected == false)
+                mreturn
+            if(popMsg == ^NULL || popMsg.Length < 1) then 
+                sendMsg = CRLF
+            else
+                sendMsg = popMsg + CRLF
+            DebugOutput('S '+%atrim(sendMsg))
+            mNStream.Write(sendMsg, 0, sendMsg.Length)
+        endmethod
+
+        
+        ;;;<summary>
+        ;;;</summary>
+        private method isContinuation ,integer
+            req in  aStr        ,string
+            endparams
+            record
+                myStr           ,string
+                ctr             ,i4
+            endrecord
+        proc
+            myStr = removeCRLF(aStr)
+            ctr = myStr.Length
+            while(ctr > 1 && myStr(ctr:1) == ' ')
+                ctr -= 1
+            if(myStr(ctr:1) == ';')
+                mreturn ctr
+            mreturn 0
+        endmethod
+        
+        
+        ;;;<summary>
+        ;;;</summary>
+        private method removeCRLF ,string
+            req in  aString ,string
+            endparams
+        proc
+            if(aString != ^NULL && aString.Length > 1 && aString.EndsWith(CRLF))
+                mreturn aString(1:aString.Length-2)
+            mreturn aString
+        endmethod
+        
+
+        ;;;<summary>
+        ;;;</summary>
+        public method DebugStart ,void
+            req in  debugFile   ,a
+            endparams
+        proc
+            if(mChan)
+                DebugClose()
+            using debugFile select
+            (' '),
+                clear mChan, mDebugFile
+            ('TT:'),
+            begin 
+                mDebugFile = 'TT:'
+                open(mChan=%syn_freechn, O, 'TT:')
+            end
+            (),
+                mDebugFile = debugFile
+            endusing
+        endmethod
+
+
+        ;;;<summary>
+        ;;;</summary>
+        private method debugOutput ,void
+            req in debugMsg     ,a
+            endparams
+        proc
+            using mDebugFile select
+            (' '),
+                nop
+            ('TT:'),
+                if(mChan)
+                    display(mChan, debugMsg)
+            (),
+            begin
+                open(mChan=%syn_freechn, A, mDebugFile)
+                display(mChan, debugMsg)
+                close mChan
+                clear mChan
+            end
+            endusing
+
+        endmethod
+
+
+        ;;;<summary>
+        ;;;</summary>
+        public method DebugClose ,void
+            endparams
+        proc
+            if(mChan > 0)
+            begin
+                close mChan
+                clear mChan
+            end
+        endmethod
+        
+    endclass
+
+endnamespace

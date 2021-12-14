@@ -1,0 +1,238 @@
+;;**********************************************************************
+;;
+;; Title:       Mime_Namespace.dbc
+;;
+;; Type:        Enumerations, ContentType class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System
+
+namespace SynPSG.System.Net.Mime
+    public enum TransferEncoding
+         Base64
+         QuotedPrintable
+         SevenBit
+         Unknown
+    endenum
+
+    ;;;<summary>
+    ;;;</summary>
+    public class ContentType
+        private mBoundary  ,string
+        private mCharSet   ,string
+        private mName      ,string
+        private mMediaType ,string
+
+        ;;;<summary>
+        ;;;Initializes a new instance of the SynPSG.Net.Mime.ContentType class
+        ;;;</summary>
+        public method ContentType
+            endparams
+        proc
+            mMediaType = "application/octet-stream"
+            mBoundary = ""
+            mCharSet = ""
+            mName = ""
+        endmethod
+
+        ;;;<summary>
+        ;;;contentType:
+        ;;;A String, for example, "text/plain; charset=us-ascii", that contains the MIME media type, subtype, and optional parameters.
+        ;;;</summary>
+        public method ContentType
+            in contentType  ,string
+            endparams
+            this()
+
+            stack record
+                ctr     ,integer
+                tmpStr  ,string
+                curVal  ,integer
+                valCount,integer
+                inString,boolean
+            endrecord
+
+        proc
+            if (contentType.Length<1)
+                throw new ArgumentException("The parameter 'contentType' cannot be an empty string.")
+            mMediaType = "application/octet-stream"
+            tmpStr = ""
+            clear valCount,curVal
+            for ctr from 1 thru contentType.Length
+            begin
+                if(inString == true) then
+                begin
+                    if(contentType(ctr:1) == '"') then
+                        inString = false
+                    else
+                        tmpStr = String.Concat(tmpStr,contentType(ctr:1))
+                end
+                else
+                    using contentType(ctr:1) select
+                    (" "),
+                        nextloop
+                    ("="),
+                    begin
+                        using tmpStr.ToUpper() select
+                        ("BOUNDARY"),
+                            curVal = 2
+                        ("NAME"),
+                            curVal = 3
+                        ("CHARSET"),
+                            curVal = 4
+                        (),
+                            throw new ArgumentException("The specified content type is invalid.")
+                        endusing
+                        tmpStr = ""
+                        valCount += 1
+                    end
+                    (";"),
+                        call setProperties
+                    ('"'),
+                        inString = true
+                    (),
+                        tmpStr = String.Concat(tmpStr,contentType(ctr:1))
+                    endusing
+            end
+            if (tmpStr.Length>0)
+                call setProperties
+            if (!valCount)
+                throw new ArgumentException("The specified content type is invalid.")
+            mreturn
+            
+        setProperties,
+            ;; If the value we're trying to set has been left off, and this is the
+            ;; first value, then assume it is MediaType
+            if (!curVal && !valCount && tmpStr.Length>0)
+            begin 
+                curVal = 1
+                valCount+=1
+            end
+            if (tmpStr.Length==0)
+                clear curVal
+            using curVal select
+            (1),
+                mMediaType = tmpStr
+            (2),
+                mBoundary = tmpStr
+            (3),
+                mName = tmpStr
+            (4),
+                mCharSet = tmpStr
+            (),
+                throw new ArgumentException("The specified content type is invalid.")
+            endusing
+            clear curVal
+            tmpStr = ""
+            return
+            
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        new public method ToString  ,string
+            endparams
+            stack record
+                tmpString   ,string
+            endrecord
+        proc
+            tmpString = mMediaType
+            if (Boundary.Length>0)
+                tmpString = String.Concat(tmpString, '; boundary="'+Boundary+'"')
+            if (Name.Length>0)
+                tmpString = String.Concat(tmpString, '; name='+Name)
+            if (CharSet.Length>0)
+                tmpString = String.Concat(tmpString, '; charset='+CharSet)
+            mreturn tmpString
+        endmethod
+
+        ;;;<summary>
+        ;;;Gets or sets the value of the boundary parameter included in the Content-Type header represented by this instance.
+        ;;;</summary>
+        public property Boundary,   string
+            method get
+            proc
+                mreturn mBoundary
+            endmethod
+            method set
+            proc
+                mBoundary = value
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;; Gets or sets the value of the charset parameter included in the Content-Type header represented by this instance.
+        ;;;</summary>
+        public property CharSet,    string
+            method get
+            proc
+                mreturn mCharSet
+            endmethod
+            method set
+            proc
+                mCharSet = value
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;; Gets or sets the media type value included in the Content-Type header represented by this instance.
+        ;;;</summary>
+        public property MediaType,  string
+            method get
+            proc
+                mreturn mMediaType
+            endmethod
+            method set
+            proc
+                if (value=="") then
+                    throw new ArgumentException("This property cannot be set to an empty string.")
+                else
+                    mMediaType = value
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;Gets or sets the value of the name parameter included in the Content-Type header represented by this instance.
+        ;;;</summary>
+        public property Name,   string
+            method get
+            proc
+                mreturn mName
+            endmethod
+            method set
+            proc
+                mName = value
+            endmethod
+        endproperty
+
+    endclass
+
+endnamespace

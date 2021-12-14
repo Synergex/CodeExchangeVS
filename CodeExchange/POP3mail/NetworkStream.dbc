@@ -1,0 +1,240 @@
+;;**********************************************************************
+;;
+;; Title:       NetworkStream.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System.Net
+import SynPSG.System.Net.Sockets
+
+namespace SynPSG.System.Net.Sockets
+
+.include "DBLDIR:synsock.def"
+
+    class NetworkStream
+        private mSocket        ,@Socket
+        private mReadTimeout   ,int
+        private mReadTimeoutSec,int
+        private mReadTimeoutMic,int
+
+        ;;;<summary>
+        ;;;Initialize a new instance of the NetworkStream class
+        ;;;</summary>
+        public method NetworkStream
+            in socket   ,@Socket
+            endparams
+        proc
+            if !socket.Handle
+                throw New ApplicationException("Socket has not been created.")
+            mSocket = socket
+            mReadTimeout = -1
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Close, void
+            endparams
+        proc
+            mSocket.Close()
+            init mSocket
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Close, void
+            wait    ,int
+            endparams
+        proc
+            sleep wait
+            mSocket.Close()
+            init mSocket
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Read, int
+            req out buffer  ,string
+            req in offset   ,int
+            req in size     ,int
+            endparams
+        stack record
+            hdl             ,D_HANDLE
+            bufLength       ,int
+        endrecord
+        structure buf
+            b               ,a1
+        endstructure
+        proc
+            hdl = %mem_proc(DM_ALLOC.bor.DM_BLANK, size)
+            bufLength = this.Read(^m(hdl), offset, size)
+            if(bufLength > 0) then
+                buffer = ^m(buf.b(1:bufLength), hdl)
+            else
+                buffer = ''
+            mreturn bufLength
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Read, int
+            req out buffer  ,a
+            req in offset   ,int
+            req in size     ,int
+            endparams
+        stack record
+            bufLength       ,int
+        endrecord
+        proc
+            if (offset<0 || (offset+size)>^size(buffer))
+                throw new ApplicationException("Argument out of range.")
+
+            clear buffer(offset+1, size)
+            ;Check if data is available, and if so, how much
+            if mReadTimeout>=0
+                if (%ss_select(mSocket.Handle,mReadTimeoutSec,mReadTimeoutMic) != SS_SUCCESS)
+                    mreturn 0
+            if(%ss_recv(mSocket.Handle,buffer,bufLength,SS_MSG_PEEK) != SS_SUCCESS)
+                mreturn 0
+            if(bufLength > 0)
+                begin
+                if bufLength>size
+                    bufLength=size
+                if(%ss_recvbuf(mSocket.Handle,buffer(offset+1:bufLength)) != SS_SUCCESS)
+                    mreturn 0
+                end
+            mreturn bufLength
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method ReadByte, i1
+            endparams
+        stack record
+            p_byte  ,a1
+        endrecord
+        proc
+            if mReadTimeout>=0
+                if (%ss_select(mSocket.Handle,mReadTimeoutSec,mReadTimeoutMic) != SS_SUCCESS)
+                    mreturn -1
+            if(%ss_recvbuf(mSocket.Handle,p_byte) != SS_SUCCESS)
+                mreturn -1
+            mreturn ^i(p_byte)
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Write, void
+            buffer          ,string
+            offset          ,int
+            bytesToWrite    ,int
+            endparams
+        stack record
+            hdl             ,int
+        endrecord
+        proc
+            if (buffer == ^null)
+                throw new System.ArgumentNullException("Buffer is a null reference.")
+            hdl = %mem_proc(DM_ALLOC, buffer.Length)
+            ^m(hdl) = buffer
+            this.Write(^m(hdl), offset, bytesToWrite)
+            mreturn
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public method Write, void
+            buffer          ,a
+            offset          ,int
+            bytesToWrite    ,int
+            endparams
+        stack record
+            status          ,int
+            bufLength       ,int
+        endrecord
+        proc
+            bufLength = ^size(buffer)
+            if (offset<0 || offset>bufLength || bytesToWrite<0 || (offset+bytesToWrite)>bufLength)
+                throw new System.ArgumentOutOfRangeException()
+            status = %ss_sendbuf(mSocket.Handle,buffer(offset+1:bytesToWrite))
+            if (status != SS_SUCCESS)
+                throw new System.ApplicationException("There was a failure writing to the network. SS_SENDBUFF error "+%string(status))
+            mreturn
+        endmethod
+
+        ;;;<summary>
+        ;;;</summary>
+        public property DataAvailable,  boolean
+            method get
+                endparams
+            stack record
+                tmpBuf  ,a1
+                tmpCount,i4
+            endrecord
+            proc
+                if (%ss_select(mSocket.Handle,0,000250) == SS_SUCCESS)
+                    if (%ss_recv(mSocket.Handle,tmpBuf,tmpCount,SS_MSG_PEEK) == SS_SUCCESS)
+                        if tmpCount
+                            mreturn %true
+                mreturn %false
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property ReadTimeout,    int
+            method get
+            proc
+                mreturn mReadTimeout
+            endmethod
+            method set
+            proc
+                mReadTimeout = value
+                if mReadTimeout>=0
+                    begin
+                    mReadTimeoutSec = mReadTimeout/1000
+                    mReadTimeoutMic = (mReadTimeout-(mReadTimeoutSec*1000))*1000
+                    end
+            endmethod
+        endproperty
+
+        ;;;<summary>
+        ;;;</summary>
+        public property Socket, @Socket
+            method get
+            proc
+                mreturn mSocket
+            endmethod
+        endproperty
+
+    endclass
+
+endnamespace

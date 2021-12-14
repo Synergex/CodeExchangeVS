@@ -1,0 +1,185 @@
+;;**********************************************************************
+;;
+;; Title:       Attachment.dbc
+;;
+;; Type:        Class
+;;
+;; Description: Represents an attachment to an e-mail.
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System
+import SynPSG.System.IO
+import SynPSG.System.Net.Mail
+import SynPSG.System.Net.Mime
+import SynPSG.System.Net.Sockets
+
+namespace SynPSG.System.Net.Mail
+    public class Attachment extends AttachmentBase
+        private mContentDisposition ,@ContentDisposition
+
+        ;;********************************************************************
+
+        ;;;<summary>Overrridden. Initializes a new Attachment with the specified file name</summary>
+        ;;;<param>fileName:
+        ;;;The file name of the attachment</param>
+        public method Attachment
+            in fileName ,string
+            endparams
+            parent(fileName)
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Initializes a new instance of the Attachment class with the specified
+        ;;;fileName and ContentType.</summary>
+        ;;;<param>fileName:
+        ;;;The file name of the attachment</param>
+        ;;;<param>contentType:
+        ;;;A SynPSG.Net.Mime.ContentType that describes the data in the string</param>
+        public method Attachment
+            in contentStream    ,@Stream
+            in contentType      ,@contentType
+            endparams
+            parent(contentStream,contentType)
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Initializes a new instance of the Attachment class with the specified
+        ;;;fileName and ContentType.</summary>
+        ;;;<param>fileName:
+        ;;;The file name of the attachment</param>
+        ;;;<param>contentType:
+        ;;;A SynPSG.Net.Mime.ContentType that describes the data in the string</param>
+        public method Attachment
+            in contentStream    ,@Stream
+            in name             ,string
+            endparams
+            parent(contentStream,name)
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Initializes a new instance of the Attachment class with the specified
+        ;;;fileName and ContentType.</summary>
+        ;;;<param>fileName:
+        ;;;The file name of the attachment</param>
+        ;;;<param>contentType:
+        ;;;A SynPSG.Net.Mime.ContentType that describes the data in the string</param>
+        public method Attachment
+            in fileName     ,string
+            in contentType  ,@contentType
+            endparams
+            parent(fileName,contentType)
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Initializes a new instance of the Attachment class with the
+        ;;;specified content string and MIME type information.</summary>
+        ;;;<param>fileName:
+        ;;;The file name of the attachment</param>
+        ;;;<param>mediaType:
+        ;;;A System.String that contains the MIME Content-Header information for this attachment</param>
+        public method Attachment
+            in fileName     ,string
+            in mediaType    ,string
+            endparams
+            parent(fileName,mediaType)
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Initializes a new instance of the Attachment class with the specified
+        ;;;fileName and ContentType.</summary>
+        ;;;<param>fileName:
+        ;;;The file name of the attachment</param>
+        ;;;<param>contentType:
+        ;;;A SynPSG.Net.Mime.ContentType that describes the data in the string</param>
+        ;;;<param>mediaType:
+        ;;;A SynPSG.Net.Mime.mediaType that describes the data in the string</param>
+        public method Attachment
+            in contentStream    ,@Stream
+            in fileName         ,string
+            in mediaType        ,string
+            endparams
+            parent(contentStream,^NULL,mediaType)
+        proc
+            this.name = fileName
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets the MIME content disposition for this attachment</summary>
+        public property ContentDisposition, @ContentDisposition
+            method get
+            proc
+                if (mContentDisposition==^null)
+                    mContentDisposition = new ContentDisposition()
+                mreturn mContentDisposition
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets the MIME content type name value in the content type
+        ;;; associated with this attachment.</summary>
+        public property Name,   string
+            method get
+            proc
+                mreturn parent.ContentType.Name
+            endmethod
+            method set
+            proc
+                parent.ContentType.Name = value
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets the MIME content type name value in the content type
+        ;;; associated with this attachment.</summary>
+        public override property TransferEncoding,   TransferEncoding
+            method get
+            proc
+                mreturn parent.TransferEncoding
+            endmethod
+            method set
+            proc
+                parent.TransferEncoding = value
+            endmethod
+        endproperty
+
+    endclass
+endnamespace

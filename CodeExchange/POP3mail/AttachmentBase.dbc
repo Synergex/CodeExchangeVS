@@ -1,0 +1,232 @@
+;;**********************************************************************
+;;
+;; Title:       AttachmentBase.dbc
+;;
+;; Type:        Abstract Class
+;;
+;; Description: Base class that represents an email attachment. The
+;;              Attachment Class derives from this class.
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System
+import SynPSG.System.IO
+import SynPSG.System.Net.Mime
+import SynPSG.System.Net.Sockets
+
+namespace SynPSG.System.Net.Mail
+    public abstract class AttachmentBase
+        private mFileName       ,string
+        private mContentId      ,string
+        private mContentIdCount,integer
+        private mContentStream  ,@Stream
+        private mContentType    ,@ContentType
+        private mTransferEncoding   ,TransferEncoding
+        private mContentStreamType  ,string
+
+        ;;********************************************************************
+
+        ;;;<summary>Overridden. Instantiates an AttachmentBase with the specified Stream.</summary>
+        ;;;<param>contentStream:
+        ;;;A stream containing the content for this attachment.</param>
+
+        protected method AttachmentBase
+            in contentStream    ,@Stream
+            endparams
+        proc
+            if (contentStream == ^null)
+                throw new ArgumentNullException("ContentStream is a null reference.")
+            mContentStream = contentStream
+            mContentStreamType = (mContentStream.ToString()).ToUpper()
+
+            if (mContentStreamType.EndsWith("FILESTREAM")) then
+                mFileName = ((FileStream)mContentStream).Name
+            else
+                mFileName = "name"
+            mContentType = new ContentType()
+            mTransferEncoding = SynPSG.Net.Mime.TransferEncoding.Base64
+            mContentId = %hex(%jbno)+%string(mContentIdCount,'XXXX')
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Instantiates an AttachmentBase with the specified file name.</summary>
+        ;;;<param>fileName:
+        ;;;The file name holding the content for this attachment.</param>
+        protected method AttachmentBase
+            in fileName ,string
+            endparams
+        proc
+            if (fileName == ^null || fileName == "")
+                throw new ArgumentException("The parameter 'fileName' cannot be an empty string.")
+            mContentStream = New FileStream(fileName,FileMode.Open)
+            mFileName = fileName
+            mContentType = new ContentType()
+            mTransferEncoding = SynPSG.Net.Mime.TransferEncoding.Base64
+            mContentId = %hex(%jbno)+%string(mContentIdCount,'XXXX')
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Instantiates an AttachmentBase with the specified stream type and content type.</summary>
+        ;;;<param>contentStream:
+        ;;;A stream containing the content for this attachment.</param>
+        ;;;<param>contentType:
+        ;;;A SynPSG.Net.Mime.ContentType that describes the data in the string</param>
+        protected method AttachmentBase
+            in contentStream    ,@Stream
+            in contentType      ,@contentType
+            endparams
+            this(contentStream)
+        proc
+            mContentType = contentType
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Instantiates an AttachmentBase with the specified Stream and media type.</summary>
+        ;;;<param>contentStream:
+        ;;;A stream containing the content for this attachment.</param>
+        ;;;<param>mediaType:
+        ;;;A System.String that contains the MIME Content-Header information for this attachment.</param>
+        protected method AttachmentBase
+            in contentStream    ,@Stream
+            in mediaType        ,string
+            this(contentStream)
+        proc
+            mContentType.MediaType = mediaType
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Instantiates an AttachmentBase with the specified file name and content type.</summary>
+        ;;;<param>fileName:
+        ;;;The file name holding the content for this attachment.</param>
+        ;;;<param>contentType:
+        ;;;A SynPSG.Net.Mime.ContentType that describes the data in the string</param>
+        protected method AttachmentBase
+            in fileName     ,string
+            in contentType  ,@contentType
+            endparams
+            this(fileName)
+        proc
+            mContentType = contentType
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Instantiates an AttachmentBase with the specified file name and media type.</summary>
+        ;;;<param>fileName:
+        ;;;The file name holding the content for this attachment.</param>
+        ;;;<param>mediaType:
+        ;;;A System.String that contains the MIME Content-Header information for this attachment.</param>
+        protected method AttachmentBase
+            in fileName     ,string
+            in mediaType    ,string
+            this(fileName)
+        proc
+            mContentType.MediaType = mediaType
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Initializes a new instance of the Attachment class with the specified
+        ;;;fileName and ContentType.</summary>
+        ;;;<param>fileName:
+        ;;;The file name of the attachment</param>
+        ;;;<param>contentType:
+        ;;;A SynPSG.Net.Mime.ContentType that describes the data in the string</param>
+        ;;;<param>mediaType:
+        ;;;A SynPSG.Net.Mime.mediaType that describes the data in the string</param>
+        protected method AttachmentBase
+            in contentStream    ,@Stream
+            in filename         ,string
+            in mediaType        ,string
+            endparams
+            this(contentStream)
+        proc
+            mContentType.MediaType = mediaType
+            if (fileName != ^null && fileName != "")
+            begin
+                mContentStream = New FileStream(fileName,FileMode.Open)
+                mFileName = fileName
+                mContentType = new ContentType()
+                mTransferEncoding = SynPSG.Net.Mime.TransferEncoding.Base64
+                mContentId = %hex(%jbno)+%string(mContentIdCount,'XXXX')
+            end
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets the MIME content ID for this attachment.</summary>
+        public property ContentId   ,string
+            method get
+            proc
+                mreturn mContentId
+            endmethod
+            method set
+            proc
+                mContentId = value
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets the content stream of this attachment.</summary>
+        public property ContentStream   ,@Stream
+            method get
+            proc
+                mreturn mContentStream
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets the content type of this attachment.</summary>
+        public property ContentType ,@ContentType
+            method get
+            proc
+                mreturn mContentType
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets the encoding of this attachment.</summary>
+        public virtual property TransferEncoding, TransferEncoding
+            method get
+            proc
+                mreturn mTransferEncoding
+            endmethod
+            method set
+            proc
+                mTransferEncoding = value
+            endmethod
+        endproperty
+    endclass
+endnamespace

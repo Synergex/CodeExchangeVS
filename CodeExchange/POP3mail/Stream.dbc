@@ -1,0 +1,331 @@
+;;**********************************************************************
+;;
+;; Title:       Stream.dbc
+;;
+;; Type:        Public Abstract Class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+namespace SynPSG.System.IO
+    ;;--------------------------------------------------------------------
+    ;;public class enumerations
+    ;;--------------------------------------------------------------------
+    public enum SeekOrigin
+        fromBegin
+        fromCurrent
+        fromEnd
+    endenum
+
+    public enum FileMode
+        Append
+        Create
+        CreateNew
+        Open
+        OpenOrCreate
+        Truncate
+    endenum
+    ;;--------------------------------------------------------------------
+
+    ;;;<summary>
+    ;;;Provides a generic view of a sequence of bytes.
+    ;;;</summary>
+    ;;;<remarks>
+    ;;;Streams involve three fundamental operations:
+    ;;; 1) You can read from streams. Reading is the transfer of data from a stream into a data structure,
+    ;;;    such as an array of bytes.
+    ;;; 2) You can write to streams. Writing is the transfer of data from a data structure into a stream.
+    ;;; 3) Streams can support seeking. Seeking is the querying and modifying of the current position
+    ;;;    within a stream. Seek capability depends on the kind of backing store a stream has. For example,
+    ;;;    network streams have no unified concept of a current position, and therefore typically do not
+    ;;;    support seeking.
+    ;;;
+    ;;;Stream is the abstract base class of all streams. A stream is an abstraction of a sequence of bytes,
+    ;;;such as a file, an input/output device, an inter-process communication pipe, or a TCP/IP socket. The
+    ;;;Stream class and its derived classes provide a generic view of these different types of input and
+    ;;;output, isolating the programmer from the specific details of the operating system and the
+    ;;;underlying devices.
+    ;;;
+    ;;;Depending on the underlying data source or repository, streams might support only some of these
+    ;;;capabilities. An application can query a stream for its capabilities by using the CanRead, CanWrite,
+    ;;;and CanSeek properties.
+    ;;;
+    ;;;The Read and Write methods read and write data in a variety of formats. For streams that support
+    ;;;seeking, use the Seek and SetLength methods and the Position and Length properties to query and
+    ;;; modify the current position and length of a stream.
+    ;;;</remarks>
+
+    public abstract class Stream
+        
+        public static null ,@stream
+        
+        ;;--------------------------------------------------------------------
+
+        ;;;<summary>Initializes a new instance of the Stream class.</summary>
+        public method Stream
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derviced class, gets a value indicating
+        ;;; whether the current stream supports reading.</summary>
+        public abstract property CanRead    ,boolean
+            method get
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, gets a value indicating 
+        ;;; whether the current stream supports seeking.</summary>
+        public abstract property CanSeek    ,boolean
+            method get
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets a value that determines whether the current stream can 
+        ;;; time out.</summary>
+        public abstract property CanTimeout    ,boolean
+            method get
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, gets a value indicating 
+        ;;; whether the current stream supports writing.</summary>
+        public abstract property CanWrite   ,boolean
+            method get
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, gets the length in 
+        ;;; bytes of the stream.</summary>
+        public abstract property Length ,integer
+            method get
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, gets or sets the 
+        ;;; position within the current stream.</summary>
+        public abstract property Position   ,integer
+            method get
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets a value, in miliseconds, that determines how 
+        ;;; long the stream will attempt to read before timing out.</summary>
+        public abstract property ReadTimeout   ,integer
+            method get
+            proc
+            endmethod
+            method set
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets or sets a value, in miliseconds, that determines how 
+        ;;; long the stream will attempt to write before timing out.</summary>
+        public abstract property WriteTimeout   ,integer
+            method get
+            proc
+            endmethod
+            method set
+            proc
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public abstract method BeginRead    ,void
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public abstract method BeginWrite    ,void
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, Closes the current 
+        ;;; stream and releases any resources (such as sockets and file handles)
+        ;;; associated with the current stream.</summary>
+        public abstract method Close    ,void
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public method CopyToStream    ,void
+        proc
+            throw new ApplicationException("CopyToStream not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public method CopyToStream    ,void
+            req in  destination       ,@stream
+            req in  bufferSize        ,integer
+            endparams
+        proc
+            throw new ApplicationException("CopyToStream(stream,int) not implemented")
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Releases all resources used by the Stream.</summary>
+        public abstract method Dispose    ,void
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Releases the unmanaged resources used by the Stream and 
+        ;;; optionally releases the managed resources.</summary>
+        public abstract method Dispose    ,void
+            req in disposing    ,boolean
+            endparams
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public abstract method EndRead    ,void
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary></summary>
+        public abstract method EndWrite    ,void
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, clears all buffers for 
+        ;;; this stream and causes any buffered data to be written to the 
+        ;;; underlying device.</summary>
+        public abstract method Flush    ,void
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, reads a sequence of 
+        ;;; bytes from the current stream and advances the position within the 
+        ;;; stream by the number of bytes read.</summary>
+        public abstract method Read    ,integer
+            req out buffer   ,a
+            req in offset   ,integer
+            req in count    ,integer
+            endparams
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Reads a byte from the stream and advances the position 
+        ;;; within the stream by one byte, or returns -1 if at the end of the
+        ;;; stream.</summary>
+        public abstract method ReadByte    ,integer
+            ;in length   ,integer
+            endparams
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, sets the position within
+        ;;; the current stream.</summary>
+        public abstract method Seek ,integer
+            in offset   ,integer
+            in origin   ,SeekOrigin
+            endparams
+        proc
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, sets the length of the
+        ;;; current stream.</summary>
+        public abstract method SetLength    ,void
+            in length   ,integer
+            endparams
+        proc
+        endmethod
+        
+        ;;********************************************************************
+
+        ;;;<summary>When overridden in a derived class, writes a sequence of 
+        ;;; bytes to the current stream and advances the current position within
+        ;;; this stream by the number of bytes written.</summary>
+        public abstract method Write    ,void
+            req in buffer   ,a
+            req in offset   ,integer
+            req in count    ,integer
+            endparams
+        proc
+        endmethod
+        ;;********************************************************************
+
+        ;;;<summary>Writes a byte to the current position in the stream and 
+        ;;;advances the position within the stream by one byte.</summary>
+        public abstract method WriteByte    ,void
+            in value   ,integer
+            endparams
+        proc
+        endmethod
+
+    endclass
+endnamespace

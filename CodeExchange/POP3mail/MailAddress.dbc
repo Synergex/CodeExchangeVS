@@ -1,0 +1,208 @@
+;;**********************************************************************
+;;
+;; Title:       MailAddress.dbc
+;;
+;; Type:        Class
+;;
+;; Description:
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+import SynPSG.System
+import SynPSG.System.IO
+import SynPSG.System.Net.Mail
+import SynPSG.System.Net.Sockets
+import SynPSG.System.Net.Mime
+
+namespace SynPSG.System.Net.Mail
+    class MailAddress
+        private mAddress        ,string
+        private mDisplayName    ,string
+        private mHost           ,string
+        private mUser           ,string
+
+        ;;********************************************************************
+
+        ;;;<summary>Overridden. Initializes a new instance of the MailAddress class.</summary>
+        ;;;<param name=address>A system.string that contains an email address.</param>
+        public method MailAddress
+            in address              ,string
+            endparams
+        proc
+            setEmailAddress(address)
+            setHostAndUser(mAddress)
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Initializes a new instance of the MailAddress class using the specified address and display name.</summary>
+        ;;;<param name=address>A system.string that contains an email address.</param>
+        ;;;<param name=displayName>A String that contains the display name associated with address.</param>
+        public method MailAddress
+            in address      ,string
+            in displayName  ,string
+            endparams
+            this(address)
+        proc
+            mDisplayName = displayName
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets the e-mail address specified when this instance was created.</summary>
+        public property Address ,string
+            method get
+            proc
+                mreturn mAddress
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets the display name composed from the display name and address information
+        ;;;specified when this instance was created.</summary>
+        public property DisplayName ,string
+            method get
+            proc
+                mreturn mDisplayName
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets the host portion of the address specified when this instance was created.</summary>
+        public property Host ,string
+            method get
+            proc
+                mreturn mHost
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Gets the user information from the address specified when this instance was created.</summary>
+        public property User ,string
+            method get
+            proc
+                mreturn mUser
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>
+        ;;;Decode email address (as string)
+        ;;;e.g.
+        ;;; LiveCareer <newsletter@m.livecareer.com>
+        ;;; user@host.com
+        ;;;</summary>
+        private method setEmailAddress ,void
+            req in  Address         ,string
+            endparams
+            record
+                addrStart           ,i4
+                addrEnd             ,i4
+                nameStart           ,i4
+                nameEnd             ,i4
+                pos                 ,i4
+            endrecord
+        proc
+            clear nameStart,nameEnd
+            addrStart = %instr(1, Address, '<')
+            addrEnd = %instr(addrStart+1, Address, '>')
+            
+            ;do we have a display name and email address 
+            if(addrStart && addrEnd > addrStart+1) then
+            begin
+                ;;remove spaces
+                nameEnd = addrStart - 1
+                while(nameEnd > 1 && Address(nameEnd:1) == ' ')
+                    nameEnd -= 1
+                nameStart = 1
+                while(nameStart < nameEnd && Address(nameStart:1) == ' ')
+                    nameStart += 1
+
+                addrEnd -= 1
+                while(addrEnd > addrStart && Address(addrEnd:1) == ' ')
+                    addrEnd -= 1
+                addrStart += 1
+                while(addrStart < addrEnd && Address(addrStart:1) == ' ')
+                    addrStart += 1
+                end
+            else
+            begin
+                addrStart = 1
+                addrEnd = Address.Length
+            end
+            
+            ;;remove quote characters from display name
+            if(nameStart && nameStart < nameEnd)
+            begin
+                if(%instr(1, Address(nameStart,nameEnd),'"')) then 
+                begin
+                    for pos from nameStart thru nameEnd
+                    begin
+                        if(Address(pos:1) == '"')
+                            nextloop
+                        mDisplayName = mDisplayName + Address(pos:1)
+                    end
+                end
+                else
+                    mDisplayName = Address(nameStart, nameEnd)
+            end
+            if(addrStart < addrEnd)
+                mAddress = Address(addrStart, addrEnd)
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Internal method used to set Host and User properties. Called at the
+        ;;;time of object initialization (by constructors)</summary>
+        private method setHostAndUser   ,void
+            in required Address ,string
+            endparams
+        record
+            atPos   ,i4
+        endrecord
+        proc
+            mHost=""
+            mUser=""
+            if %instr(2,Address,"@",atPos)
+                begin
+                mUser = Address(1:atPos-1)
+                if (atPos<%trim(Address))
+                    mHost = Address(atPos+1,%trim(Address))
+                end
+            if (mHost.length==0 || mUser.length==0)
+                throw new exception("The specified string is not in the form required for an e-mail address.")
+        endmethod
+
+    endclass
+
+endnamespace

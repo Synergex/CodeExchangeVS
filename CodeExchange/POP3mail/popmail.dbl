@@ -1,0 +1,105 @@
+import SynPSG.System
+import SynPSG.System.IO
+import SynPSG.System.Net
+import SynPSG.System.Net.Mail
+import SynPSG.System.Net.Sockets
+import SynPSG.System.Net.Mime
+import SynPSG.Core.Utilities.Mail
+
+main pop3client
+record
+    pop             ,@Pop3Client
+    msg             ,@MailMessage
+    ttchan          ,i4
+    count           ,i4
+    seeAttachments  ,boolean
+    emailServer     ,a40
+    emailAddress    ,a50
+    password        ,a50
+proc
+    flags(7004020,1)
+
+    open(ttchan=%syn_freechn,O,'TT:')
+
+    getlog('EMAILSERVER', emailServer, count)
+    display(ttchan, "Email Server  : ")
+    if(count<1) then
+        reads(ttchan, emailServer, done)
+    else
+        writes(ttchan, emailServer(1:count))
+
+    getlog('EMAILADDRESS', emailAddress, count)
+    display(ttchan, "Email Address : ")
+    if(count<1) then
+        reads(ttchan, emailAddress, done)
+    else
+        writes(ttchan, emailAddress(1:count))
+
+    getlog('EMAILPASSWORD', password, count)
+    display(ttchan, "Password      : ")
+    if(count < 1) then
+        reads(ttchan, password, done)
+    else
+        writes(ttchan, password(1:count))
+
+    seeAttachments = 0
+
+    pop = new Pop3Client(%atrim(emailServer), 110)
+
+    delet('popmail.log')
+    pop.DebugStart('popmail.log')
+    ;pop.DebugStart('TT:')
+
+    pop.Connect()
+    pop.Logon(%atrim(emailAddress), %atrim(password))
+
+    count = pop.NumberOfMessages()
+    if(ttchan && count < 1) writes(ttchan, "no messages")
+
+    while(count > 0)
+    begin
+        if(ttchan) writes(ttchan, "Message "+%string(count))
+        msg = pop.GetMessage(count)
+        if(ttchan) writes(ttchan, "From "+msg.From.Address+" Subject "+msg.Subject+"  "+%string(msg.Attachments.Count)+" attachments")
+        if(msg.Attachments.Count > 0)
+        begin
+            data ctr ,i4
+            for ctr from 1 thru msg.Attachments.Count
+            begin
+                data attmnt ,@Attachment
+                data myAtt ,@MemoryStream
+                data myhdl ,D_HANDLE
+                attmnt = msg.Attachments.Indexer(ctr-1)
+                myAtt = (MemoryStream)attmnt.ContentStream
+                myHdl = %mem_proc(DM_ALLOC, myAtt.Length)
+                myAtt.Read(^m(myHdl), 0, myAtt.Length)
+                if(ttchan) writes(ttchan, attmnt.ContentType.ToString())
+                if(seeAttachments)
+                begin
+                    using attmnt.TransferEncoding select
+                    (SynPSG.Net.Mime.TransferEncoding.Base64),
+                        if(ttchan) writes(ttchan, Convert.FromBase64String(^m(myHdl)))
+                    (),
+                        if(ttchan) writes(ttchan, attmnt.ContentType.ToString())
+                    endusing
+                end
+            end
+        end
+        count -= 1
+    end
+
+    pop.Logoff()
+
+    pop.DebugClose()
+
+    pop.Disconnect()
+    clear pop
+
+done,
+    if(ttchan) close ttchan
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    stop D_EXIT_SUCCESS
+endmain
+

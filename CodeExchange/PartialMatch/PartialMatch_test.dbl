@@ -1,0 +1,30 @@
+main
+
+external function
+    partialmatch        ,i
+
+.align
+record
+    chan                ,i4
+    count               ,i4
+    match               ,a3
+
+proc
+
+    open(1, O, 'TT:')
+
+    chan = 2
+    open(chan, I:I, 'DBLDIR:syntxt')
+
+    match = 'DTK'
+    count = %PartialMatch(chan, match)
+
+    writes(1, "Number of match's for '"+match+"' in SYNTXT.ISM is "+%string(count))
+
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    
+    stop D_EXIT_SUCCESS
+end
+

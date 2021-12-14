@@ -1,0 +1,101 @@
+;;**********************************************************************
+;;
+;; Title:       AttachmentCollection.dbc
+;;
+;; Type:        Class
+;;
+;; Description: Stores attachments to be sent as part of an e-mail message.
+;;
+;; Author:      Tod Phillips, Synergex Professional Services Group
+;;
+;; Copyright    © 2009 Synergex International Corporation.  All rights reserved.
+;;
+;; WARNING:     All content constituting or related to this code ("Code") is the
+;;              property of Synergex International Corporation ("Synergex") and
+;;              is protected by U.S. and international copyright laws.
+;;              If you were given this Code by a Synergex employee then you may
+;;              use and modify it freely for use within your applications.
+;;
+;;              However, you may use the Code only for your personal use.
+;;              Any other use, unless otherwise authorized in writing by
+;;              Synergex is strictly prohibited.  You may not under any
+;;              circumstances distribute this Code, or any modified version
+;;              or part of this Code, to any third party without first
+;;              obtaining written permission to do so from Synergex.
+;;              In using this Code you accept that it is provided as is,
+;;              and without support or warranty of any kind.
+;;
+;;              Neither Synergex nor the author accept any responsibility
+;;              for any losses or damages of any nature which may arise
+;;              from the use of this Code.  This header information must
+;;              remain unaltered in the Code at all times.  Possession
+;;              of this Code, or any modified version or part of this Code,
+;;              indicates your acceptance of these terms.
+;;
+;;***********************************************************************************
+;;**********************************************************************
+import SynPSG.System
+import SynPSG.System.IO
+import SynPSG.System.net.mail
+import SynPSG.System.Net.Sockets
+import System.collections
+import SynPSG.System.Net.Mime
+
+namespace SynPSG.System.net.mail
+    class AttachmentCollection
+        private mAttachmentCollection   ,@ArrayList
+
+        ;;********************************************************************
+
+        ;;<summary>Initializes an empty instance of the AttachmentCollection class.</summary>
+        public method AttachmentCollection
+            endparams
+        proc
+            mAttachmentCollection = New ArrayList()
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Adds an attachment object to the end of the Collection.</summary>
+        public method Add, i
+            in item, @Attachment
+        proc
+            mreturn mAttachmentCollection.Add((Object)item)
+        endmethod
+
+        ;;********************************************************************
+
+        ;;;<summary>Return the total count of mail address objects in the collection</summary>
+        public property Count,  integer
+            method get
+            proc
+                mreturn mAttachmentCollection.Count
+            endmethod
+        endproperty
+
+        ;;********************************************************************
+
+        ;;;<summary>Method to clear the entire collection</summary>
+        public method Clear,    void
+            endparams
+        proc
+            mAttachmentCollection.Clear()
+            mreturn
+        endmethod
+
+        ;;********************************************************************
+
+        ;;Indexer to expose the typed collection to the outside world
+        public property Indexer, @Attachment
+            required in index, i4
+            method get
+            proc
+                mreturn (Attachment)mAttachmentCollection[index]
+            endmethod
+            method set
+            proc
+                mAttachmentCollection[index]=(Object)value
+            endmethod
+        endproperty
+    endclass
+endnamespace
