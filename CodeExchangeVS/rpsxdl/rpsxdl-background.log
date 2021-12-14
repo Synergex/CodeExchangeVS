@@ -1,0 +1,54 @@
+"C:\Development\CodeExchange\ismKey\ismkey.dbl"(67): .include 'INC:ismkey.def'                       ;function return values plus other defines
+%DBL-E-OPENIN2, Cannot open:  INC:ismkey.def
+"C:\Development\CodeExchange\ismKey\ismkey.dbl"(91):         filespec        ,a FIL_SIZ              ;file specification
+%DBL-E-NFND, FIL_SIZ not found
+"C:\Development\CodeExchange\ismKey\ismkey.dbl"(92):         keyspec         ,a KEY_SIZ              ;Key specification
+%DBL-E-NFND, KEY_SIZ not found
+"C:\Development\CodeExchange\ismKey\ismkey.dbl"(93):         st              ,a ST_SIZ               ;key segment start position string
+%DBL-E-NFND, ST_SIZ not found
+"C:\Development\CodeExchange\ismKey\ismkey.dbl"(94):         ln              ,a LN_SIZ               ;key segment length string
+%DBL-E-NFND, LN_SIZ not found
+"C:\Development\CodeExchange\ismKey\ismkey.dbl"(95):         ty              ,a TY_SIZ               ;key segment type string
+%DBL-E-NFND, TY_SIZ not found
+"C:\Development\CodeExchange\ismKey\ismkey.dbl"(96):         or              ,a OR_SIZ               ;key segment order string
+%DBL-E-NFND, OR_SIZ not found
+"C:\Development\CodeExchange\ismKey\ismkey.dbl"(111):         key_spec        ,a KEY_SIZ              ;key specification for structure
+%DBL-E-NFND, KEY_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\rpsxdl.dbl"(61): .include 'INC:ismkey.def'                       ;function return values plus other defines
+%DBL-E-OPENIN2, Cannot open:  INC:ismkey.def
+"C:\Development\CodeExchange\rpsxdl\rpsxdl.dbl"(130):         key_spec        ,a KEY_SIZ              ;key specification for structure
+%DBL-E-NFND, KEY_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\rps_xdl_test.dbl"(38): .include 'INC:ismkey.def'
+%DBL-E-OPENIN2, Cannot open:  INC:ismkey.def
+"C:\Development\CodeExchange\rpsxdl\rps_xdl_test.dbl"(62):         filespec        ,a FIL_SIZ @results     ;file specification
+%DBL-E-NFND, FIL_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\rps_xdl_test.dbl"(63):         key_spec        ,[ NM_KEYS] a KEY_SIZ   ;key specs
+%DBL-E-NFND, NM_KEYS not found
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(43): .function ismkey, ^VAL
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(67): .include 'INC:ismkey.def'                       ;function return values plus other defines
+%DBL-E-OPENIN2, Cannot open:  INC:ismkey.def
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(91):         filespec        ,a FIL_SIZ              ;file specification
+%DBL-E-NFND, FIL_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(92):         keyspec         ,a KEY_SIZ              ;Key specification
+%DBL-E-NFND, KEY_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(93):         st              ,a ST_SIZ               ;key segment start position string
+%DBL-E-NFND, ST_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(94):         ln              ,a LN_SIZ               ;key segment length string
+%DBL-E-NFND, LN_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(95):         ty              ,a TY_SIZ               ;key segment type string
+%DBL-E-NFND, TY_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(96):         or              ,a OR_SIZ               ;key segment order string
+%DBL-E-NFND, OR_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(111):         key_spec        ,a KEY_SIZ              ;key specification for structure
+%DBL-E-NFND, KEY_SIZ not found
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(553): .function order_is_same ,^VAL
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxdl\ismkey.dbl"(578): .function type_is_same ,^VAL
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxdl\log_error.dbl"(12): subroutine log_error
+%DBL-E-TOKUDF, Symbol already uniquely defined
+%DBL-E-NOASM, No assembly file created
+
+Errors:        25
+

@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\rpschk\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\rpschk\bin\Debug\rpschk.exe
+C:\Development\CodeExchangeVS\rpschk\bin\Debug\rpschk.pdb
+C:\Development\CodeExchangeVS\rpschk\obj\Debug\rpschk.exe
+C:\Development\CodeExchangeVS\rpschk\obj\Debug\rpschk.pdb

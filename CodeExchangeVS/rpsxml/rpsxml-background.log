@@ -1,0 +1,142 @@
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(2): .include 'INC:rpsxml.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.def
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(3): .include 'INC:rpsxml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.rec
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(69): .include 'INC:file_utilities.def'
+%DBL-E-OPENIN2, Cannot open:  INC:file_utilities.def
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(71): .include 'INC:rpsxml.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.def
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(72): .include 'INC:rpsxml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.rec
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(393): .include 'INC:rpsxml.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.def
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(394): .include 'INC:rpsxml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.rec
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(926): .include 'INC:rpsxml.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.def
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(927): .include 'INC:rpsxml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.rec
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(1234): .include 'INC:rpsxml.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.def
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(1235): .include 'INC:rpsxml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.rec
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(1244):         rpsmfile        ,a D_FILENAME_SIZE      ;original RPSMFIL
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(1245):         rpstfile        ,a D_FILENAME_SIZE      ;original RPSTFIL
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(1389): .include 'INC:rpsxml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.rec
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(1433): .include 'INC:rpsxml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.rec
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(1435): .include 'INC:rps_utilities.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rps_utilities.def
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(1460): .include 'INC:rpsxml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.rec
+"C:\Development\CodeExchange\rpsxml\rpsxml.dbl"(1490): .include 'INC:rpsxml.rec'
+%DBL-E-OPENIN2, Cannot open:  INC:rpsxml.rec
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(33): .include 'INC:file_utilities.def'
+%DBL-E-OPENIN2, Cannot open:  INC:file_utilities.def
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(155):         name                ,a D_FILENAME_SIZE      ;name
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(183):     freturn name(1:%trim(name))
+%DBL-E-TYPPARM, Type mismatch for parameter 1 in routine trim
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(250):         name                ,a D_FILENAME_SIZE      ;converted name
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(251):         folder              ,a D_FILENAME_SIZE      ;folder
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(252):         logical             ,a D_FILENAME_SIZE      ;logical
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(398):             freturn name(1:%trim(name))
+%DBL-E-TYPPARM, Type mismatch for parameter 1 in routine trim
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(512):         file_name           ,a D_FILENAME_SIZE
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(572):         name                ,a D_FILENAME_SIZE      ;converted name
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(573):         folder              ,a D_FILENAME_SIZE      ;folder
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(574):         logical             ,a D_FILENAME_SIZE      ;logical
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\Utilities\file_utilities.dbl"(575):         filename            ,a D_FILENAME_SIZE      ;qualified filename
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\Utilities\rps_utilities.dbl"(128): .include 'INC:rps_utilities.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rps_utilities.def
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(33): .include 'INC:file_utilities.def'
+%DBL-E-OPENIN2, Cannot open:  INC:file_utilities.def
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(38): .subroutine LOG_MESSAGE
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(112): .function FILE_EXISTS ,^VAL
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(148): .function CASE_NAME ;,ALPHA
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(155):         name                ,a D_FILENAME_SIZE      ;name
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(183):     freturn name(1:%trim(name))
+%DBL-E-TYPPARM, Type mismatch for parameter 1 in routine trim
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(191): .function UPCASE ;,ALPHA
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(213): .function LOCASE ;,ALPHA
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(236): .function EXPAND_FOLDER ;,ALPHA
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(250):         name                ,a D_FILENAME_SIZE      ;converted name
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(251):         folder              ,a D_FILENAME_SIZE      ;folder
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(252):         logical             ,a D_FILENAME_SIZE      ;logical
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(398):             freturn name(1:%trim(name))
+%DBL-E-TYPPARM, Type mismatch for parameter 1 in routine trim
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(473): .function GET_DIR_TERM  ;ALPHA
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(501): .function DBLCASE_FILE  ;ALPHA
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(512):         file_name           ,a D_FILENAME_SIZE
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(558): .function FULLY_QUALIFY_FILESPEC ;,ALPHA
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(572):         name                ,a D_FILENAME_SIZE      ;converted name
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(573):         folder              ,a D_FILENAME_SIZE      ;folder
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(574):         logical             ,a D_FILENAME_SIZE      ;logical
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(575):         filename            ,a D_FILENAME_SIZE      ;qualified filename
+%DBL-E-NFND, D_FILENAME_SIZE not found
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(685): .function TO_INT  ,^val
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(716): .function STR_TO_DBL ;,DEC
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(766): .function DBL_TO_STR ;,ALPHA
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\file_utilities.dbl"(823): .subroutine DEBUG_BREAK
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\ismkey.dbl"(67): .include 'INC:ismkey.def'                       ;function return values plus other defines
+%DBL-E-OPENIN2, Cannot open:  INC:ismkey.def
+"C:\Development\CodeExchange\rpsxml\ismkey.dbl"(91):         filespec        ,a FIL_SIZ              ;file specification
+%DBL-E-NFND, FIL_SIZ not found
+"C:\Development\CodeExchange\rpsxml\ismkey.dbl"(92):         keyspec         ,a KEY_SIZ              ;Key specification
+%DBL-E-NFND, KEY_SIZ not found
+"C:\Development\CodeExchange\rpsxml\ismkey.dbl"(93):         st              ,a ST_SIZ               ;key segment start position string
+%DBL-E-NFND, ST_SIZ not found
+"C:\Development\CodeExchange\rpsxml\ismkey.dbl"(94):         ln              ,a LN_SIZ               ;key segment length string
+%DBL-E-NFND, LN_SIZ not found
+"C:\Development\CodeExchange\rpsxml\ismkey.dbl"(95):         ty              ,a TY_SIZ               ;key segment type string
+%DBL-E-NFND, TY_SIZ not found
+"C:\Development\CodeExchange\rpsxml\ismkey.dbl"(96):         or              ,a OR_SIZ               ;key segment order string
+%DBL-E-NFND, OR_SIZ not found
+"C:\Development\CodeExchange\rpsxml\ismkey.dbl"(111):         key_spec        ,a KEY_SIZ              ;key specification for structure
+%DBL-E-NFND, KEY_SIZ not found
+"C:\Development\CodeExchange\rpsxml\log_error.dbl"(12): subroutine log_error
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\rps_utilities.dbl"(34): .function GET_RPS_FILENAMES ,^VAL
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\rps_utilities.dbl"(99): .subroutine RPS_FILENAME_DRILL ,reentrant
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\rpsxml\rps_utilities.dbl"(128): .include 'INC:rps_utilities.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rps_utilities.def
+"C:\Development\CodeExchange\rpsxml\rps_utilities.dbl"(282): .subroutine RPS_FILENAME_LOAD ,stack
+%DBL-E-TOKUDF, Symbol already uniquely defined
+%DBL-E-NOASM, No assembly file created
+
+Errors:        69
+

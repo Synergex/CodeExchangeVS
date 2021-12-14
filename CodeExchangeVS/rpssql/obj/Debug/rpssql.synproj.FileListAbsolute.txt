@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\rpssql\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\rpssql\bin\Debug\rpssql.exe
+C:\Development\CodeExchangeVS\rpssql\bin\Debug\rpssql.pdb
+C:\Development\CodeExchangeVS\rpssql\obj\Debug\rpssql.exe
+C:\Development\CodeExchangeVS\rpssql\obj\Debug\rpssql.pdb

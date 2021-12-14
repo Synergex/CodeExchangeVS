@@ -1,0 +1,18 @@
+"C:\Development\CodeExchange\rpssql\rpssql.dbl"(59): .include 'INC:rpssql.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpssql.def
+"C:\Development\CodeExchange\rpssql\rpssql.dbl"(96): .include 'INC:rpssql.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpssql.def
+"C:\Development\CodeExchange\rpssql\rpssql.dbl"(363): .include 'INC:rpssql.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpssql.def
+"C:\Development\CodeExchange\rpssql\rpssql.dbl"(440): .include 'INC:rpssql.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpssql.def
+"C:\Development\CodeExchange\rpssql\rpssql.dbl"(1149): .include 'INC:rpssql.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpssql.def
+"C:\Development\CodeExchange\rpssql\rpssql.dbl"(1481): .include 'INC:rpssql.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpssql.def
+"C:\Development\CodeExchange\rpssql\rpssql.dbl"(1522): .include 'INC:rpssql.def'
+%DBL-E-OPENIN2, Cannot open:  INC:rpssql.def
+%DBL-E-NOASM, No assembly file created
+
+Errors:         7
+

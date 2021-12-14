@@ -1,0 +1,8 @@
+"C:\Development\CodeExchange\ll_accept\StopMessage.dbl"(1): subroutine StopMessage
+%DBL-E-TOKUDF, Symbol already uniquely defined
+"C:\Development\CodeExchange\ll_accept\StopMessage.dbl"(20): subroutine anyKey
+%DBL-E-TOKUDF, Symbol already uniquely defined
+%DBL-E-NOASM, No assembly file created
+
+Errors:         2
+

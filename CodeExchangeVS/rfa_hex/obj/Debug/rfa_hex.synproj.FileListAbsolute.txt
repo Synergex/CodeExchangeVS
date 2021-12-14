@@ -1,0 +1,5 @@
+C:\Development\CodeExchangeVS\rfa_hex\obj\Debug\ResolveAssemblyReference.cache
+C:\Development\CodeExchangeVS\rfa_hex\bin\Debug\rfa_hex.exe
+C:\Development\CodeExchangeVS\rfa_hex\bin\Debug\rfa_hex.pdb
+C:\Development\CodeExchangeVS\rfa_hex\obj\Debug\rfa_hex.exe
+C:\Development\CodeExchangeVS\rfa_hex\obj\Debug\rfa_hex.pdb
