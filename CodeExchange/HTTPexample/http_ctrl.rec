@@ -1,0 +1,7 @@
+;http_ctrl.rec
+
+group ctrl
+    colid               ,3i4            ;menu column ID's
+    tsquit_msid         ,i4             ;close method set
+endgroup
+

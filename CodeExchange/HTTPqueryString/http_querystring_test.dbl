@@ -1,0 +1,26 @@
+main
+
+record
+    field   ,[2]a10
+    value   ,[2]a20
+    handle  ,i4
+
+proc
+    open(1, O, 'TT:')
+
+    field[1] = "name"
+    field[2] = "location"
+
+    value[1] = "John Doe"
+    value[2] = "Sacramento, CA"
+
+    handle = %http_query_string(field,value)
+
+    writes(1, "Query String = "+^m(handle))
+
+    close 1
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    stop D_EXIT_SUCCESS
+end

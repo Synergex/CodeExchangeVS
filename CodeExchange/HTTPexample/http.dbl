@@ -1,0 +1,1008 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; HTTP.DBL
+;
+; Last revised : 2-Jun-2004
+;
+; Example program to run as a HTTP server or a HTTP client.
+;
+; Requires : Synergy/DE 8
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+.include 'INC:http.def'
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+; Please uncomment the defines below to include the appropriate functions.
+;
+; Allow HTTP Client options
+.define HTTPCLIENT      1
+;
+; Allow Shutdown HTTP Server option
+.define HTTPSHUTDOWN    1
+;
+.ifndef DBLNET
+;
+; Allow Start HTTP Server option
+.define HTTPSERVER      1
+;
+.endc ;DBLNET
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.main HTTP
+
+external function
+    mainprog    ,i
+record
+    stopStatus  ,i4
+proc
+.ifdef DBLv9
+    try
+        stopStatus = %mainprog()
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stopStatus = D_EXIT_FAILURE
+    end
+    endtry
+.else
+    stopStatus = %mainprog()
+.endc ;DBLv9
+
+    xcall flags(7000000, 1)
+    stop stopStatus
+endmain
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function mainprog ,i
+
+.include 'WND:tools.def'
+.include 'WND:inpctl.def'
+.include 'DBLDIR:windows.def'
+
+.define APP_VERSION     "v1.2"
+
+; COLID array pointers
+.define INP_COL         1
+.define SEL_COL         2
+.define LST_COL         3
+
+; Application Height
+.define APP_HEIGHT      12
+; Application Width
+.define APP_WIDTH       75
+
+.define MAX_FLD_LEN     APP_WIDTH - 25
+
+.define D_NUM_FLDS      7
+.define D_NUM_CLTOPTS   2
+.define D_NUM_LOGOPTS   4
+
+    literal
+        ;HTTP client options
+        cltopts             ,D_NUM_CLTOPTS a 20
+&           ,'Get file from server'
+&           ,'Put file on server  '
+        ;Logging options
+        logopts             ,D_NUM_LOGOPTS a 20
+&           ,'No logging          '
+&           ,'Errors only         '
+&           ,'Errors and Success  '
+&           ,'Everything          '
+        ;Input window fields
+        flds                ,D_NUM_FLDS a30
+&           ,'HOST'
+&           ,'PORT'
+&           ,'LOGGING'
+&           ,'LOG_FILE'
+&           ,'HST_FILE'
+&           ,'CLT_FILE'
+&           ,'CLT_OPT'
+
+
+    record control_data
+.include 'INC:http_ctrl.rec'
+.include 'INC:http_inp_rec.rec'
+
+    record clr
+        mbuffer             ,a1024          ;menu build buffer
+
+    record clr_i
+        tabid               ,i4             ;tab id
+        tab_ctr             ,i4             ;number of tabs used
+        wndid               ,3i4            ;window id's
+        tabw                ,3i4            ;tab window ids
+        bld_id              ,i4             ;build id
+        gen_colid           ,i4             ;general column id
+        tab_colid           ,i4             ;tab navigation column id
+        ctr                 ,i4             ;counter
+        len                 ,i4             ;field length
+
+proc
+
+    clear clr, ^i(clr_i), control_data
+
+    xcall u_start(,,,,APP_HEIGHT, APP_WIDTH)
+
+    xcall e_state(D_VALSTCHG)
+
+    xcall e_method(D_METH_ENTRST, 'syn_entrst')
+
+    xcall e_sect("HTTP Sample Application for Synergy/DE 8 "+APP_VERSION, D_CAPTION)
+
+    ;create menu columns
+    xcall mb_column(mbuffer, 'httpc_g', "General  ")
+    xcall mb_entry(mbuffer, 'O_EXIT', "OK", F4_KEY)
+    xcall mb_entry(mbuffer, 'O_ABANDON', "Cancel", F3_KEY)
+    xcall mb_end(mbuffer, gen_colid)
+
+    ;Create utility columns, but do not place
+    xcall mb_column(mbuffer, 'httpc_i', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'I_NEXT', "Next field", DOWN_KEY)
+    xcall mb_entry(mbuffer, 'I_PREV', "Prev field", UP_KEY)
+    xcall mb_entry(mbuffer, 'E_LEFT', "Left 1 character", LEFT_KEY)
+    xcall mb_entry(mbuffer, 'E_RIGHT', "Right 1 character", RIGHT_KEY)
+    xcall mb_entry(mbuffer, 'E_CDEL', "Delete character", CTRL_H_KEY)
+    xcall mb_end(mbuffer, colid(INP_COL))
+
+    xcall mb_column(mbuffer, 'httpc_s', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'S_DOWN', "Next item", DOWN_KEY)
+    xcall mb_entry(mbuffer, 'S_UP', "Prev item", UP_KEY)
+    xcall mb_end(mbuffer, colid(SEL_COL))
+
+    xcall mb_column(mbuffer, 'httpc_l', "Cursor  ",, D_NOPLC)
+    xcall mb_entry(mbuffer, 'S_DOWN', "Next item", DOWN_KEY)
+    xcall mb_entry(mbuffer, 'S_UP', "Prev item", UP_KEY)
+    xcall mb_entry(mbuffer, 'S_PGDN', "Next page", F59_KEY)
+    xcall mb_entry(mbuffer, 'S_PGUP', "Prev page", F61_KEY)
+    xcall mb_entry(mbuffer, 'S_TOP', "Top of list", CTRL_F_KEY)
+    xcall mb_entry(mbuffer, 'S_BOTTOM', "Bottom of list", CTRL_B_KEY)
+    xcall mb_end(mbuffer, colid(LST_COL))
+
+.ifdef D_GUI
+    ;create method set
+    tsquit_msid = %u_wndevents(D_CREATE, , D_EVENT_CLOSE, "X_TS_QUIT")
+.endc
+
+    ;set defaults
+    clear inp_rec
+    host = 'localhost'                  ;default host name
+    port = 80                           ;default port
+    logging = 2                         ;default to "Errors and Success"
+
+
+    ;no tabs in tabset (yet)
+    clear tab_ctr
+
+    ;create tabset
+    tabid = %ts_tabset(DTS_CREATE, "HTTPT", APP_HEIGHT, APP_WIDTH-2)
+
+.ifdef HTTPCLIENT
+
+    tab_ctr += 1
+
+    ;create client window
+    xcall ib_input(bld_id, 'HTTPI_CLIENT', APP_HEIGHT, APP_WIDTH-2)
+
+    ctr = 2
+
+    if(^size(host).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(host)
+    xcall ib_field(bld_id, flds(1), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(host),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_PROMPT, "Server")
+
+    ctr += 1
+    xcall ib_field(bld_id, flds(2), D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(port),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_PROMPT, "Port")
+
+    ctr += 1
+    xcall ib_field(bld_id, flds(3), D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(logging),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_SELECT, 1, 1, D_NUM_LOGOPTS, 20, D_NUM_LOGOPTS, logopts,
+&       D_FLD_ENUM, 20, 0, 1,
+&       D_FLD_PROMPT, "Logging in use")
+
+    ctr += 1
+    if(^size(log_file).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(log_file)
+    xcall ib_field(bld_id, flds(4), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(log_file),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_DRILL, 'log_file_drill',
+&       D_FLD_PROMPT, "Log file")
+
+    ctr += 1
+    if(^size(hst_file).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(hst_file)
+    xcall ib_field(bld_id, flds(5), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(hst_file),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_DRILL, 'hst_file_drill',
+&       D_FLD_PROMPT, "Server file")
+
+    ctr += 1
+    if(^size(clt_file).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(clt_file)
+    xcall ib_field(bld_id, flds(6), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(clt_file),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_DRILL, 'clt_file_drill',
+&       D_FLD_PROMPT, "Client file")
+
+    ctr += 1
+    xcall ib_field(bld_id, flds(7), D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(clt_opt),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_SELECT, 1, 1, D_NUM_CLTOPTS, 20, D_NUM_CLTOPTS, cltopts,
+&       D_FLD_ENUM, 20, 0, 1,
+&       D_FLD_PROMPT, "Option")
+
+    xcall ib_structure(bld_id, 'local', D_NUM_FLDS, flds)
+    xcall ib_set(bld_id, 'ALL', 'local', D_NUM_FLDS, flds)
+
+    xcall ib_end(bld_id, wndid(tab_ctr))
+
+    xcall w_brdr(wndid(tab_ctr), WB_TITLE, "HTTP Client")
+
+    xcall b_button(wndid(tab_ctr), 'O_EXIT', DSB_TEXT, "OK",,, "O")
+    xcall b_button(wndid(tab_ctr), 'O_ABANDON', DSB_TEXT, "Cancel",,, "C")
+
+    ;add window to tabset
+    tabw(tab_ctr) = %ts_tabset(DTS_WINDOW, tabid, wndid(tab_ctr), 'tab_client',, "Run HTTP client")
+
+.endc ;HTTPCLIENT
+
+.ifdef HTTPSERVER
+
+    tab_ctr += 1
+
+    ;create server window
+    xcall ib_input(bld_id, 'HTTPI_SERVER', APP_HEIGHT, APP_WIDTH-2)
+
+    ctr = 2
+    if(^size(host).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(host)
+    xcall ib_field(bld_id, flds(1), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(host),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_PROMPT, " ")
+
+    ctr += 1
+    xcall ib_field(bld_id, flds(2), D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(port),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_PROMPT, "Port")
+
+    ctr += 1
+    xcall ib_field(bld_id, flds(3), D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(logging),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_SELECT, 1, 1, D_NUM_LOGOPTS, 20, D_NUM_LOGOPTS, logopts,
+&       D_FLD_ENUM, 20, 0, 1,
+&       D_FLD_PROMPT, "Logging in use")
+
+    ctr += 1
+    if(^size(log_file).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(log_file)
+    xcall ib_field(bld_id, flds(4), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(log_file),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_DRILL, 'log_file_drill',
+&       D_FLD_PROMPT, "Log file")
+
+    ctr += 1
+    if(^size(hst_file).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(hst_file)
+    xcall ib_field(bld_id, flds(5), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(hst_file),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_PROMPT, " ")
+
+    ctr += 1
+    if(^size(clt_file).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(clt_file)
+    xcall ib_field(bld_id, flds(6), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(clt_file),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_PROMPT, " ")
+
+    ctr += 1
+    xcall ib_field(bld_id, flds(7), D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(clt_opt),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_PROMPT, " ")
+
+    xcall ib_structure(bld_id, 'local', D_NUM_FLDS, flds)
+    xcall ib_set(bld_id, 'ALL', 'local', D_NUM_FLDS, flds)
+
+    xcall ib_end(bld_id, wndid(tab_ctr))
+
+    ;delete fields from set that are not applicable to HTTP server
+    xcall i_setdel(wndid(tab_ctr), 'ALL', flds(1), flds(5), flds(6), flds(7))
+
+    xcall w_brdr(wndid(tab_ctr), WB_TITLE, "Start HTTP Server")
+
+    xcall b_button(wndid(tab_ctr), 'O_EXIT', DSB_TEXT, "OK",,, "O")
+    xcall b_button(wndid(tab_ctr), 'O_ABANDON', DSB_TEXT, "Cancel",,, "C")
+
+    ;add window to tabset
+    tabw(tab_ctr) = %ts_tabset(DTS_WINDOW, tabid, wndid(tab_ctr), 'tab_server',, "Start HTTP server on this computer")
+
+.endc ;HTTPSERVER
+
+.ifdef HTTPSHUTDOWN
+
+    tab_ctr += 1
+
+    ;create server shutdown window
+    xcall ib_input(bld_id, 'HTTPI_SHUTDOWN', APP_HEIGHT, APP_WIDTH-2)
+
+    ctr = 2
+    if(^size(host).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(host)
+    xcall ib_field(bld_id, flds(1), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(host),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_PROMPT, "Host")
+
+    ctr += 1
+    xcall ib_field(bld_id, flds(2), D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(port),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_PROMPT, "Port")
+
+    ctr += 1
+    xcall ib_field(bld_id, flds(3), D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(logging),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_SELECT, 1, 1, D_NUM_LOGOPTS, 20, D_NUM_LOGOPTS, logopts,
+&       D_FLD_ENUM, 20, 0, 1,
+&       D_FLD_PROMPT, "Logging in use")
+
+    ctr += 1
+    if(^size(log_file).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(log_file)
+    xcall ib_field(bld_id, flds(4), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(log_file),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_DRILL, 'log_file_drill',
+&       D_FLD_PROMPT, "Log file")
+
+    ctr += 1
+    if(^size(hst_file).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(hst_file)
+    xcall ib_field(bld_id, flds(5), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(hst_file),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_PROMPT, " ")
+
+    ctr += 1
+    if(^size(clt_file).gt.MAX_FLD_LEN) then
+        len = MAX_FLD_LEN
+    else
+        len = ^size(clt_file)
+    xcall ib_field(bld_id, flds(6), D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(clt_file),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_VIEWLEN, len,
+&       D_FLD_PROMPT, " ")
+
+    ctr += 1
+    xcall ib_field(bld_id, flds(7), D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(clt_opt),
+&       D_FLD_POS, ctr, 2, D_FLD_FPOS, ctr, 20,
+&       D_FLD_PROMPT, " ")
+
+    xcall ib_structure(bld_id, 'local', D_NUM_FLDS, flds)
+    xcall ib_set(bld_id, 'ALL', 'local', D_NUM_FLDS, flds)
+
+    xcall ib_end(bld_id, wndid(tab_ctr))
+
+    ;delete fields from set that are not applicable to HTTP server shutdown
+    xcall i_setdel(wndid(tab_ctr), 'ALL', flds(5), flds(6), flds(7))
+
+    xcall w_brdr(wndid(tab_ctr), WB_TITLE, "Stop HTTP Server")
+
+    xcall b_button(wndid(tab_ctr), 'O_EXIT', DSB_TEXT, "OK",,, "O")
+    xcall b_button(wndid(tab_ctr), 'O_ABANDON', DSB_TEXT, "Cancel",,, "C")
+
+    ;add window to tabset
+    tabw(tab_ctr) = %ts_tabset(DTS_WINDOW, tabid, wndid(tab_ctr), 'tab_server_shutdown',, "Shutdown HTTP server")
+
+.endc ;HTTPSHUTDOWN
+
+.ifndef D_GUI
+    ;add tab navigation menu column
+    if(tab_ctr.gt.1)
+    begin
+        xcall mb_column(mbuffer, 'httpc_t', "Tab  ")
+        xcall mb_entry(mbuffer, 'TS_TABNEXT', "Next Tab", F8_KEY)
+        xcall mb_entry(mbuffer, 'TS_TABPREV', "Previous Tab", F7_KEY)
+        xcall mb_end(mbuffer, tab_colid)
+    end
+    ;assign close event to tabset
+    xcall u_wndevents(D_ASSIGN, tsquit_msid, tabid)
+.endc ;D_GUI
+
+    ;now we're ready to process the tabset
+    if(tab_ctr)
+    begin
+        do  begin
+            xcall ts_process(tabid, ctrl, inp_rec)
+            ;process window
+            if (g_select)
+                call mnu_cols           ;menu processing
+        end
+        until(g_entnam.eq.'TS_QUIT')
+    end
+
+    xcall u_finish
+    freturn D_EXIT_SUCCESS
+
+;----------------------------------------------------------------------------
+; process any menu column signals
+
+mnu_cols,
+
+    using g_entnam select
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.ifdef HTTPSERVER
+
+subroutine TAB_SERVER
+    a_wndid     ,n                      ;tab window id
+.include 'INC:http_ctrl.rec'
+.include 'INC:http_inp_rec.rec'
+
+.include 'WND:tools.def'
+
+.align
+    record clr
+        fld         ,a30                    ;field with error
+
+proc
+
+    clear clr
+
+    xcall i_display(a_wndid,, inp_rec)
+    xcall i_next(a_wndid,, '*FRST*')
+
+    do  begin
+        xcall i_input(a_wndid,, inp_rec, colid(INP_COL), colid(SEL_COL),,
+&           D_NOTERM,,, ctrl)
+        ;process window
+        if (g_select) then
+            call mnu_cols               ;menu processing
+        else
+        begin
+            if(g_setsts) then
+                call set_proc           ;set processing
+            else
+                call brk_proc           ;break procssing
+        end
+    end
+    until(g_entnam.eq.'TS_')
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call set_proc
+        if(.not.fld)
+        begin
+            xcall e_sect("Running HTTP server on port "+%string(port),
+&               D_INFO, D_CLEAR, D_LEFT)
+            xcall u_update
+            xcall http_server(port, logging, log_file)
+        end
+    end
+    ('O_ABANDON'),
+        g_entnam = 'TS_QUIT'
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    xcall i_next(a_wndid,, '*FRST*')
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    clear fld
+
+    ;is port number valid
+    if(.not.port)
+        fld = 'PORT'
+
+    ;has an error been identified
+    if(fld) then
+    begin
+        xcall u_beep
+        xcall i_next(a_wndid,, fld)
+    end
+    else
+        xcall i_next(a_wndid,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+end
+
+.endc ;HTTPSERVER
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.ifdef HTTPSHUTDOWN
+
+subroutine TAB_SERVER_SHUTDOWN
+    a_wndid     ,n                      ;tab window id
+.include 'INC:http_ctrl.rec'
+.include 'INC:http_inp_rec.rec'
+
+.include 'WND:tools.def'
+
+.align
+    record clr
+        fld         ,a30                    ;field with error
+
+proc
+
+    clear clr
+
+    xcall i_display(a_wndid,, inp_rec)
+    xcall i_next(a_wndid,, '*FRST*')
+
+    do  begin
+        xcall i_input(a_wndid,, inp_rec, colid(INP_COL), colid(SEL_COL),,
+&           D_NOTERM,,, ctrl)
+        ;process window
+        if (g_select) then
+            call mnu_cols               ;menu processing
+        else
+        begin
+            if(g_setsts) then
+                call set_proc           ;set processing
+            else
+                call brk_proc           ;break procssing
+        end
+    end
+    until(g_entnam.eq.'TS_')
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call set_proc
+        if(.not.fld)
+        begin
+            xcall e_sect("Running HTTP server on port "+%string(port),
+&               D_INFO, D_CLEAR, D_LEFT)
+            xcall u_update
+
+            xcall http_server_shutdown(host, port, logging, log_file)
+        end
+    end
+    ('O_ABANDON'),
+        g_entnam = 'TS_QUIT'
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    xcall i_next(a_wndid,, '*FRST*')
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    clear fld
+
+    ;is host name valid
+    if(.not.host)
+    begin
+        fld = 'HOST'
+    end
+
+    ;is port number valid
+    if(.not.port)
+        fld = 'PORT'
+
+    ;has an error been identified
+    if(fld) then
+    begin
+        xcall u_beep
+        xcall i_next(a_wndid,, fld)
+    end
+    else
+        xcall i_next(a_wndid,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+end
+
+.endc ;HTTPSHUTDOWN
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.ifdef HTTPCLIENT
+
+subroutine TAB_CLIENT
+    a_wndid     ,n                      ;tab window id
+.include 'INC:http_ctrl.rec'
+.include 'INC:http_inp_rec.rec'
+
+.include 'WND:tools.def'
+
+    external function
+        http_client_get_file        ,^VAL
+        http_client_put_file        ,^VAL
+
+.align
+    record clr_i
+        status              ,i4             ;return status
+
+.align
+    record clr
+        fld                 ,a30            ;field with error
+
+proc
+
+    clear clr
+
+    xcall i_display(a_wndid,, inp_rec)
+    xcall i_next(a_wndid,, '*FRST*')
+
+    do  begin
+        xcall i_input(a_wndid,, inp_rec, colid(INP_COL), colid(SEL_COL),,
+&           D_NOTERM,,, ctrl)
+        ;process window
+        if (g_select) then
+            call mnu_cols               ;menu processing
+        else
+        begin
+            if(g_setsts) then
+                call set_proc           ;set processing
+            else
+                call brk_proc           ;break procssing
+        end
+    end
+    until(g_entnam.eq.'TS_')
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+mnu_cols,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call set_proc
+        if(.not.fld)
+        begin
+            xcall e_sect("Running HTTP client on port "+%string(port),
+&               D_INFO, D_CLEAR, D_LEFT)
+            xcall u_update
+
+            using clt_opt select
+            (0),
+            begin
+                status = %http_client_get_file(host, port, logging, log_file, hst_file, clt_file)
+                using status select
+                (0),
+                    xcall u_message("Received "+%atrim(clt_file)+" OK")
+                (),
+                    xcall u_message("Receive "+%atrim(clt_file)+" failed")
+                endusing
+            end
+            (1),
+            begin
+                status = %http_client_put_file(host, port, logging, log_file, hst_file, clt_file)
+                using status select
+                (0),
+                    xcall u_message("Transferred "+%atrim(clt_file)+" OK")
+                (),
+                    xcall u_message("Transfer "+%atrim(clt_file)+" failed")
+                endusing
+            end
+            endusing
+        end
+        clear g_entnam
+    end
+    ('O_ABANDON'),
+        g_entnam = 'TS_QUIT'
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+brk_proc,
+
+    xcall i_next(a_wndid,, '*FRST*')
+    return
+
+;----------------------------------------------------------------------------
+
+set_proc,
+
+    clear fld
+
+    ;is host name valid
+    if(.not.host)
+    begin
+        fld = 'HOST'
+    end
+
+    if(.not.fld)
+    begin
+        ;is port number valid
+        if(.not.port)
+            fld = 'PORT'
+    end
+
+;    if(.not.fld)
+;        begin
+;        ;is host file valid
+;        if(.not.hst_file)
+;            fld = 'HST_FILE'
+;        end
+
+    if(.not.fld)
+    begin
+        ;is client name valid
+        if(.not.clt_file)
+            fld = 'CLT_FILE'
+    end
+
+    ;has an error been identified
+    if(fld) then
+    begin
+        xcall u_beep
+        xcall i_next(a_wndid,, fld)
+    end
+    else
+        xcall i_next(a_wndid,, '*FRST*')
+
+    return
+
+;----------------------------------------------------------------------------
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine HST_FILE_DRILL
+.include "WND:inpinf.def"   ; Group argument of input info
+.include 'INC:http_inp_rec.rec' ; The data_area argument passed to the
+    ;  calling input routine.
+.include 'INC:http_ctrl.rec'    ; Method data
+
+.include 'WND:tools.def'
+
+.align
+    record
+        filename            ,a255   ;filename
+
+.define NUM_FILTERS     ,2
+
+.align
+    record
+        filters             ,NUM_FILTERS a30    ,'*.xml','*.*'
+        filter_desc         ,NUM_FILTERS a30    ,'XML files','All files'
+
+proc
+
+    xcall i_force(, filename)
+    if(.not.filename)
+        filename = hst_file
+
+    ;client GET file
+    if(clt_opt.eq.1) then
+    begin
+        if(%u_getfilename(filename, "HOST Filename",
+&           NUM_FILTERS, filter_desc, filters, filename,,
+&           colid(inp_col), colid(sel_col), colid(lst_col),,
+&           D_OFN_NOTRANS))
+        begin
+            xcall i_force(filename)
+        end
+    end
+    else
+    begin
+        if(%u_getfilename(filename, "HOST Filename",
+&           NUM_FILTERS, filter_desc, filters, filename,,
+&           colid(inp_col), colid(sel_col), colid(lst_col),,
+&           D_OFN_NOTRANS, D_OFN_SAVEAS))
+        begin
+            xcall i_force(filename)
+        end
+    end
+
+    xreturn
+
+.undefine NUM_FILTERS
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine CLT_FILE_DRILL
+.include "WND:inpinf.def"   ; Group argument of input info
+.include 'INC:http_inp_rec.rec' ; The data_area argument passed to the
+    ;  calling input routine.
+.include 'INC:http_ctrl.rec'    ; Method data
+
+.include 'WND:tools.def'
+
+.align
+    record
+        filename            ,a255   ;filename
+
+.define NUM_FILTERS     ,2
+
+.align
+    record
+        filters             ,NUM_FILTERS a30    ,'*.xml','*.*'
+        filter_desc         ,NUM_FILTERS a30    ,'XML files','All files'
+
+proc
+
+    xcall i_force(, filename)
+    if(.not.filename)
+        filename = clt_file
+
+    ;client POST file
+    if(clt_opt.eq.2) then
+    begin
+        if(%u_getfilename(filename, "Client Filename",
+&           NUM_FILTERS, filter_desc, filters, filename,,
+&           colid(inp_col), colid(sel_col), colid(lst_col),,
+&           D_OFN_NOTRANS))
+        begin
+            xcall i_force(filename)
+        end
+    end
+    else
+    begin
+        if(%u_getfilename(filename, "Client Filename",
+&           NUM_FILTERS, filter_desc, filters, filename,,
+&           colid(inp_col), colid(sel_col), colid(lst_col),,
+&           D_OFN_NOTRANS, D_OFN_SAVEAS))
+        begin
+            xcall i_force(filename)
+        end
+    end
+
+    xreturn
+
+.undefine NUM_FILTERS
+end
+
+.endc ;HTTPCLIENT
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Drill Method
+
+subroutine LOG_FILE_DRILL
+.include "WND:inpinf.def"   ; Group argument of input info
+.include 'INC:http_inp_rec.rec' ; The data_area argument passed to the
+    ;  calling input routine.
+.include 'INC:http_ctrl.rec'    ; Method data
+
+.include 'WND:tools.def'
+
+.align
+    record
+        filename            ,a255   ;filename
+
+.define NUM_FILTERS     ,2
+
+.align
+    record
+        filters             ,NUM_FILTERS a30    ,'*.log','*.*'
+        filter_desc         ,NUM_FILTERS a30    ,'Log files','All files'
+
+proc
+
+    xcall i_force(, filename)
+    if(.not.filename)
+        filename = log_file
+
+    if(%u_getfilename(filename, "Log Filename",
+&       NUM_FILTERS, filter_desc, filters, filename, 'log',
+&       colid(inp_col), colid(sel_col), colid(lst_col),,
+&       D_OFN_NOTRANS))
+    begin
+        xcall i_force(filename)
+    end
+
+    xreturn
+
+.undefine NUM_FILTERS
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Method to be executed when user closes a window
+
+subroutine X_TS_QUIT
+
+proc
+
+    xcall m_signal("TS_QUIT")
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Allow partially completed fields to be accepted if a menu entry is signalled
+
+subroutine SYN_ENTRST
+
+    a_nomod     ,n
+    a_reset     ,n
+
+proc
+
+    if(.not.a_nomod)
+        a_reset = 0
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

@@ -1,0 +1,216 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; record_locked.dbl
+
+.function isam_reads ,^VAL
+
+    a_chan              ,n              ;REQURIED open channel to read
+    a_record            ,a              ;REQUIRED data
+    a_direction         ,n              ;OPTIONAL direction
+    a_getrfa            ,a              ;OPTIONAL getrfa
+    a_lock              ,n              ;OPTIONAL lock qualifier
+    a_wait              ,n              ;OPTIONAL wait time
+
+    a_keynum            ,n              ;OPTIONAL key number
+    a_key               ,a              ;OPTIONAL RETURNED key of isam
+
+; Function return values
+;
+;    0 ok
+;  +ve Synergy error
+;  -ve Synergy error on reposition
+
+; Use this routine instead of the standard READS statement,
+; and it can return the key of the locked record.
+
+    structure file_rec
+        ,a1
+
+.align
+    record clr_i
+        reclen              ,i4             ;record length
+        keynum              ,i4             ;key number
+        direction           ,i4             ;direction
+        lock                ,i4             ;lock
+        wait                ,i4             ;wait time
+        handle              ,D_HANDLE       ;handle
+
+.align
+    record clr
+        rfa                 ,a6             ;RFA
+        buffer              ,a5             ;buffer
+
+.proc
+
+    clear ^i(clr_i), clr
+
+    ;which direction to read
+    if(^passed(a_direction)) then
+        direction = a_direction
+    else
+        direction = Q_IGNDIR
+
+    ;what sort of lock is required
+    if(^passed(a_lock)) then
+        lock = a_lock
+    else
+        lock = Q_AUTO_LOCK
+
+    ;how long do we wait, if locked
+    if(^passed(a_wait)) then
+        wait = a_wait
+    else
+        wait = Q_NOWAIT
+
+    ;read record
+    reads(a_chan, a_record, LOCK:lock, DIRECTION:direction, LOCK=lock, WAIT=wait, GETRFA:rfa) [LOCK=locked, ERR=read_error]
+
+    ;return rfa
+    if(^passed(a_getrfa))
+        a_getrfa = rfa
+
+    freturn 0
+
+;--------------------------------------------------------------------
+; error reading record (but not a record locked)
+
+read_error,
+
+    freturn %error
+
+;--------------------------------------------------------------------
+; record locked when reading record
+
+locked,
+
+    if(.not.^passed(a_key))
+    begin
+        freturn 40
+    end
+
+    ;which key number to use
+    if(^passed(a_keynum))
+        keynum = a_keynum
+
+.ifdef DBLv7
+
+    ;what is the record length of the isam file
+    reclen = %isinfo(a_chan, 'SIZE')
+
+.else
+
+    ;what is the record length of the isam file
+    xcall issts(a_chan, buffer)
+    reclen = buffer(1:5)
+
+.endc ;DBLv7
+
+    ;allocate a memory segment of the correct record length
+    handle = %mem_proc(DM_ALLOC, reclen)
+
+    ;read locked record
+    reads(a_chan, ^m(file_rec(1:reclen), handle), LOCK:Q_NO_LOCK, GETRFA:rfa) [ERR=read_error2]
+
+    ;get key value from record
+    a_key = %keyval(a_chan, ^m(file_rec(1:reclen), handle), keynum)
+
+    ;reposition to correct record
+    find(a_chan,,, KEYNUM:keynum, RFA:rfa)
+
+    ;return rfa
+    if(^passed(a_getrfa))
+        a_getrfa = rfa
+
+    freturn 0
+
+;--------------------------------------------------------------------
+; error repositioning after record locked
+
+read_error2,
+
+    ;no key read
+    clear a_key
+
+    ;return rfa
+    if(^passed(a_getrfa))
+        a_getrfa = rfa
+
+    freturn -%error
+
+.end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.function isam_reads_locked ,^VAL
+
+    a_chan              ,n              ;REQURIED open channel to read
+    a_keynum            ,n              ;OPTIONAL key number
+    a_key               ,a              ;REQUIRED RETURNED key of isam
+
+; Function return values
+;
+;    0 ok
+; else Synergy error
+
+; Use this routine after a record lock has occurred,
+; and you want to know which record was actually locked.
+; Only really useful after a reads failed
+
+    structure file_rec
+        ,a1
+
+.align
+    record clr_i
+        reclen              ,i4             ;record length
+        keynum              ,i4             ;key number
+        handle              ,D_HANDLE       ;handle
+
+.align
+    record clr
+        rfa                 ,a6             ;RFA
+        buffer              ,a5             ;buffer
+
+.proc
+
+    clear ^i(clr_i), clr
+
+    ;which key number to use
+    if(^passed(a_keynum))
+        keynum = a_keynum
+
+.ifdef DBLv7
+
+    ;what is the record length of the isam file
+    reclen = %isinfo(a_chan, 'SIZE')
+
+.else
+
+    ;what is the record length of the isam file
+    xcall issts(a_chan, number(1:5))
+    reclen = buffer(1:5)
+
+.endc ;DBLv7
+
+    ;allocate a memory segment of the correct record length
+    handle = %mem_proc(DM_ALLOC, reclen)
+
+    ;read locked record
+    reads(a_chan, ^m(file_rec(1:reclen), handle), LOCK:Q_NO_LOCK, GETRFA:rfa) [ERR=read_error]
+
+    ;get key value from record
+    a_key = %keyval(a_chan, ^m(file_rec(1:reclen), handle), keynum)
+
+    ;reposition to correct record
+    find(a_chan,,, KEYNUM:keynum, RFA:rfa)
+
+    freturn 0
+
+;--------------------------------------------------------------------
+
+read_error,
+
+    clear a_key
+
+    freturn %error
+
+.end
+

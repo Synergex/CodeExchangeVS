@@ -1,0 +1,417 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; HTTP_UTILS.DBL
+;
+; Last revised : 2-Jun-2004
+;
+; Requires : Synergy/DE 8
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+; Logging routines use the USE_TOOLKIT define.  If defined, will use toolkit
+; window as a logging device, else TT: will be used.
+;
+.define USE_TOOLKIT
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; extract the filename from a URI
+;
+; e.g.
+; URI = //localhost/C:\xfNLCOM\xfSamples\xfTest.xml will yield a filename of
+; C:\xfNLCOM\xfSamples\xfTest.xml
+
+function parseURI ,^val
+    a_URI       ,a          ;REQUIRED URI
+    a_file      ,a          ;REQUIRED RETURNED filename
+
+.align
+    record
+        cur         ,i4         ;Current position
+        pos         ,i4         ;Position
+        size        ,i4         ;Size
+        error       ,i4         ;Error flag
+        filename    ,a255       ;Filename to return
+
+proc
+
+    size = %trimz(a_URI)
+    if(size .lt. 1) then
+    begin
+        clear filename
+        error = 1
+    end
+    else
+    begin
+        clear error
+        pos = %instr(1, a_URI, '//')
+        cur = pos + 2
+        if (pos .gt. 0 .and. size .gt. cur) then
+        begin
+            pos = %instr(cur, a_URI, '/')
+            cur = pos + 1
+            if (pos .gt. 0 .and. size .gt. cur) then
+                filename = a_URI(cur, size)
+            else
+            begin
+                filename = a_URI
+                error = 1
+            end
+        end
+        else
+        begin
+            filename = a_URI
+        end
+    end
+
+.ifdef D_GUI
+
+    ;remove leading '/'
+    while(filename .eq. '/')
+        filename = filename(2,^size(filename))
+
+    ;change '/' to '\'
+    while(pos = %instr(1, filename, '/'))
+        filename(pos:1) = '\'
+
+.endc ;D_GUI
+
+    a_file = filename
+
+    freturn error
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function URLencode ;,a
+    a_uri       ,a          ;REQUIRED URI to encode
+    a_mode      ,n          ;OPTIONAL mode 0=encode spaces only, 1=all chars
+
+.define NUM_URL_CHARS   ,25
+
+    literal
+        url_char            ,NUM_URL_CHARS i4
+&           ,037
+&           ,036,038,043,044,047,058,059,061,063,064
+&           ,032,034,035,060,062,091,092,093,094,096
+&           ,123,124,125,126
+&           
+; %, then reserved characters, then un-safe characters
+
+    structure buff
+        b                   ,a1
+
+.align
+    record clr
+        search_char         ,a1
+        replace_chars       ,a3
+
+.align
+    record clr_i
+        hdl                 ,D_HANDLE
+        len                 ,i4
+        start               ,i4
+        pos                 ,i4
+        ctr                 ,i4
+        mode                ,i4
+
+proc
+
+    len = %trim(a_uri)
+    hdl = %mem_proc(DM_ALLOC .bor. DM_BLANK, len)
+
+    ^m(hdl) = a_uri
+
+    if(^passed(a_mode)) then
+        mode = a_mode
+    else
+        clear mode
+
+    using mode select
+    (0),
+    begin
+        search_char = %char(032)
+        replace_chars = '%' + %hex(032,1)
+        call replace
+    end
+    (),
+    begin
+        call process_all
+        call process_ctrl
+        call process_8bit
+    end
+    endusing
+
+    freturn ^m(hdl)
+
+;--------------------------------------------------------------------
+
+process_all,
+
+    ;look for reserved or un-safe characters
+    for ctr from 1 thru NUM_URL_CHARS
+    begin
+        search_char = %char(url_char(ctr))
+        replace_chars = '%' + %hex(url_char(ctr),1)
+        call replace
+    end
+
+    return
+
+;--------------------------------------------------------------------
+
+process_8bit,
+
+    ;look for 8-bit characters
+    for ctr from 1 thru len
+    begin
+        if(^m(b(ctr:1),hdl) .gt. '~')
+        begin
+            search_char = ^m(b(ctr:1),hdl)
+            replace_chars = '%' + %hex(^i(^m(b(ctr:1),hdl)),1)
+            call replace
+        end
+    end
+
+    return
+
+;--------------------------------------------------------------------
+
+process_ctrl,
+
+    ;look for control characters
+    for ctr from 1 thru len
+    begin
+        if(^m(b(ctr:1),hdl) .lt. ' ')
+        begin
+            search_char = ^m(b(ctr:1),hdl)
+            replace_chars = '%' + %hex(^i(^m(b(ctr:1),hdl)),1)
+            call replace
+        end
+    end
+
+    return
+
+;--------------------------------------------------------------------
+
+replace,
+
+    start = 1
+    while(pos = %instr(start, ^m(hdl), search_char))
+    begin
+        ;make memory larger
+        hdl = %mem_proc(DM_RESIZ .bor. DM_BLANK, len+2, hdl)
+        if(pos+1 .le. len) then
+            ^m(b(pos,len+2),hdl) = replace_chars + ^m(b(pos+1,len),hdl)
+        else
+            ^m(b(pos,len+2),hdl) = replace_chars
+        start = pos+2
+        len += 2
+    end
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function URLdecode ;,a
+    a_uri       ,a          ;REQUIRED URI to encode
+
+    structure buff
+        b                   ,a1
+
+.align
+    record clr
+        hex                 ,a2
+        replace_char        ,a1
+
+.align
+    record clr_i
+        hdl                 ,D_HANDLE
+        len                 ,i4
+        start               ,i4
+        pos                 ,i4
+
+proc
+
+    len = %trim(a_uri)
+    hdl = %mem_proc(DM_ALLOC .bor. DM_BLANK, len)
+
+    ^m(hdl) = a_uri
+
+    start = 1
+    while(pos = %instr(start, ^m(hdl), '%'))
+    begin
+        if(pos+2 .le. len)
+        begin
+            hex = ^m(b(pos+1:2),hdl)
+            replace_char = %char(^x(hex))
+            call replace
+        end
+    end
+
+    freturn ^m(hdl)
+
+;--------------------------------------------------------------------
+
+replace,
+
+    if(pos+3 .le. len) then
+        ^m(b(pos,len),hdl) = replace_char + ^m(b(pos+3,len),hdl)
+    else
+        ^m(b(pos,len),hdl) = replace_char
+
+    len -= 2
+    ;make memory smaller
+    hdl = %mem_proc(DM_RESIZ .bor. DM_BLANK, len, hdl)
+
+    start = pos+2
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; open log window or TT:
+
+subroutine OPNLOG
+    a_tt_chan   ,n          ;REQUIRED Display channel
+    a_logfile   ,a          ;OPTIONAL Log file channel
+
+.include 'DBLDIR:windows.def'
+
+    record
+        app_height      ,i4
+        app_width       ,i4
+
+proc
+
+    if(.not.(^passed(a_logfile) .and. a_logfile))
+    begin
+.ifdef USE_TOOLKIT
+        app_height = %w_info(WIF_SROWS)
+        app_width = %w_info(WIF_SCOLS)
+        xcall w_proc(WP_CREATE, a_tt_chan, 'HTTP_LOG', app_height, app_width,
+&           WP_PLACE, a_tt_chan, 1, 1)
+        xcall u_logwnd(a_tt_chan)
+.else
+        a_tt_chan = %syn_freechn
+        open(a_tt_chan, O, 'TT:')
+.endc ;USE_TOOLKIT
+    end
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; write to log file or TT:
+
+subroutine WRTLOG
+    a_tt_chan   ,n          ;OPTIONAL Display channel
+    a_logfile   ,a          ;OPTIONAL Log file channel
+    a_msg       ,a          ;REQUIRED Message to log
+
+.include 'DBLDIR:windows.def'
+
+    structure msg
+        txt         ,a1
+
+.align
+    record
+        log_chan    ,i4     ;log channel
+        m_hdl       ,D_HANDLE   ;handle for text
+        pos_cr      ,i4     ;position of CR
+        pos_lf      ,i4     ;position of LF
+        max         ,i4     ;max chars
+
+proc
+
+    if (^passed(a_tt_chan) .and. a_tt_chan)
+    begin
+.ifdef USE_TOOLKIT
+        max = %trim(a_msg)
+        m_hdl = %mem_proc(DM_ALLOC, max)
+        ^m(m_hdl) = a_msg
+        while(^m(m_hdl))
+        begin
+            pos_cr = %instr(1, ^m(m_hdl), %char(13))
+            pos_lf = %instr(1, ^m(m_hdl), %char(10))
+            if(pos_cr)
+            begin
+                if(pos_lf .gt. pos_cr .and.
+&                   pos_lf .ne. pos_cr+1)
+                    pos_lf = pos_cr
+                if(pos_cr .lt. pos_lf)
+                    clear ^m(msg.txt(pos_cr:1), m_hdl)
+            end
+            if(pos_lf)
+                clear ^m(msg.txt(pos_lf:1), m_hdl)
+            if(.not. pos_cr .and. .not.pos_cr)
+                pos_lf = max
+            xcall w_disp(a_tt_chan, WD_WRITES, %atrim(^m(msg.txt(1:pos_lf),m_hdl)))
+            if(pos_lf .lt. max) then
+                ^m(msg.txt(1:max),m_hdl) = ^m(msg.txt(pos_lf+1,max),m_hdl)
+            else
+                clear ^m(m_hdl)
+        end
+        xcall w_updt
+.else
+        writes(a_tt_chan, %atrim(a_msg))
+.endc ;USE_TOOLKIT
+    end
+
+    if(^passed(a_logfile) .and. a_logfile)
+    begin
+        log_chan = %syn_freechn
+        open(log_chan, A, a_logfile) [ERR=nologfile_a]
+        if(0)
+        begin
+nologfile_a,
+            open(log_chan, O, a_logfile) [ERR=nologfile_o]
+        end
+        writes(log_chan, %atrim(a_msg))
+        close log_chan
+nologfile_o,
+    end
+
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; close log window or TT:
+
+subroutine CLSLOG
+    a_tt_chan   ,n          ;REQUIRED Display channel
+
+.ifdef USE_TOOLKIT
+.include 'WND:tools.def'
+.endc
+
+proc
+
+    if(a_tt_chan)
+    begin
+.ifdef USE_TOOLKIT
+        ;update screen
+        xcall u_update
+        ;wait for 2 seconds to allow the user to see any recent messages
+        sleep 2
+
+        xcall u_window(D_DELETE, a_tt_chan)
+.else
+        ;wait for 2 seconds to allow the user to see any recent messages
+        sleep 2
+        close a_tt_chan
+
+.endc ;USE_TOOLKIT
+
+        clear a_tt_chan
+    end
+
+    xreturn
+
+end
+
+

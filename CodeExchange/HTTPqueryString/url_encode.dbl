@@ -1,0 +1,114 @@
+;-------------------------------------------------------------------------------
+;
+;Routine:       url_encode
+;
+;Author:        Steve Ives (Synergex Professional Services Group)
+;
+;Platforms:     All Synergy-supported platforms
+;
+;Revisions:     Version Date            Comment
+;               1.0     23 Jan 2002     Original version
+;
+;Diclaimer:     This code is supplied as seen and without warranty or support.
+;               You may use and redistribute this code as you wish, but doing
+;               so is entirely your own risk. Neither the author or Synergex
+;               accept responsability for any loss or damage which may result
+;               from the use of this code.
+;
+;-------------------------------------------------------------------------------
+;
+;When passing data via the HTTP protocol, either as URI parameters in an HTTP GET
+;operation, or as body data in an HTTP POST operation, certain characters must be
+;'escaped', usually by replacing them with their hexadecimal values. This process
+;is referred to as "URL Encoding".
+;
+;More details can be found in RFC 2396 (URI General Syntax)
+;
+;This function accepts a string in parameter 1 and returns a URL encoded version
+;of that string.
+;
+;This function must be declared before use, as follows:
+;
+;   external function
+;       url_encode      ,a
+;
+;An example of using this function is:
+;
+;   url = "http://www.domain.com/page.asp?location=" + %url_encode("Gold River (CA)")
+;
+;Which would set the variable url to:
+;
+;   http://www.domain.com/page.asp?location=Gold+River+%28CA%29
+;
+;-------------------------------------------------------------------------------
+;
+.ifdef DBLv9
+function url_encode     ,a
+    req in  a_instr     ,a
+    endparams
+.else
+function url_encode
+    ;Required Parameters
+    a_instr             ,a
+
+    ;Optional parameters
+
+    ;End of parameters
+.endc
+
+
+.align
+    stack record
+
+        mh              ,D_HANDLE   ;Memory handle
+        mc              ,i4         ;Memory content pointer
+        count           ,i4         ;Loop counter
+
+        dchr            ,d3         ;ASCII character number (demimal)
+
+    structure chr
+        ,a1
+
+proc
+
+    clear mc
+
+    ;Allocate dynamic memory for return string
+    mh = %mem_proc(DM_ALLOC+DM_BLANK, %trim(a_instr)*3 )
+
+    for count from 1 thru %trim(a_instr)
+    begin
+
+        dchr = %decml(a_instr(count:1))
+
+        using dchr select
+
+        ;Replace spaces with +
+        (32),
+            ^m(chr[mc+=1],mh) = "+"
+
+        ;Replace other reserved characters with their hexadecimal value
+        (9, 33 thru 41, 43, 44, 47, 58 thru 64, 91 thru 96, 123 thru 126),
+        begin
+            ^m(chr[mc+1](1:3),mh) = "%" + %hex(dchr,1)
+            mc+=3
+        end
+
+        ;Leave other characters unchanged
+        (),
+            ^m(chr[mc+=1],mh)=a_instr(count:1)
+        endusing
+
+    end
+
+    ;Trim memory
+    mh = %mem_proc(DM_RESIZ,mc,mh)
+
+    ;Note: The memory handle "mh" can not be explicitly released as it is
+    ;required to provide the return value of the function.  However, the
+    ;handle is NOT defined as static, so it will be explicitly released
+    ;during the FRETURN processing.
+
+    freturn ^m(mh)
+
+end

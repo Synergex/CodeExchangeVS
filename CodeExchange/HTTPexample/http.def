@@ -1,0 +1,14 @@
+;http.def
+
+;http server shutdown message
+.define D_SHUTDOWN_MSG  "SHUTDOWN-svrhttp"
+
+;the size of the message buffers for logging purposes
+.define D_SIZ_RECV_MSG  5000
+.define D_SIZ_SEND_MSG  5000
+
+.define D_HTTP_LOG_NONE     0
+.define D_HTTP_LOG_ERR      1
+.define D_HTTP_LOG_SUCCESS  2
+.define D_HTTP_LOG_ALL      3
+

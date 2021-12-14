@@ -1,0 +1,31 @@
+import Synergex.SynergyDE.Collections
+
+main
+
+    literal
+        fileSpec    ,a ,'*.*'
+
+    record
+        fileList    ,@ArrayList ;File names
+        FileObj     ,@a
+        file        ,a255
+
+proc
+    open(1, O, 'TT:')
+
+    writes(1, "Getting list of files for "+fileSpec)
+
+    GetDirFiles(fileSpec, fileList)
+
+    foreach FileObj in fileList
+    begin
+        file = (a)FileObj
+        writes(1, file(1:%trim(file)))
+    end
+
+    close 1
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    stop D_EXIT_SUCCESS
+endmain

@@ -1,0 +1,1190 @@
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; FIXDATA.DBL
+;;
+;; This routine uses the Synergy/DE Repository to correct SBDMS data
+;;
+;; Requires with Synergy/DE version 9.1.5 or later
+;;
+;; Notes:
+;;
+;;  If you do not have BUILD_EXE defined, then you must perform the same
+;;  validation logic as main$fixdata (main line program)
+;;  prior to executing the function %FIX_DATA.
+;;
+;;  If you have multiple physical files associated with a RPS file,
+;;  only the first physical file will be updated
+;;
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+;; %FIX_DATA uses UI toolkit to display status
+.define D_UI_OUTPUT
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; fix data
+;;
+;; return values
+;; 0 = ok
+;; 1 = DD_INIT error
+;; 2 = Invalid (or no) structure
+;; 3 = Structure size doesn't match ISAM records length
+;; 4 = Error opening SDBMS file
+;; 5 = Error opening RPS filename
+
+function FIX_DATA   ,^val
+    opt in      a_sdbms_file    ,a                      ;physical file name to fix
+    opt in      a_rps_str_name  ,a                      ;required if A_RPS_FIL_NAME is blank
+    opt in      a_rps_fil_name  ,a                      ;required if A_SDBMS_FILE is blank
+    opt in      a_rps_main      ,a                      ;RPSMFIL
+    opt in      a_rps_text      ,a                      ;RPSTFIL
+    opt in      a_ignore_spaces ,n                      ;ignore decimals that only contain spaces
+    opt in      a_log_changes   ,n                      ;log file updates
+    opt in      a_do_not_update ,n                      ;do not update files
+    endparams
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:FixData.rec'
+
+;; any date with a year < 1900 is invalid
+.define D_MINIMUM_YEAR  1900
+
+    external function
+        normalizeNumber     ,a
+
+    structure b
+        buff            ,a1
+
+.align
+    record clr_i
+        fstatus         ,i4                     ;function return status
+        s_ptr           ,D_HANDLE               ;structure list handle
+        str_ctr         ,i4                     ;structure array counter
+
+        fn_ptr          ,D_HANDLE               ;field names list handle
+        f_ptr           ,D_HANDLE               ;field details list handle
+        tn_ptr          ,D_HANDLE               ;tag names list handle
+        t_ptr           ,D_HANDLE               ;tag details list handle
+        b_ptr           ,D_HANDLE               ;buff handle
+        c_ptr           ,D_HANDLE               ;copy handle
+
+        fld_ctr         ,i4                     ;field array pointer
+        field_pos       ,i4                     ;field position in structure/group
+        field_num       ,i4                     ;field number
+        status          ,i4                     ;function status
+        pos             ,i4                     ;position
+        len             ,i4                     ;length
+        chan            ,i4                     ;channel
+        tag_ctr         ,i4                     ;tag number
+        dim1_ctr        ,i4                     ;dim 1 counter
+        dim2_ctr        ,i4                     ;dim 2 counter
+        dim3_ctr        ,i4                     ;dim 3 counter
+        dim4_ctr        ,i4                     ;dim 4 counter
+        pos2            ,i4                     ;position in structure
+        disp_len        ,i4                     ;display length
+        ignoreSpaces    ,boolean                ;ignore decimals that only contain spaces
+        logChanges      ,boolean                ;log file updates
+        doNotUpdate     ,boolean                ;do not update files
+
+.align
+    record clr
+        struct_name     ,a30                    ;structure name
+        field_name      ,a30                    ;field name
+        field_value     ,a30                    ;field value
+        tag_value       ,a30                    ;tag value
+
+    record
+        group yymmdd    ,a6
+            yy          ,d2
+            mm          ,d2
+            dd          ,d2
+        endgroup
+        group yyyymmdd  ,a8
+            yyyy        ,d4
+            mm          ,d2
+            dd          ,d2
+        endgroup
+        group yyjjj     ,a5
+            yy          ,d2
+            jjj         ,d3
+        endgroup
+        group yyyyjjj   ,a7
+            yyyy        ,d4
+            jjj         ,d3
+        endgroup
+        group yypp      ,a4
+            yy          ,d2
+            pp          ,d2
+        endgroup
+        group yyyypp    ,a6
+            yyyy        ,d4
+            pp          ,d2
+        endgroup
+        group hhmmss    ,a6
+            hh          ,d2
+            mm          ,d2
+            ss          ,d2
+        endgroup
+        group hhmm      ,a4
+            hh          ,d2
+            mm          ,d2
+        endgroup
+
+proc
+    clear clr, ^i(clr_i)
+
+    if(^passed(a_ignore_spaces) && a_ignore_spaces) then
+        ignoreSpaces = TRUE
+    else
+        ignoreSpaces = FALSE
+    if(^passed(a_log_changes) && a_log_changes) then
+        logChanges = TRUE
+    else
+        logChanges = FALSE
+    if(^passed(a_do_not_update) && a_do_not_update) then
+        doNotUpdate = TRUE
+    else
+        doNotUpdate = FALSE
+
+    clear fstatus
+
+    ;;connect to Repository
+    if((^passed(a_rps_main) && a_rps_main) || (^passed(a_rps_text) && a_rps_text)) then
+        dd_init(dcs, a_rps_main, a_rps_text)
+    else
+        dd_init(dcs)
+    using error select
+    (E_OK),
+    begin
+        clear fl_info
+        ;;got a single RPS structure
+        if(^passed(a_rps_str_name) && a_rps_str_name) then
+        begin
+            fli_nmstructs = 1
+            s_ptr = %mem_proc(DM_ALLOC, fli_nmstructs*^size(str_names))
+            ^m(s_ptr) = a_rps_str_name
+        end
+        else
+        begin
+            clear fli_nmstructs
+            ;;got a physical filename
+            if(^passed(a_sdbms_file) && a_sdbms_file)
+                exit
+            ;;got a RPS file - go get physical file and RPS structure info
+            if(^passed(a_rps_fil_name) && a_rps_fil_name)
+            begin
+                dd_file(dcs, DDL_INFO, a_rps_fil_name, fl_info)
+                if(error)
+                begin
+                    log_message("File:" + %atrim(a_rps_fil_name)+' '+%string(error))
+                    clear fli_nmstructs
+                end
+                if(fli_nmstructs)
+                begin
+                    ;; get structure names from Repository
+                    ;; and store them in dynamic memory arrays
+                    s_ptr = %mem_proc(DM_ALLOC, fli_nmstructs*^size(str_names))
+                    dd_file(dcs, DDL_STRS, fli_nmstructs, ^m(str_names, s_ptr))
+                    if(error)
+                    begin
+                        log_message("No structures")
+                        clear fli_nmstructs
+                    end
+                end
+            end
+        end
+
+        ;; do we have any structures
+        if(fli_nmstructs <= 0)
+            fstatus = 2
+    end
+    (),
+    begin
+        fstatus = 1
+        clear fli_nmstructs
+    end
+    endusing
+
+;;----------------------------------------------------------------------------
+;; Process each structure for RPS file
+;; Assumes that there's only one valid structure for each TAG condition
+
+    for str_ctr from 1 thru fli_nmstructs
+    begin
+        ;; get current structure info
+        dd_struct(dcs, DDS_INFO, ^m(str_names[str_ctr].str_name, s_ptr), s_info)
+        if(error) then
+        begin
+            log_message("Structure:" + %atrim(^m(str_names[str_ctr].str_name, s_ptr))+' '+%string(error))
+            if(^passed(a_rps_str_name) && a_rps_str_name)
+            begin
+                fstatus = 2
+                exitloop
+            end
+        end
+        else
+        begin
+            if(^passed(a_rps_str_name) && a_rps_str_name &&
+&               ^m(str_names[str_ctr].str_name, s_ptr) != a_rps_str_name)
+                nextloop
+            log_status("File:"+%atrim(fli_fname)+" Structure:"+%atrim(sname))
+            call process_structure
+        end
+    end
+
+;;----------------------------------------------------------------------------
+;; Here we clean up all resources that may have been used by the routine.
+
+    log_status(" ")
+
+    if(c_ptr)
+        c_ptr = %mem_proc(DM_FREE, c_ptr)
+    if(b_ptr)
+        b_ptr = %mem_proc(DM_FREE, b_ptr)
+    if(t_ptr)
+        t_ptr = %mem_proc(DM_FREE, t_ptr)
+    if(f_ptr)
+        f_ptr = %mem_proc(DM_FREE, f_ptr)
+    if(fn_ptr)
+        fn_ptr = %mem_proc(DM_FREE, fn_ptr)
+
+    if(s_ptr)
+        s_ptr = %mem_proc(DM_FREE, s_ptr)
+
+    freturn fstatus
+
+;;----------------------------------------------------------------------------
+
+process_structure,
+
+    struct_name = sname
+
+;;----------------------------------------------------------------------------
+;; get all the field information from Repository
+
+    ;;create field name array
+    fn_ptr = %mem_proc(DM_ALLOC, si_nmflds*^size(fld_names))
+
+    ;;get a list of fields
+    dd_field(dcs, DDF_SLIST, si_nmflds, ^m(fld_names, fn_ptr))
+    if(error)
+    begin
+        log_message("Structure:" + %atrim(struct_name)+" Field list "+%string(error))
+        fn_ptr = %mem_proc(DM_FREE, fn_ptr)
+        return
+    end
+
+    ;;create field details array
+    f_ptr = %mem_proc(DM_ALLOC, si_nmflds*^size(fld_array))
+
+    ;;get properties for all fields from repository
+    clear field_num, field_pos
+    get_all_fields(dcs, fn_ptr, f_ptr, si_nmflds, field_num, field_pos)
+
+    ;;are there any repository structure tags
+    if(si_nmtags)
+        call get_rps_tags
+
+;;----------------------------------------------------------------------------
+;; now we're going to read all the records from the SDBMS file, and fix them
+
+    ;;only display first 20 characters of record
+    if(si_recsz > 20) then
+        disp_len = 20
+    else
+        disp_len = si_recsz
+
+    chan = %syn_freechn
+    clear status
+
+    if(^passed(a_sdbms_file) && a_sdbms_file) then
+    begin
+        try
+        begin
+            ;;open isam file
+            open(chan, 'I:I', a_sdbms_file)
+
+            ;;check isam record length matches structure size
+            if(%isinfo(chan, 'SIZE') != si_recsz)
+            begin
+                close chan
+                clear chan
+                fstatus = 3
+                status = 1
+            end
+        end
+        catch (ex, @SynException)
+        begin
+            if(ex.Errno == 56) then
+            begin
+                ;;Not an ISAM file, try as a relative file
+                try
+                    open(chan, 'I', a_sdbms_file)
+                catch (ex2, @SynException)
+                begin
+                    fstatus = 4
+                    status = ex2.Errno
+                end
+                endtry
+            end
+            else
+            begin
+                fstatus = 4
+                status = ex.Errno
+            end
+        end
+        endtry
+    end
+    else
+    begin
+        using fli_filtyp select
+        ('DBL ISAM'),
+        begin
+            try
+            begin
+                open(chan, 'I:I', fli_fname)
+
+                ;;check isam record length matches structure size
+                if(%isinfo(chan, 'SIZE') != si_recsz)
+                begin
+                    close chan
+                    clear chan
+                    fstatus = 3
+                    status = 1
+                end
+            end
+            catch (ex, @SynException)
+            begin
+                fstatus = 5
+                status = ex.Errno
+            end
+            endtry
+        end
+        (),
+        begin
+            try
+                open(chan, 'I', fli_fname)
+            catch (ex, @SynException)
+            begin
+                fstatus = 5
+                status = ex.Errno
+            end
+            endtry
+        end
+        endusing
+    end
+
+    if(!status)
+    begin
+        ;;create dummy record, used to read data from SDBMS file
+        b_ptr = %mem_proc(DM_ALLOC, si_recsz)
+        c_ptr = %mem_proc(DM_ALLOC, si_recsz)
+
+        ;;position at first record
+        find(chan,, ^FIRST) [ERR=eof]
+
+        repeat
+        begin
+            ;;read data
+            reads(chan, ^m(buff(1:si_recsz),b_ptr)) [ERR=eof]
+
+            log_status(^m(buff(1:disp_len),b_ptr))
+
+            ;;see which tag (if any) this record belongs to
+            call check_rps_tags
+
+            ;;found a record to process
+            if(status)
+            begin
+                ^m(c_ptr) = ^m(b_ptr)
+                for fld_ctr from 1 thru si_nmflds
+                    call process_fields
+                if(^m(b_ptr) != ^m(c_ptr))
+                begin
+                    if(logChanges == TRUE)
+                        call log_update
+
+                    if(doNotUpdate == FALSE)
+                        write(chan, ^m(b_ptr)) [ERR=write_error]
+                    if(FALSE)
+                    begin
+write_error,
+                        if(logChanges == FALSE)
+                            call log_update
+                        log_message("Error "+%string(%error)+" updating record above")
+                    end
+                end
+            end
+        end
+eof,
+        ;;close SDBMS file
+        close chan
+        clear chan
+
+        c_ptr = %mem_proc(DM_FREE, c_ptr)
+        b_ptr = %mem_proc(DM_FREE, b_ptr)
+    end
+
+    if(t_ptr)
+        t_ptr = %mem_proc(DM_FREE, t_ptr)
+
+    f_ptr = %mem_proc(DM_FREE, f_ptr)
+
+    fn_ptr = %mem_proc(DM_FREE, fn_ptr)
+
+    return
+
+;;----------------------------------------------------------------------------
+;; log record changes to file
+
+log_update,
+
+    log_message(^m(c_ptr)) ;original data
+    log_message(^m(b_ptr)) ;updated data
+
+    return
+
+;;----------------------------------------------------------------------------
+;; process fields
+
+process_fields,
+
+    ;;do not process overlay fields
+    if(^m(fld_array[fld_ctr].fld_ovrlay, f_ptr))
+        return
+
+    ;;field name
+    field_name = ^m(fld_array[fld_ctr].fld_name, f_ptr)
+
+    ;;get field position and length
+    pos = ^m(fld_array[fld_ctr].fld_pos, f_ptr)
+    len = ^m(fld_array[fld_ctr].fld_len, f_ptr)
+
+    for dim1_ctr from 1 thru ^m(fld_array[fld_ctr].fld_dim[1], f_ptr)
+        for dim2_ctr from 1 thru ^m(fld_array[fld_ctr].fld_dim[2], f_ptr)
+            for dim3_ctr from 1 thru ^m(fld_array[fld_ctr].fld_dim[3], f_ptr)
+                for dim4_ctr from 1 thru ^m(fld_array[fld_ctr].fld_dim[4], f_ptr)
+                begin
+                    call process_fld
+                    pos += len
+                end
+
+    return
+
+;;----------------------------------------------------------------------------
+
+process_fld,
+
+    using ^m(fld_array[fld_ctr].fld_typ, f_ptr) select
+    ('A'),
+    begin
+        using ^m(fld_array[fld_ctr].fld_class, f_ptr) select
+        (C_BINARY),
+            nop
+.ifdef DBLv93
+        (C_STRFLD),
+            nop
+.endc ;DBLv93
+        (),
+            nop
+        endusing
+    end
+    ('D'),
+    begin
+        if(ignoreSpaces == TRUE && ^m(buff(pos:len), b_ptr) .eqs. ' ')
+            exit
+
+        for pos2 from pos thru pos+len-1
+        begin
+            using ^m(buff(pos2:1), b_ptr) select
+            ('0' thru '9'),
+                nop
+            ('p' thru 'y'),
+            begin
+                if(pos2 != pos+len-1)
+                    ^m(buff(pos2:1), b_ptr) = '0'
+            end
+            (),
+                ^m(buff(pos2:1), b_ptr) = '0'
+            endusing
+        end
+
+        using ^m(fld_array[fld_ctr].fld_class, f_ptr) select
+        (0),
+            nop
+        (C_YYMMDD),
+        begin
+            if(len == 6)
+            begin
+                yymmdd = ^m(buff(pos:len), b_ptr)
+                using yymmdd.mm select
+                (01, 03, 05, 07, 08, 10, 12),
+                begin
+                    using yymmdd.dd select
+                    (01 thru 31),
+                        nop
+                    (),
+                        fill('0', ^m(buff(pos:len), b_ptr))
+                    endusing
+                end
+                (04, 06, 09, 11),
+                begin
+                    using yymmdd.dd select
+                    (01 thru 30),
+                        nop
+                    (),
+                        fill('0', ^m(buff(pos:len), b_ptr))
+                    endusing
+                end
+                (02),
+                begin
+                    using yymmdd.dd select
+                    (01 thru 28),
+                        nop
+                    (29),
+                    begin
+                        if(yymmdd.yy != (yymmdd.yy / 4) * 4)
+                            fill('0', ^m(buff(pos:len), b_ptr))
+                    end
+                    (),
+                        fill('0', ^m(buff(pos:len), b_ptr))
+                    endusing
+                end
+                (),
+                    fill('0', ^m(buff(pos:len), b_ptr))
+                endusing
+            end
+        end
+        (C_YYYYMMDD),
+        begin
+            if(len == 8)
+            begin
+                yyyymmdd = ^m(buff(pos:len), b_ptr)
+                if(yyyymmdd.yyyy < D_MINIMUM_YEAR)
+                    fill('0', ^m(buff(pos:len), b_ptr))
+                using yyyymmdd.mm select
+                (01, 03, 05, 07, 08, 10, 12),
+                begin
+                    using yyyymmdd.dd select
+                    (01 thru 31),
+                        nop
+                    (),
+                        fill('0', ^m(buff(pos:len), b_ptr))
+                    endusing
+                end
+                (04, 06, 09, 11),
+                begin
+                    using yyyymmdd.dd select
+                    (01 thru 30),
+                        nop
+                    (),
+                        fill('0', ^m(buff(pos:len), b_ptr))
+                    endusing
+                end
+                (02),
+                begin
+                    using yyyymmdd.dd select
+                    (01 thru 28),
+                        nop
+                    (29),
+                    begin
+                        if((yyyymmdd.yyyy != (yyyymmdd.yyyy / 4) * 4) &&
+&                           (yyyymmdd.yyyy != (yyyymmdd.yyyy / 400) * 400))
+                            fill('0', ^m(buff(pos:len), b_ptr))
+                    end
+                    (),
+                        fill('0', ^m(buff(pos:len), b_ptr))
+                    endusing
+                end
+                (),
+                    fill('0', ^m(buff(pos:len), b_ptr))
+                endusing
+            end
+        end
+        (C_YYJJJ),
+        begin
+            if(len == 5)
+            begin
+                yyjjj = ^m(buff(pos:len), b_ptr)
+            end
+        end
+        (C_YYYYJJJ),
+        begin
+            if(len == 7)
+            begin
+                yyyyjjj = ^m(buff(pos:len), b_ptr)
+                if(yyyyjjj.yyyy < D_MINIMUM_YEAR)
+                    fill('0', ^m(buff(pos:len), b_ptr))
+            end
+        end
+        (C_YYPP),
+        begin
+            if(len == 4)
+            begin
+                yypp = ^m(buff(pos:len), b_ptr)
+            end
+        end
+        (C_YYYYPP),
+        begin
+            if(len == 6)
+            begin
+                yyyypp = ^m(buff(pos:len), b_ptr)
+                if(yyyypp.yyyy < D_MINIMUM_YEAR)
+                fill('0', ^m(buff(pos:len), b_ptr))
+            end
+        end
+        (C_HHMMSS),
+        begin
+            if(len == 6)
+            begin
+                hhmmss = ^m(buff(pos:len), b_ptr)
+                using hhmmss.hh select
+                (00 thru 23),
+                    nop
+                (),
+                    fill('0', ^m(buff(pos:len), b_ptr))
+                endusing
+                using hhmmss.mm select
+                (00 thru 59),
+                    nop
+                (),
+                    fill('0', ^m(buff(pos:len), b_ptr))
+                endusing
+                using hhmmss.ss select
+                (00 thru 59),
+                    nop
+                (),
+                    fill('0', ^m(buff(pos:len), b_ptr))
+                endusing
+            end
+        end
+        (C_HHMM),
+        begin
+            if(len == 4)
+            begin
+                hhmm = ^m(buff(pos:len), b_ptr)
+                using hhmm.hh select
+                (00 thru 23),
+                    nop
+                (),
+                    fill('0', ^m(buff(pos:len), b_ptr))
+                endusing
+                using hhmm.mm select
+                (00 thru 59),
+                    nop
+                (),
+                    fill('0', ^m(buff(pos:len), b_ptr))
+                endusing
+            end
+        end
+        (),
+            nop
+        endusing
+    end
+    ('I'),
+    begin
+        using ^m(fld_array[fld_ctr].fld_class, f_ptr) select
+.ifdef DBLv93
+        (C_BOOLEAN),
+            nop
+        (C_ENUM),
+            nop
+.endc
+        (),
+            nop
+        endusing
+    end
+    ('U'),
+    begin
+        using ^m(fld_array[fld_ctr].fld_class, f_ptr) select
+        (C_ALPHA),
+            nop
+        (C_NUMERIC),
+            nop
+        (C_DATE),
+            nop
+.ifdef DBLv93
+        (C_UBINARY),
+            nop
+.endc ;DBLv93
+        (),
+            nop
+        endusing
+    end
+    (),
+        nop
+    endusing
+
+    return
+
+;;----------------------------------------------------------------------------
+;; get all the tags for this structure out of repository
+
+get_rps_tags,
+
+    ;;allocate tag names memory
+    tn_ptr = %mem_proc(DM_ALLOC, si_nmtags*^size(tag_names))
+
+    ;;get a list of tags
+    dd_tag(dcs, DDTG_LIST, si_nmtags, ^m(tag_names, tn_ptr))
+    if(error) then
+    begin
+        log_message("Structure:" + %atrim(struct_name)+" Tag list"+' '+%string(error))
+        clear si_nmtags
+    end
+    else
+    begin
+        ;;allocate tag details memory
+        t_ptr = %mem_proc(DM_ALLOC, si_nmtags*^size(tag_array))
+
+        ;;get details for each tag
+        for tag_ctr from 1 thru si_nmtags
+        begin
+            dd_tag(dcs, DDTG_INFO, ^m(tag_names[tag_ctr].tag_name, tn_ptr),
+&               ^m(tag_array[tag_ctr].tag_info, t_ptr))
+            clear ^m(tag_array[tag_ctr].tag_pos, t_ptr), ^m(tag_array[tag_ctr].tag_len, t_ptr)
+        end
+    end
+
+    ;;release tag names memory
+    tn_ptr = %mem_proc(DM_FREE, tn_ptr)
+
+    ;;are we determining tag type by field
+    if(si_nmtags && si_tagtyp == TAGFLD)
+    begin
+        for tag_ctr from 1 thru si_nmtags
+        begin
+            tg_info = ^m(tag_array[tag_ctr].tag_info, t_ptr)
+            locase tgi_tagfld
+
+            fld_ctr = 1
+            while(fld_ctr <= si_nmflds)
+            begin
+                if(^m(fld_names[fld_ctr].fld_name, fn_ptr) == tgi_tagfld)
+                begin
+                    ;;found the matching field - save tag positions
+                    ^m(tag_array[tag_ctr].tag_pos, t_ptr) = ^m(fld_array[fld_ctr].fld_pos, f_ptr)
+                    ^m(tag_array[tag_ctr].tag_len, t_ptr) = ^m(fld_array[fld_ctr].fld_len, f_ptr)
+                    exitloop
+                end
+                fld_ctr += 1
+            end
+        end
+    end
+
+    return
+
+;;----------------------------------------------------------------------------
+;; find the correct tag (if there is one) for the record we just read
+
+check_rps_tags,
+
+    ;;are there any tags
+    if(!si_nmtags)
+    begin
+        status = 1
+        return
+    end
+
+    clear status
+
+    tag_ctr = 1
+    while(tag_ctr <= si_nmtags)
+    begin
+        tg_info = ^m(tag_array[tag_ctr].tag_info, t_ptr)
+        locase tgi_tagfld
+
+        using si_tagtyp select
+        (TAGNON),
+            status = 1
+        (TAGFLD),
+        begin
+            clear status
+            pos = ^m(tag_array[tag_ctr].tag_pos, t_ptr)
+            len = ^m(tag_array[tag_ctr].tag_len, t_ptr)
+
+            ;;find the relevant field
+            fld_ctr = 1
+            while(fld_ctr < si_nmflds && tgi_tagfld != ^m(fld_names[fld_ctr].fld_name, fn_ptr))
+            fld_ctr += 1
+
+            ;;normalize the data, so that an apples-to-apples comparison can occur
+            field_value = %normalizeNumber(^m(fld_array[fld_ctr].fld_typ, f_ptr), ^m(buff(pos:len),b_ptr))
+            tag_value = %normalizeNumber(^m(fld_array[fld_ctr].fld_typ, f_ptr), tgi_tagval)
+
+            using tgi_tagcmp select
+            (TGI_EQ),
+                status = (field_value == tag_value)
+            (TGI_NE),
+                status = (field_value != tag_value)
+            (TGI_LE),
+                status = (field_value <= tag_value)
+            (TGI_LT),
+                status = (field_value < tag_value)
+            (TGI_GE),
+                status = (field_value >= tag_value)
+            (TGI_GT),
+                status = (field_value > tag_value)
+            (),
+                clear status
+            endusing
+
+        end
+        (TAGSIZ),
+        begin
+            using tgi_tagcmp select
+            (TGI_EQ),
+                status = (%rsize == ^d(tgi_tagval))
+            (TGI_NE),
+                status = (%rsize != ^d(tgi_tagval))
+            (TGI_LE),
+                status = (%rsize <= ^d(tgi_tagval))
+            (TGI_LT),
+                status = (%rsize < ^d(tgi_tagval))
+            (TGI_GE),
+                status = (%rsize >= ^d(tgi_tagval))
+            (TGI_GT),
+                status = (%rsize > ^d(tgi_tagval))
+            endusing
+        end
+        endusing
+
+        tag_ctr += 1
+
+        using tgi_tagcon select
+        (TGI_AND),
+        begin
+            ;;no match
+            if(!status)
+            begin
+                if(tag_ctr <= si_nmtags)
+                begin
+                    ;;try next condition by finding next OR tag
+                    do
+                    begin
+                        tg_info = ^m(tag_array[tag_ctr].tag_info, t_ptr)
+                        locase tgi_tagfld
+
+                        if(tgi_tagcon != TGI_OR)
+                            tag_ctr += 1
+                    end
+                    until(tag_ctr >= si_nmtags || tgi_tagcon == TGI_OR)
+                end
+            end
+        end
+        (TGI_OR),
+        begin
+            if(status)
+                exitloop
+        end
+        (),
+            exitloop
+        endusing
+    end
+
+    return
+
+endfunction
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Normalize alpha numbers to a common format, for comparison purposes
+
+function normalizeNumber ,a
+    req in        a_type          ,a              ;D, I or A
+    req in        a_old_value     ,a              ;original value
+    endparams
+
+.ifdef DBLv93
+    record clr
+        ret_value       ,a58            ;returned value
+        decimal         ,d28.28
+        d28             ,d28 @decimal
+
+.else
+    record clr
+        ret_value       ,a30            ;returned value
+        decimal         ,d28.10
+        d18             ,d18 @decimal
+.endc ;DBLv93
+
+proc
+    using a_type select
+    ('D'),
+    begin
+        decimal = ^d(%atrim(a_old_value))
+.ifdef DBLv93
+        ret_value = decimal ,'XXXXXXXXXXXXXXXXXX.XXXXXXXXXX-'
+.else ;DBLv93
+        ret_value = decimal ,'XXXXXXXXXXXXXXXXXXXXXXXXXXXX.XXXXXXXXXXXXXXXXXXXXXXXXXXXX-'
+.endc ;DBLv93
+    end
+    ('I'),
+    begin
+.ifdef DBLv93
+        d28 = ^argn(2)
+        ret_value = d28 ,'XXXXXXXXXXXXXXXXXXXXXXXXXXX-'
+.else ;DBLv93
+        d18 = ^argn(2)
+        ret_value = d18 ,'XXXXXXXXXXXXXXXXX-'
+.endc ;DBLv93
+    end
+    (),
+        ret_value = a_old_value
+    endusing
+
+    freturn ret_value
+
+endfunction
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine get_all_fields, reentrant, stack
+    req inout        a_dcs           ,a              ;RPS DCS
+    req inout        a_fn_ptr        ,n              ;filename array handle
+    req inout        a_f_ptr         ,n              ;file detail array handle
+    req in           a_si_nmflds     ,n              ;number of fields in structure
+    req inout        a_field_num     ,n              ;current field number
+    req in           a_fi_pos        ,n              ;current field position (in structure)
+    endparams
+
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:FixData.rec'
+
+.define MAX_FLDS    500
+
+.align
+    record clr_i
+        num_flds    ,d4                 ;number of fields in DDF_SLIST
+        fld_ctr     ,i4                 ;field counter
+
+.align
+    record clr
+        field_names ,MAX_FLDS a30       ;DDF_SLIST array of field names
+        field_name  ,a30                ;field name
+        start       ,a30                ;start field name (for DDF_SLIST)
+        strname     ,a30                ;structure name
+        old_struct  ,a30                ;old structure
+        old_dcs     ,a30                ;old DCS
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    dcs = a_dcs
+
+again,
+    dd_field(dcs, DDF_SLIST, MAX_FLDS, field_names, start, num_flds)
+    if (error)
+    begin
+        log_message("Structure:" + %atrim(sname) + " List of fields error "+%string(error))
+        xreturn
+    end
+
+    for fld_ctr from 1 thru num_flds
+    begin
+        ;;second time thru, ignore first field
+        if(fld_ctr == 1 && start && field_names(1) == start)
+            nextloop
+
+        ;;get the field information
+        dd_field(dcs, DDF_INFO, field_names(fld_ctr), f_info)
+        if(error)
+        begin
+            log_message("Structure:" + %atrim(sname)
+&               + " Field:" + %atrim(field_names(fld_ctr))+' '+%string(error))
+            nextloop
+        end
+
+        field_name = field_names(fld_ctr)
+
+        a_field_num += 1
+
+        ;;update field names array
+        ^m(fld_names[a_field_num].fld_name, a_fn_ptr) = field_names(fld_ctr)
+
+        locase ^m(fld_names[a_field_num].fld_name, a_fn_ptr)
+        locase field_name
+
+        ;;update field details array
+        ^m(fld_array[a_field_num].fld_name, a_f_ptr) = field_name
+        ^m(fld_array[a_field_num].fld_pos, a_f_ptr) = a_fi_pos + fi_pos
+        ^m(fld_array[a_field_num].fld_len, a_f_ptr) = fi_size
+        ^m(fld_array[a_field_num].fld_dim[1], a_f_ptr) = fi_dim(1)
+        ^m(fld_array[a_field_num].fld_dim[2], a_f_ptr) = fi_dim(2)
+        ^m(fld_array[a_field_num].fld_dim[3], a_f_ptr) = fi_dim(3)
+        ^m(fld_array[a_field_num].fld_dim[4], a_f_ptr) = fi_dim(4)
+
+        ;;make sure eact element is at least 1
+        if(^m(fld_array[a_field_num].fld_dim[1], a_f_ptr) < 1)
+        ^m(fld_array[a_field_num].fld_dim[1], a_f_ptr) = 1
+        if(^m(fld_array[a_field_num].fld_dim[2], a_f_ptr) < 1)
+        ^m(fld_array[a_field_num].fld_dim[2], a_f_ptr) = 1
+        if(^m(fld_array[a_field_num].fld_dim[3], a_f_ptr) < 1)
+        ^m(fld_array[a_field_num].fld_dim[3], a_f_ptr) = 1
+        if(^m(fld_array[a_field_num].fld_dim[4], a_f_ptr) < 1)
+        ^m(fld_array[a_field_num].fld_dim[4], a_f_ptr) = 1
+
+        using fi_type select
+        (T_ALP),
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'A'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = 0
+        end
+        (T_DEC),
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'D'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = fi_prec
+        end
+        (T_INT),
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'I'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = 0
+        end
+        (T_USR),
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'U'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = 0
+        end
+        (),
+        begin
+            ^m(fld_array[a_field_num].fld_typ, a_f_ptr) = 'A'
+            ^m(fld_array[a_field_num].fld_dp, a_f_ptr) = 0
+        end
+        endusing
+
+        ;;field sub class
+        ^m(fld_array[a_field_num].fld_class, a_f_ptr) = fi_class
+
+        ;;is this field is an overlay field
+        ^m(fld_array[a_field_num].fld_ovrlay, a_f_ptr) = (fi_ovrfld!=' ')
+
+        ;;is this field a group
+        if (fi_group == F_GROUPFLD) then
+        begin
+
+            ;;is this an implicit group
+            if(fi_struct) then
+            begin
+                ;;start of implicit group
+                ^m(fld_array[a_field_num].fld_grp_st, a_f_ptr) = 2
+                old_struct = sname
+                old_dcs = dcs
+                ;;get structure name
+                dd_field(dcs, DDF_TEXT, fi_struct, strname)
+                if(!error)
+                begin
+                    ;;reset to new structure
+                    dd_struct(dcs, DDS_INFO, strname, s_info)
+                end
+            end
+            else
+            begin
+                ;;start of explicit group
+                ^m(fld_array[a_field_num].fld_grp_st, a_f_ptr) = 1
+                clear old_struct, old_dcs
+                ;;start explicit group
+                dd_field(dcs, DDF_GROUP, field_names(fld_ctr))
+            end
+
+            if(error) then
+                log_message("Structure:" + %atrim(sname) + " Group Field:" + %atrim(field_names(fld_ctr))+" "+%string(error))
+            else
+                get_all_fields(dcs, a_fn_ptr, a_f_ptr, a_si_nmflds, a_field_num, fi_pos-1)
+
+            ;;last field in a group
+            ^m(fld_array[a_field_num].fld_grp_end, a_f_ptr) += 1
+
+            if(old_struct) then
+            begin
+                dcs = old_dcs
+                sname = old_struct
+            end
+            else
+            begin
+                ;;end explicit group
+                dd_field(dcs, DDF_ENDGROUP)
+            end
+        end
+        else
+        begin
+            ;;not the start of end of a group
+            ^m(fld_array[a_field_num].fld_grp_st, a_f_ptr) = 0
+            ^m(fld_array[a_field_num].fld_grp_end, a_f_ptr) = 0
+        end
+
+    end
+
+    ;;see if there are more fields
+    if(num_flds == MAX_FLDS && field_names(MAX_FLDS))
+    begin
+        start = field_names(MAX_FLDS)
+        goto again
+    end
+
+    a_dcs = dcs
+    xreturn
+
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine log_message
+    req in        a_ermsg         ,a              ;message text or ~~filename
+    endparams
+
+    static record
+        log_file        ,a255
+
+.align
+    record
+        chan            ,i4
+
+proc
+
+    if(a_ermsg == '~~')
+    begin
+        log_file = a_ermsg - '~~'
+        if(log_file)
+            delet(log_file)
+        xreturn
+    end
+
+    if(!log_file)
+    begin
+.ifdef D_UI_OUTPUT
+        u_message(a_ermsg)
+.endc ;D_UI_OUTPUT
+        xreturn
+    end
+
+    chan = %syn_freechn
+
+    open(chan, A, log_file)
+    writes(chan, %atrim(a_ermsg))
+    close chan
+
+    xreturn
+
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine log_status
+    req in  a_text  ,a
+    endparams
+
+.ifdef D_UI_OUTPUT
+.include 'WND:tools.def'
+.endc ;D_UI_OUTPUT
+
+proc
+
+.ifdef D_UI_OUTPUT
+    e_sect(a_text, D_INFO, D_LEFT, D_CLEAR)
+    u_update
+.endc ;D_UI_OUTPUT
+
+    xreturn
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

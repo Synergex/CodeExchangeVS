@@ -1,0 +1,861 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+function FILE_LOCKS ,^val
+.ifdef DBLv9
+    req in  a_filename       ,a      ;filename to check
+    req inout a_size         ,n      ;number of locks
+    opt out a_keys           ,[*]a   ;array of keys
+    opt out a_keylens        ,[*]n   ;array of key lengths
+    opt out a_filenames      ,[*]a   ;array of filenames
+    opt out a_process        ,[*]a   ;array of process ids
+    opt out a_usernames      ,[*]a   ;array of unix user names
+    opt out a_ttypes         ,[*]a   ;array of user terminal types
+    opt out a_altkey         ,n      ;alternate key number
+    opt out a_altkeys        ,[*]a   ;array of alternate keys
+    opt out a_altkeylens     ,[*]n   ;array of alternate key lengths
+    endparams
+.else ;DBLv9
+    a_filename          ,a      ;REQUIRED filename to check
+    a_size              ,n      ;REQUIRED RETURNED number of locks
+    a_keys              ,[*]a   ;OPTIONAL RETURNED array of keys
+    a_keylens           ,[*]n   ;OPTIONAL RETURNED array of key lengths
+    a_filenames         ,[*]a   ;OPTIONAL RETURNED array of filenames
+    a_process           ,[*]a   ;OPTIONAL RETURNED array of process ids
+    a_usernames         ,[*]a   ;OPTIONAL RETURNED array of unix user names
+    a_ttypes            ,[*]a   ;OPTIONAL RETURNED array of user terminal types
+    a_altkey            ,n      ;OPTIONAL RETURNED alternate key number
+    a_altkeys           ,[*]a   ;OPTIONAL RETURNED array of alternate keys
+    a_altkeylens        ,[*]n   ;OPTIONAL RETURNED array of alternate key lengths
+.endc ;DBLv9
+
+; Function return values
+;
+;    0 ok
+;   17 bad file specification
+;   18 cannot open file
+;   29 unsupported platform
+;   33 no free channels
+;   87 invalid (argument) filename
+
+; Both a_usernames and a_ttypes must be passed.
+; If one is not passed, the other is not populated
+
+; CHKLOCK will work for any filename, including *.ism.
+; Wildcards only work for the current directory or native style logicals
+; i.e. for Unix "$LOGICAL/*.ism" not "LOGICAL:*.ism"
+
+; However "LOGICAL:filename.ism" does work
+
+.ifndef FALSE
+.define FALSE           0
+.endc
+
+    external function
+        get_user            ,^val
+        locase              ,a
+
+    structure file_rec
+        ,a1
+
+    structure cl_str
+        pid                 ,a20    ;process id
+        filename            ,a255   ;filename
+        start               ,i4     ;record offset
+        length              ,i4     ;record length
+
+.align
+    record rfa
+        pos_trfa            ,a5     ;terabyte RFA
+        static_trfa         ,i1     ;static rfa flag
+
+    record ,x
+        pos_rfa             ,a4     ;non-terabyte RFA
+        static_rfa          ,i1     ;static rfa flag
+
+    record issts_rec
+        ireclen             ,d5
+        ikeystart           ,d5
+        ikeylen             ,d3
+        irecsmax            ,d8
+        irecsleft           ,d8
+        inumkeys            ,d2
+
+    record iskeyinfo
+        iskeypos            ,d5
+        iskeylen            ,d3
+        iskeydup            ,d1
+        iskeyasc            ,d1
+        iskeymod            ,d1
+        iskeyname           ,a15
+        iskeysegpos         ,8d5
+        iskeyseglen         ,8d3
+
+.align
+    record clr
+        buffer              ,a80    ;chklocks input buffer
+        number              ,a18    ;number conversion field
+        fname               ,a255   ;current chklocks filename
+        chklock_option      ,a4     ;chklock option
+
+.align
+    record clr_i
+        syscode             ,i4     ;system code
+        max                 ,i4     ;maximum number of files required
+        curr                ,i4     ;current/maximum structure array
+        pos                 ,i4     ;position in buffer
+        pos2                ,i4     ;position in buffer
+        len                 ,i4     ;length
+        chan                ,i4     ;channel
+        handle              ,D_HANDLE   ;cl_str handle
+        hndl2               ,D_HANDLE   ;file_rec handle
+        error               ,i4     ;read error
+        ctr                 ,i4     ;loop counter
+        isam_file           ,i4     ;file is an isam file
+        change_ism_to_is1   ,i4     ;change ISM to IS1
+        test_mode           ,i4     ;is test mode being used?
+
+.align
+    record keyinfo_i
+        tbyte               ,i4     ;file is terabyte enabled
+        reclen              ,i4     ;record length
+        keylen              ,i4     ;primary key length
+        altkey              ,i4     ;alternate key number
+        altkeylen           ,i4     ;alternate key length
+
+proc
+
+    clear ^i(clr_i), clr, ^i(keyinfo_i), issts_rec, iskeyinfo, rfa
+
+    xcall envrn(syscode)
+
+    using syscode select
+    (8),
+        chklock_option = '-p'
+    (.gt. 10),
+        chklock_option = ' '
+    (),
+    begin                   ;not unix or windows
+        a_size = -999
+        freturn 29              ;Error BADCMP
+    end
+    endusing
+
+    if(.not.a_filename .or. a_filename .eqs. '.')
+        freturn 87              ;Error ARGMIS
+
+    ;check the lock against the IS1 file, not the ISM file
+    change_ism_to_is1 = 1
+
+    ;find an unused channel
+    chan = %syn_freechn
+    if(.not.chan)
+        freturn 33              ;Error CHNEXC
+
+    ;how many do we want?
+    if(a_size .gt. 0)
+        max = a_size
+
+    ;filename to work with
+    fname = a_filename
+
+    ;are we in test mode?
+    if(fname .eq. '~') then
+    begin
+        test_mode = 1
+        fname = fname - '~'
+    end
+    else
+    begin
+        ;check for wildcard
+        if(%instr(1, fname, '*') .or. %instr(1, fname, '?'))
+        begin
+            ;wildcards are only supported on UNIX
+            using syscode select
+            (8),
+                nop
+            (),
+            begin
+                a_size = -999
+                freturn 17 ;Error FILSPC
+            end
+            endusing
+
+            if(change_ism_to_is1)
+            begin
+                len = %trim(fname)
+                if(%instr(1, %locase(fname), '.ism') .eq. len-3)
+                begin
+                    ;got an isam file - change the name to check
+                    ; to be the name of the data file (IS1).
+                    fname(len:1) = '1'
+                end
+            end
+            goto run_chklock
+        end
+
+        open(chan, I:I, fname) [ERR=not_isam]
+        close chan
+
+        ;got an isam file - change filename to be the name of the data file (IS1).
+
+        pos = %instr(1, fname, '.')
+        len = %trim(fname)
+
+        ;if last character of name is '.', remove it
+        if(pos .eq. len)
+        begin
+            len -= 1
+            fname = fname(1,len)
+            clear pos
+        end
+
+        if(change_ism_to_is1)
+        begin
+            ;do we have a file type?
+            if(pos) then
+            begin
+                ;what is the last character of the filetype?
+                using fname(len:1) select
+                ('0' thru '9'),
+                begin
+                    ;insert an "_" just before the filetype
+                    fname = fname(1:pos-1) + '_' + fname(pos, len)
+                end
+                (),
+                begin
+                    ;modify last character of filetype to be a '1'
+                    fname(len:1) = '1'
+                end
+                endusing
+            end
+            else
+            begin
+                ;no filetype - use default
+                fname = fname(1:len) + '.is1'
+            end
+        end
+    end
+
+    if(FALSE)
+    begin
+not_isam,
+        open(chan, I, fname) [ERR=no_file]
+        close chan
+        if(FALSE)
+        begin
+no_file,
+            freturn %error
+        end
+    end
+
+run_chklock,
+
+    if(test_mode) then
+    begin
+        ;open this file, which should already be in the correct chklock format
+        open(chan, I, fname)
+    end
+    else
+    begin
+        ;execute the chklock utility
+        onerror chklock_error
+        open(chan, I, '|chklock ' + %atrim(chklock_option) + ' ' + fname)
+        offerror
+
+        if(FALSE)
+        begin
+chklock_error,
+            offerror
+            error = %syserr
+
+            freturn -%error
+        end
+
+        ;reset filename (for reporting purposes)
+        fname = a_filename
+    end
+
+    do  begin
+        reads(chan, buffer, eof)
+
+        ;look to see if this is a multiple file check
+        if(buffer .eq. '[') then
+        begin
+            ;get new filename
+            if(pos = %instr(1, buffer, ']'))
+            begin
+                fname = buffer(2, pos-1)
+                pos -= 2
+                if(%instr(1, %locase(fname), '.is1') .eq. pos-3)
+                begin
+                    if(fname(pos-1:1) .eq. 's') then
+                        fname(pos:1) = 'm'
+                    else
+                        fname(pos:1) = 'M'
+                end
+            end
+        end
+        else
+        begin
+            ;process chklock line
+            using chklock_option select
+            ('-p '),
+                call process_opt_p
+            (),
+                call process_no_opt
+            endusing
+        end
+    end
+    until(max .and. curr.ge.max)
+
+eof,
+    ;close pipe
+    close chan
+
+    ;number of locks
+    a_size = curr
+
+    ;get the actual key values
+    if(^passed(a_keys) .or.
+&       (^passed(a_altkey) .and. ^passed(a_altkeys) .and. a_altkey .ge. 0))
+    begin
+        ;no file currently being processed
+        clear fname, ^i(keyinfo_i)
+        altkey = -1
+
+        for ctr from 1 thru curr
+        begin
+            ;get the primary key & length and alternate key and length
+            call get_key
+        end
+
+        ;close the channel, if it's still open
+        if(%chopen(chan))
+            close chan
+
+        ;release any memory still in use
+        if(hndl2)
+            hndl2 = %mem_proc(DM_FREE, hndl2)
+    end
+
+    ;get the filenames
+    if(^passed(a_filenames))
+    begin
+        for ctr from 1 thru curr
+            a_filenames[ctr] = ^m(cl_str[ctr].filename, handle)
+    end
+
+    ;process id's
+    if(^passed(a_process))
+    begin
+        for ctr from 1 thru curr
+            a_process[ctr] = ^m(cl_str[ctr].pid, handle)
+    end
+
+    ;get usernames and terminal types
+    if(^passed(a_usernames) .and. ^passed(a_ttypes))
+    begin
+        for ctr from 1 thru curr
+        begin
+            xcall get_user(^m(cl_str[ctr].pid, handle),
+&               a_usernames[ctr], a_ttypes[ctr])
+        end
+    end
+
+    freturn 0
+
+;--------------------------------------------------------------------
+
+process_opt_p,
+
+    ;find position of colon
+    pos = %instr(1, buffer, ':')
+    if(pos .gt. 1)
+    begin
+        ;next lock found
+        curr += 1
+
+        ;increase memory array to hold new details
+        if(.not.handle) then
+            handle = %mem_proc(DM_ALLOC, ^size(cl_str))
+        else
+            handle = %mem_proc(DM_RESIZ, (curr*^size(cl_str)), handle)
+
+        ^m(cl_str[curr].pid, handle) = buffer(1:pos-1)
+        ^m(cl_str[curr].filename, handle) = fname
+
+        ;remove process id
+        buffer = buffer(pos+1, ^size(buffer))
+        pos = %instr(1, buffer, ' -')
+        if(pos .gt. 2) then
+        begin
+            onerror bad_digits_p
+            ;start position of record
+            number = buffer(1:pos-1)
+
+            ^m(cl_str[curr].start, handle) = number
+
+            if(pos+3.le.%trim(buffer))
+            begin
+                ;length of record
+                number = buffer(pos+3, %trim(buffer))
+                ^m(cl_str[curr].length, handle) = number
+            end
+            offerror
+            if(FALSE)
+            begin
+bad_digits_p,
+                offerror
+                clear ^m(cl_str[curr].start, handle)
+                clear ^m(cl_str[curr].length, handle)
+            end
+        end
+        else
+        begin
+            clear ^m(cl_str[curr].start, handle)
+            clear ^m(cl_str[curr].length, handle)
+        end
+    end
+    return
+
+;--------------------------------------------------------------------
+
+process_no_opt,
+
+    len = %trimz(buffer)
+
+    clear pos, pos2
+
+    repeat
+    begin
+        pos = pos2+1
+
+        ;look for next non-space char
+        while(.not.buffer(pos:1) .and. pos .le. len)
+            incr pos
+
+        if(pos .gt. len)
+            exitloop
+
+        ;look for next space
+        pos2 = pos+1
+        while(buffer(pos2:1) .and. pos2 .le. len)
+            incr pos2
+
+
+        curr += 1
+
+        ;increase memory array to hold new details
+        if(.not.handle) then
+            handle = %mem_proc(DM_ALLOC, ^size(cl_str))
+        else
+            handle = %mem_proc(DM_RESIZ, (curr*^size(cl_str)), handle)
+
+        clear ^m(cl_str[curr].pid, handle)
+        ^m(cl_str[curr].filename, handle) = fname
+
+        onerror bad_digits
+        number = buffer(pos, pos2-1)
+
+        ^m(cl_str[curr].start, handle) = number
+        ^m(cl_str[curr].length, handle) = 0
+        offerror
+
+        if(FALSE)
+        begin
+bad_digits,
+            offerror
+            clear ^m(cl_str[curr].start, handle)
+            clear ^m(cl_str[curr].length, handle)
+        end
+
+    end
+
+    return
+
+;--------------------------------------------------------------------
+
+get_key,
+
+    ;is this a different file (or first file)
+    if(fname .ne. ^m(cl_str[ctr].filename, handle))
+    begin
+        ;if the last file channel is still open - close it
+        if(%chopen(chan))
+            close chan
+
+        ;deallocate any previous memory "records"
+        if(hndl2)
+            hndl2 = %mem_proc(DM_FREE, hndl2)
+
+        ;new filename
+        fname = ^m(cl_str[ctr].filename, handle)
+
+        ;assume not an isam file
+        clear isam_file
+        open(chan, I:I, fname) [ERR=not_isam2]
+        isam_file = 1
+not_isam2,
+
+        if(isam_file) then
+        begin
+            ;what is the record length of the isam file
+            reclen = %isinfo(chan, 'SIZE')
+            ;primary key length
+            keylen = %isinfo(chan, 'KEYLENGTH', 0)
+            ;is this a terabyte enabled isam file
+            tbyte = %instr(1, ^a(%isinfo(chan, 'FOPTS')), 'TBYTE')
+
+            altkey = -1
+            clear altkeylen
+            if(^passed(a_altkey) .and. ^passed(a_altkeys))
+            begin
+                if(a_altkey .ge. 0 .and. a_altkey .gt. %isinfo(chan, 'NUMKEYS'))
+                begin
+                    altkey = a_altkey
+                    altkeylen = %isinfo(chan, 'KEYLENGTH', altkey)
+                end
+            end
+
+            ;allocate a memory segment of the correct record length
+            hndl2 = %mem_proc(DM_ALLOC, reclen)
+        end
+        else
+        begin
+            reclen = ^m(cl_str[ctr].length, handle)
+            clear keylen
+            clear tbyte
+            altkey = -1
+            clear altkeylen
+        end
+    end
+
+    ;is this an ISAM file
+    if(isam_file) then
+    begin
+        ;clear rfa to integer 0
+        clear ^i(rfa), error
+        if(tbyte) then
+            pos_trfa = %cnv_ip(^m(cl_str[ctr].start, handle))
+        else
+            pos_rfa = %cnv_ip(^m(cl_str[ctr].start, handle))
+        ;read using rfa
+read_again,
+        read(chan, ^m(file_rec(1:reclen), hndl2), ' ', RFA:rfa) [ERR=get_key_err]
+
+        if(^passed(a_keys))
+        begin
+            ;get primary key
+            a_keys[ctr] = %keyval(chan, ^m(file_rec(1:reclen), hndl2), 0)
+        end
+
+        if(^passed(a_keylens))
+            a_keylens[ctr] = keylen
+
+        if(^passed(a_altkeys))
+        begin
+            ;get alternate key
+            if(altkey .ge. 0) then
+                a_altkeys[ctr] = %keyval(chan, ^m(file_rec(1:reclen), hndl2), altkey)
+            else
+                clear a_altkeys[ctr]
+        end
+
+        if(^passed(a_altkeylens))
+            a_altkeylens[ctr] = altkeylen
+
+    end
+    else
+    begin
+        if(^passed(a_keys))
+        begin
+            ; calculate record number for non-ISAM files
+            if(reclen) then
+                a_keys[ctr] = (^m(cl_str[ctr].start, handle) + (reclen-1)) / reclen [LEFT]
+            else
+                clear a_keys[ctr]
+        end
+
+        if(^passed(a_keylens))
+            clear a_keylens[ctr]
+
+        if(^passed(a_altkeys))
+            clear a_altkeys[ctr]
+
+        if(^passed(a_altkeylens))
+            clear a_altkeylens[ctr]
+    end
+
+    return
+
+;--------------------------------------------------------------------
+
+get_key_err,
+    using (error=%error) select
+    (317, 318),
+    begin ;invalid RFA / deleted record
+        ;is this a terabyte enabled isam file
+        if(tbyte) then
+        begin
+            if(static_trfa .lt. 127)
+            begin
+                ;try next static RFA flag
+                static_trfa += 1
+                goto read_again
+            end
+        end
+        else
+        begin
+            if(static_rfa .lt. 127)
+            begin
+                ;try next static RFA flag
+                static_rfa += 1
+                goto read_again
+            end
+        end
+    end
+    endusing
+
+    ;cannot read isam record
+
+    if(^passed(a_keys))
+        clear a_keys[ctr]
+
+    if(^passed(a_altkeys))
+        clear a_altkeys[ctr]
+
+    if(^passed(a_altkeylens))
+        clear a_altkeylens[ctr]
+
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+function GET_USER ,^VAL
+.ifdef DBLv9
+    req in  a_pid       ,a          ;Process ID
+    req out a_user      ,a          ;unix user name
+    req out a_term      ,a          ;unix terminal type
+    endparams
+.else ;DBLv9
+    a_pid           ,a          ;REQUIRED Process ID
+    a_user          ,a          ;REQUIRED RETURNED unix user name
+    a_term          ,a          ;REQURIED RETURNED unix terminal type
+.endc ;DBLv9
+
+;function return values
+;  0 = ok
+; 29 = unsupported platform
+; 33 = no free channels
+; 87 = invalid pid
+
+.align
+    record clr
+        buffer              ,a255   ;ps -ef buffer
+        pid                 ,a20    ;pid
+        user                ,a20    ;unix user
+        upid                ,a20    ;user pid
+        term                ,a20    ;user terminal name
+
+.align
+    record clr_i
+        fstatus             ,i4     ;function return status
+        pos                 ,i4     ;position in buffer
+        chan                ,i4     ;channel
+        ctr                 ,i4     ;loop counter
+
+proc
+
+    clear a_user, a_term
+
+    xcall envrn(pos)
+    using pos select
+    (8),
+        nop
+    (),
+        freturn 29              ;Error BADCMP
+    endusing
+
+    ;no process ID
+    if(.not.a_pid)
+        freturn 87              ;Error ARGMIS
+
+    clear ^i(clr_i), clr
+
+    ;find an unused channel
+    chan = %syn_freechn
+    if(.not.chan)
+        freturn 33              ;Error CHNEXC
+
+    pos = 1
+    while(.not.a_pid(pos:1))
+        pos += 1
+
+    ;left justify pid
+    pid = a_pid(pos, %trim(a_pid))
+
+    fstatus = 18                ;Error EOF
+
+    open(chan, I, '|ps -ef') [ERR=open_fail]
+
+    fstatus = 53                ;Error KEYNOT
+
+    do  begin
+        reads(chan, buffer) [ERR=eof]
+
+        ;find user
+        pos = 1
+        while(.not.buffer(pos:1))
+            pos += 1
+
+        clear ctr, user
+        while(buffer(pos:1))
+        begin
+            ctr += 1
+            user(ctr:1) = buffer(pos:1)
+            pos += 1
+        end
+
+        ;find pid
+        while(.not.buffer(pos:1))
+            pos += 1
+
+        clear ctr, upid
+        while(buffer(pos:1))
+        begin
+            ctr += 1
+            upid(ctr:1) = buffer(pos:1)
+            pos += 1
+        end
+    end
+    until(upid .eq. pid)
+
+    ;now we have to decode the ps -ef line
+
+    ;find ppid
+    while(.not.buffer(pos:1))
+        pos += 1
+
+    while(buffer(pos:1))
+        pos += 1
+
+
+    ;find c
+    while(.not.buffer(pos:1))
+        pos += 1
+
+    while(buffer(pos:1))
+        pos += 1
+
+
+    ;find stime
+    while(.not.buffer(pos:1))
+        pos += 1
+
+    while(buffer(pos:1))
+        pos += 1
+
+
+    ;find tname
+    while(.not.buffer(pos:1))
+        pos += 1
+
+    clear ctr, term
+    while(buffer(pos:1))
+    begin
+        ctr += 1
+        term(ctr:1) = buffer(pos:1)
+        pos += 1
+    end
+
+    clear fstatus               ;no error
+
+    a_user = user
+    a_term = term
+
+eof,
+
+    close chan
+
+open_fail,
+
+    freturn fstatus
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; lowercase a string
+
+.ifdef DBLv9
+function LOCASE ,a
+    req in  a_arg           ,a              ;string to be uppercased
+    endparams
+.else ;DBLv9
+function LOCASE ;,ALPHA
+    a_arg               ,a              ;REQUIRED string to be uppercased
+.endc ;DBLv9
+
+.align
+    record
+        handle              ,D_HANDLE       ;memory handle
+
+proc
+
+    handle = %mem_proc(DM_ALLOC, ^size(a_arg))
+
+    ^m(handle) = a_arg
+    locase ^m(handle)
+
+    freturn ^m(handle)
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.ifndef DBLv8
+
+function %syn_freechn ,^val
+    a_start             ,n
+    a_end               ,n
+
+.align
+    record
+        chan                ,i4
+        end_ch              ,i4
+
+proc
+
+    chan = 1
+    end_ch = 255
+
+    ;set start channel
+    if(^passed(a_start))
+    begin
+        if(a_start .gt. 1 .and. a_start .le. 255)
+            chan = a_start
+    end
+
+    ;set end channel
+    if(^passed(a_end))
+    begin
+        if(a_end .gt. 1 .and. a_end .le. 255)
+            end_ch = a_end
+    end
+
+    ;find un-open channel
+    while(chan .le. end_ch .and. %chopen(chan))
+        chan += 1
+
+    ;found an un-open channel
+    if(chan .le. end_ch)
+        freturn chan
+
+    ;could not find un-open channel
+    freturn 0
+
+end
+
+.endc ;DBLv8
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

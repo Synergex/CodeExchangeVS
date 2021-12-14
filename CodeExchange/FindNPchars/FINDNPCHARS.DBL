@@ -1,0 +1,87 @@
+;
+; Title:        FindNPChars.dbl
+;
+; Author:       Steve Ives (Synergex Professional Services Group)
+;
+; This code is provided as is, without warranty, and is used at your own risk.
+; Neither Synergex or the author accept any liability for any loss or damage which
+; may result from the use of the code or executables included with this demo.
+;
+; The version 9, the compiler treats embedded CR, LF and null's differently than the
+; version 8 compiler. This program will search through any DBL files that are in its directory
+; and identify what lines have the CR, LF or null in them. This will then allow you to
+; replace with %char(0), %char(10) and %char(13) respectively as those are the suggested
+; values in the version 9 compiler.
+;
+main
+    record local_data
+        tt          ,i4
+        dir         ,i4
+        ch          ,i4
+        ln          ,i4
+        er          ,i4
+        infile      ,a80
+        buffer      ,a1024
+        dircmd  ,a256
+
+proc
+    open(tt=%syn_freechn,i,"tt:")
+    writes(tt, "FindNPchars")
+
+.ifdef D_GUI
+    dircmd = "|cmd.exe /c dir /b *.dbl"
+.endc
+.ifdef OS_VMS
+    dircmd = "|dir/brief/nodate/nosize/nohead/notrail/noprot/nosec/noown/nover *.dbl;"
+.endc
+.ifdef OS_UNIX
+    ;Define an ls command that produces a list of .dbl files in a single column.
+    ;File names only (no owner, group, protection, etc.)
+    dircmd="?????"
+.endc
+
+    open(dir=%syn_freechn,i,dircmd)
+
+    repeat
+    begin
+        reads(dir,infile,nomore)
+        writes(tt,"Processing file "+%atrim(infile))
+        call process_file
+    end
+
+nomore,
+    close dir
+
+    close tt
+.ifdef DBLNET
+    StopMessage()
+.endc ;DBLNET
+    stop D_EXIT_SUCCESS
+
+
+process_file,
+    clear ln,er
+    open(ch=%syn_freechn,i:s,infile) [ERR=ferr]
+    repeat
+    begin
+        reads(ch,buffer,eof)
+        ln+=1
+        if (%instr(1,buffer,%char(0))
+&           || %instr(1,buffer,%char(10))
+&           || %instr(1,buffer,%char(13)))
+        begin
+            er+=1
+            writes(tt,"  --  Invalid character at line "+%string(ln))
+        end
+    end
+
+eof,
+    close ch
+    if (er)
+        writes(tt,"  --  "+%string(er)+" invalid character(s) in file.")
+    return
+ferr,
+    writes(tt,"  --  Failed to open file "+%atrim(infile))
+    return
+
+end

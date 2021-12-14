@@ -1,0 +1,29 @@
+;FixData_test.rec
+
+.ifndef D_FILENAME_SIZE
+.define D_FILENAME_SIZE 255
+.endc
+
+.ifdef GDS_INIT
+global data section fixdata ,init
+.else
+global data section fixdata
+.endc
+record
+    colid               ,5i4            ;menu column id's
+    ms_close            ,i4             ;close method set id
+
+endglobal
+
+record input_rps
+    rps_main            ,a D_FILENAME_SIZE
+    rps_text            ,a D_FILENAME_SIZE
+    sdbms_file          ,a D_FILENAME_SIZE
+    rps_fil_name        ,a30
+    rps_str_name        ,a30
+    log_rps             ,a D_FILENAME_SIZE
+    logChanges          ,d1
+    doNotUpdate         ,d1
+    ignoreSpaces        ,d1
+
+

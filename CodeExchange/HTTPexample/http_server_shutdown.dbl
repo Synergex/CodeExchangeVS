@@ -1,0 +1,121 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; HTTP_SERVER_SHUTDOWN.DBL
+;
+; Last revised : 2-Jun-2004
+;
+; Requires : Synergy/DE 8
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+.include 'INC:http.def'
+;
+; Logging routines use the USE_TOOLKIT define.  If defined, will use toolkit
+; window as a logging device, else TT: will be used.
+;
+.define USE_TOOLKIT
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Synergy HTTP server shutdown
+
+subroutine HTTP_SERVER_SHUTDOWN
+    a_host      ,a          ;REQUIRED HOST name (or TCP/IP address)
+    a_port      ,n          ;OPTIONAL port number
+    a_logging   ,n          ;OPTIONAL logging mode
+    a_logfile   ,a          ;OPTIONAL log file
+
+.include "DBLDIR:synxml.def"
+
+    structure bd
+        bdy         ,a1
+
+.align
+    record clr_i
+        recvhdl     ,D_HANDLE   ;Receive message handle
+        recvlen     ,i4         ;Receive message length
+        tt_chan     ,i4         ;Display logging channel
+        status      ,i4         ;Return value
+        PortNo      ,i4         ;Port number to use
+        timeout     ,i4         ;Timeout setting in seconds
+        log_mode    ,i4         ;log mode
+        wid         ,i4         ;log window ID
+
+.align
+    record clr
+        URI         ,a255       ;URI for the request
+        errmsg      ,a80        ;Error message field
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    if(^passed(a_logging)) then
+        log_mode = a_logging
+    else
+        log_mode = D_HTTP_LOG_ERR
+
+    if(log_mode)
+    begin
+        xcall opnlog(tt_chan, a_logfile)
+    end
+
+    if (log_mode .ge. D_HTTP_LOG_SUCCESS)
+        xcall wrtlog(tt_chan, a_logfile, "HTTP_SHUTDOWN_SERVER")
+
+    ; Set the port number
+    if(^passed(a_port).and.a_port) then
+        PortNo = a_port
+    else
+        PortNo = 80
+
+    URI = "http://" + %atrim(a_host) + ":" + %string(PortNo) + "/" + D_SHUTDOWN_MSG
+    if (log_mode .ge. D_HTTP_LOG_SUCCESS)
+        xcall wrtlog(tt_chan, a_logfile, "URI = " + URI)
+
+    timeout = 0
+
+    ; use a GET request to send shutdown message
+    status = %http_client_get(URI, timeout, recvhdl, recvlen, errmsg)
+    if (status)
+    begin
+        if(log_mode)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_SHUTDOWN_SERVER"
+&               + " (http_client_get)"
+&               + " status = " + %string(status) + " " + %atrim(errmsg))
+        end
+.ifdef USE_TOOLKIT
+        if(.not.tt_chan)
+            xcall u_message("status = " + %string(status) + " " + %atrim(errmsg))
+.endc ;USE_TOOLKIT
+    end
+
+    if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+    begin
+        ; Receive body - display any response
+        if (recvhdl .and. recvlen) then
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_SHUTDOWN_SERVER"
+&               + " msg = " + ^m(bd.bdy(1:recvlen), recvhdl))
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_SHUTDOWN_SERVER"
+&               + " length = " + %string(recvlen))
+        end
+        else
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_SHUTDOWN_SERVER"
+&               + " No body in Receive message ")
+        end
+    end
+
+    ; Make sure any memory resources are released
+    if (recvhdl)
+        recvhdl = %mem_proc(DM_FREE, recvhdl)
+
+    if(log_mode)
+    begin
+        xcall clslog(tt_chan)
+    end
+
+    xreturn
+
+end
+

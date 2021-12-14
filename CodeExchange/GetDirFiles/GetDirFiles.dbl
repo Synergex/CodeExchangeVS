@@ -1,0 +1,218 @@
+;*******************************************************************************
+;
+; Title:        GetDirFiles.dbl
+;
+; Type:         Function
+;
+; Description:  Returns a collection containing filenames matching a passed
+;               file specification.
+;
+; Author:       William Hawkins, Synergex Professional Services Group
+;
+; Copyright:    ©Synergex International Inc.  All rights reserved.
+;
+; WARNING:      If you were given this code by a Synergex employee then you may
+;               use and modify it freely to generate code for your applications.
+;               However, you may not under any circumstances distribute this
+;               code, or any modified version of this code, to any third party
+;               without first obtaining written permission to do so from
+;               Synergex.  In using this code you accept that it is provided
+;               as is, and without support or warranty.  Neither Synergex or the
+;               author accept any responsibility for any losses or damages of
+;               any nature which may arise from the use of this code.  This
+;               header information must remain, unaltered in the code at all
+;               times.  Possession of this code, or any modified version of this
+;               code, indicates your acceptance of these terms.
+;
+;*******************************************************************************
+
+import Synergex.SynergyDE.Collections
+
+;return value = the number of files matching search spec
+function GetDirFiles    ,^val
+
+    required in     a_spec      ,a          ;Search filespec
+    required inout  a_files     ,@ArrayList ;File names
+    endparams
+
+    stack record
+        fileCount           ,i4     ;Number of files added to collection
+        len                 ,i4     ;Length of file name
+    endrecord
+
+.ifdef D_GUI
+    stack record local_data
+        dll                 ,i4     ;DLL Handle
+        srch_hdl            ,i4     ;Search handle
+        spec                ,a260   ;Search filespec
+        sts					,i4		;Search status
+    endrecord
+.ifdef DBLNET
+    stack record
+        argArray	       ,[#]@*
+    endrecord
+.endc ;DBLNET
+
+    stack record WIN32_FIND_DATA
+        FileAttributes      ,i4     ;File attribute bit flags
+        CreationTimeLow     ,i4     ; Low-order 32 bits of file creation time (UTC format)
+        CreationTimeHigh    ,i4     ;High-order 32 bits of file creation time (UTC format)
+        LastAccessTimeLow   ,i4     ; Low-order 32 bits of last access time (UTC format)
+        LastAccessTimeHigh  ,i4     ;High-order 32 bits of last access time (UTC format)
+        LastWriteTimeLow    ,i4     ; Low-order 32 bits of last write time (UTC format)
+        LastWriteTimeHigh   ,i4     ;High-order 32 bits of last write time (UTC format)
+        FileSizeHigh        ,i4     ;High-order 32 bits of file size (bytes)
+        FileSizeLow         ,i4     ; Low-order 32 bits of file size (bytes)
+        Reserved0           ,i4     ;
+        Reserved1           ,i4     ;
+        FileName            ,a260   ;Name of file (null-terminated string)
+        AlternateFileName   ,a14    ;8.3 file name (null-terminated string
+    endrecord
+
+.define INVALID_HANDLE_VALUE        -1
+.define FILE_ATTRIBUTE_READONLY     %x(1)
+.define FILE_ATTRIBUTE_HIDDEN       %x(2)
+.define FILE_ATTRIBUTE_SYSTEM       %x(4)
+.define FILE_ATTRIBUTE_DIRECTORY    %x(10)
+.define FILE_ATTRIBUTE_ARCHIVE      %x(20)
+.define FILE_ATTRIBUTE_NORMAL       %x(80)
+.define FILE_ATTRIBUTE_TEMPORARY    %x(100)
+.define FILE_ATTRIBUTE_COMPRESSED   %x(800)
+.define FILE_ATTRIBUTE_OFFLINE      %x(1000)
+
+.endc ;D_GUI
+
+.ifdef OS_UNIX
+    stack record local_data
+        chan               ,i4     ;Channel
+        FileName           ,a256   ;FileName
+    endrecord
+.endc ;OS_UNIX
+
+.ifdef OS_VMS
+    external function
+        lib$find_file       ,^val
+        lib$find_file_end   ,^val
+    endexternal
+
+    stack record local_data
+        sts                 ,i4     ;Status
+        context             ,i4     ;Context
+        FileName            ,a256   ;FileName
+        fn                  ,a256   ;Filename
+        fe                  ,a80    ;Filetype
+    endrecord
+.endc ;OS_VMS
+
+proc
+
+    clear fileCount
+    init local_data
+
+.ifdef D_GUI
+
+    dll = %dll_open("kernel32.dll")
+    if(dll > 0)
+    begin
+        xcall fill(%char(0), spec)
+        spec(1:%trim(a_spec)) = a_spec
+
+        ;Look for the first file
+.ifdef DBLNET
+        begin
+            argArray = new object[2]
+            argArray[1] = (object)^addr(spec)
+            argArray[2] = (object)^addr(WIN32_FIND_DATA)
+            srch_hdl = %dll_netcall(dll, DLL_TYPE_WINAPI, 'FindFirstFileA', argArray)
+        end
+.else ;DBLNET
+        srch_hdl = %dll_call(dll, DLL_TYPE_WINAPI, "FindFirstFileA", ^addr(spec), ^addr(WIN32_FIND_DATA))
+.endc ;DBLNET
+        if (srch_hdl .ne. INVALID_HANDLE_VALUE)
+        begin
+            do
+            begin
+                ;is file really a directory?
+                if (.not.(FileAttributes .band. FILE_ATTRIBUTE_DIRECTORY))
+                begin
+                    ;Find end of file name in null-terminated string
+                    len = %instr(1, FileName, %char(0)) - 1
+                    call addFileNameToCollection
+                end
+.ifdef DBLNET
+                begin
+                    argArray = new object[2]
+                    argArray[1] = (VariantDesc)srch_hdl
+                    argArray[2] = (object)^addr(WIN32_FIND_DATA)
+                    sts = %dll_netcall(dll, DLL_TYPE_WINAPI, 'FindNextFileA', argArray)
+                end
+.else ;DBLNET
+                sts = %dll_call(dll, DLL_TYPE_WINAPI, "FindNextFileA", srch_hdl, ^addr(WIN32_FIND_DATA))
+.endc ;DBLNET
+            end
+            until(!sts)
+
+            ;Close the search handle
+.ifdef DBLNET
+            begin
+                argArray = new object[1]
+                argArray[1] = (VariantDesc)srch_hdl
+                sts = %dll_netcall(dll, DLL_TYPE_WINAPI, 'FindClose', argArray)
+            end
+.else ;DBLNET
+            sts = %dll_call(dll, DLL_TYPE_WINAPI, "FindClose", srch_hdl)
+.endc ;DBLNET
+        end
+
+        dll = %dll_close(dll)
+    end
+
+.endc ;D_GUI
+
+
+.ifdef OS_UNIX
+
+    open(chan=%syn_freechn, i, "|find " + %atrim(a_spec) + " -exec basename {} \;")
+
+    repeat
+    begin
+        reads(chan, FileName) [ERR=eof]
+        len = %trim(FileName)
+        call addFileNameToCollection
+    end
+
+eof,
+    if(chan .gt. 0)
+        close chan
+
+.endc ;OS_UNIX
+
+
+.ifdef OS_VMS
+
+    while(%success(%lib$find_file(a_spec(1:%trim(a_spec)), FileName, ^ref(context))))
+    begin
+        xcall parse(FileName,,,,, fn, fe)
+        FileName = %atrim(fn) + fe
+        len = %trim(FileName)
+        call addFileNameToCollection
+    end
+    sts = %lib$find_file_end(^ref(context))
+
+.endc ;OS_VMS
+
+    freturn fileCount
+
+
+addFileNameToCollection,
+
+    fileCount += 1
+
+    if (a_files == ^null)
+        a_files = new ArrayList()
+    a_files.Add((@a)FileName(1:len))
+
+    return
+
+endfunction
+

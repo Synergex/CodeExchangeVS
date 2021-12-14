@@ -1,0 +1,43 @@
+;FixData.rec
+
+structure fil_array
+    fil_name    ,a30            ;file names
+
+structure str_names
+    str_name    ,a30            ;structure names
+
+structure odbc_names
+    odbc_name   ,a30            ;ODBC file/structure names
+
+structure str_array
+    str_name    ,a30            ;structure names
+    str_len     ,i4             ;structure length
+    str_flds    ,i4             ;number of fields
+    fld_nam_hdl ,i4             ;list of fld names
+    fld_arr_hdl ,i4             ;list of fld details
+    str_tags    ,i4             ;number of tags
+    tag_arr_hdl ,i4             ;list of tag details
+
+structure tag_names
+    tag_name    ,a30            ;tag names
+
+structure tag_array
+    tag_info    ,a ^size(tg_info)   ;tag details for structure
+    tag_pos     ,i4             ;field position
+    tag_len     ,i4             ;field length
+
+structure fld_names
+    fld_name    ,a30            ;field names for structure
+
+structure fld_array
+    fld_name    ,a30            ;field names for structure
+    fld_pos     ,i4             ;field position
+    fld_len     ,i4             ;field length
+    fld_dim     ,[4]i4          ;field array dimensions
+    fld_typ     ,a1             ;field type
+    fld_dp      ,d2             ;field decimal places
+    fld_class   ,d2             ;field class
+    fld_ovrlay  ,d1             ;field is an overlay field
+    fld_grp_st  ,d1             ;field is first field in group
+    fld_grp_end ,d1             ;field is last field in group
+

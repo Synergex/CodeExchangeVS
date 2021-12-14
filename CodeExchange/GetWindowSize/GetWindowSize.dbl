@@ -1,0 +1,281 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; GetWindowSize calculates the number of rows and columns available for the
+; application. If a specific window is required, the appropriate calculations
+; adjust for the frame, caption, buttons and tabset attributes.
+;
+; Note: Having bottons in an application window may cause incorrect values.  If
+; the window is sized such that the number of rows/columns of buttons change,
+; the resulting a_xchars/a_ychars may be incorrect.
+;
+; Note: This routine does not cope with tabsets where the tabs are on the side.
+; Note: This routine does not cope with scroll bars.
+; Note: This routine does not cope with lists
+; Note: This routine is untested with WinXP themes
+;
+; This routine is an example of using %U_WINMETRICS, and does not contain all
+; the logic required to be 100% accurate when predicting the size of a
+; Synergy/DE UI Toolkit window.
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+subroutine GetWindowSize
+    a_xchars        ,n              ;RETURNED maximum height in characters
+    a_ychars        ,n              ;RETURNED maximum width in characters
+    a_wid           ,n              ;OPTIONAL window ID
+    a_type          ,n              ;OPTIONAL window type (see D_TYPE_* below)
+
+.include 'WND:tools.def'
+.include 'DBLDIR:windows.def'
+
+.define D_TYPE_WINDOW   1               ;window
+.define D_TYPE_TABSET   2               ;tabset
+
+.align
+    record clr_i
+        wnd_id          ,i4             ;window id
+        wnd_type        ,i4             ;window type (see D_TYPE_* above)
+        wnd_height      ,i4             ;window height
+        wnd_width       ,i4             ;window width
+
+        group cltrect                   ;client window rectangle
+            left        ,i4
+            top         ,i4
+            right       ,i4
+            bottom      ,i4
+        endgroup
+        group visrect                   ;visible window rectangle
+            left        ,i4
+            top         ,i4
+            right       ,i4
+            bottom      ,i4
+        endgroup
+
+        row_height      ,i4             ;row height (incl leading)
+        column_width    ,i4             ;char width
+        row_leading     ,i4             ;leading factor
+
+        tabset_rows     ,i4             ;how many tabset header rows
+        tabset_cols     ,i4             ;how many tabset header columns
+        buttons_bottom  ,i4             ;how many buttons rows on bottom
+        buttons_right   ,i4             ;how many buttons cols on right
+
+        tabset_height   ,i4             ;tabset header height
+        tabset_width    ,i4             ;tabset header width
+        tabset_ymargin  ,i4             ;tabset vertical margin
+        tabset_xmargin  ,i4             ;tabset horizontal margin
+        button_height   ,i4             ;button height
+        button_width    ,i4             ;button width
+        button_ymargin  ,i4             ;vertical gap around buttons
+        button_xmargin  ,i4             ;horizontal gap around buttons
+
+proc
+
+    clear ^i(clr_i)
+
+    ;get the maximum dimensions of the available space for application
+    xcall u_winmetrics(D_VISIBLE_RECT, WID_APP, visrect)
+
+    wnd_height = visrect.bottom - visrect.top
+    wnd_width  = visrect.right - visrect.left
+
+    ;is a window specified
+    if(^passed(a_wid) .and. a_wid .ne. WID_CONTAINER)
+    begin
+        wnd_id = a_wid
+
+        ;get window type
+        if(^passed(a_type))
+        begin
+            using a_type select
+            (D_TYPE_WINDOW, D_TYPE_TABSET),
+            begin
+                wnd_type = a_type
+            end
+            endusing
+        end
+    end
+
+    if(wnd_type) then
+    begin
+        ;get column width in pixels
+        column_width = %u_winmetrics(D_CHARWIDTH, wnd_id)
+
+        ;get row height in pixels (includes leading)
+        row_height   = %u_winmetrics(D_ROWHEIGHT, wnd_id)
+
+        call calc_max_window_size
+    end
+    else
+    begin
+        ;get column width in pixels
+        column_width = %u_winmetrics(D_CHARWIDTH, WID_APP)
+
+        ;get row height in pixels (includes leading)
+        row_height   = %u_winmetrics(D_ROWHEIGHT, WID_APP)
+    end
+
+    a_ychars = wnd_height / row_height
+    a_xchars = wnd_width / column_width
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+calc_max_window_size,
+
+    ;the following are predefined by UI Toolkit, and are in pixels
+;;      button_height  = 23                 ;button height
+;;      button_width   = 70                 ;button width
+;;      button_ymargin = 5                  ;vertical space between buttons
+;;      button_xmargin = 10                 ;horizontal space between buttons
+
+    ;calculate button placement and size based upon client_rec &
+    ; visible_rect for the window.
+    ;*** this logic replaces/overrides the above values ***
+
+    xcall u_winmetrics(D_CLIENT_RECT, %w_info(WIF_HWND, wnd_id), cltrect)
+    xcall u_winmetrics(D_VISIBLE_RECT, wnd_id, visrect)
+
+    if(cltrect.bottom - cltrect.top .ne. visrect.bottom - visrect.top)
+    begin
+        buttons_bottom = 1
+        button_height = (cltrect.bottom - cltrect.top)
+&           - (visrect.bottom - visrect.top)
+    end
+    if(cltrect.right - cltrect.left .ne. visrect.right - visrect.left)
+    begin
+        buttons_right = 1
+        button_width = (cltrect.right - cltrect.left)
+&           - (visrect.right - visrect.left)
+    end
+
+    tabset_height  = row_height         ;tabset header height
+    tabset_width   = 0                  ;tabset header width
+    tabset_ymargin = row_height / 2     ;indented 0.5 row at top and bottom
+    tabset_xmargin = row_height / 2     ;indented 0.5 row at left and right
+
+    ;is this a tabset - if yes, assume DTS_NONE (1 row at top)
+    if(wnd_type .eq. D_TYPE_TABSET)
+        tabset_rows = 1
+
+
+    using wnd_type select
+    (D_TYPE_WINDOW, D_TYPE_TABSET),
+    begin
+        ;get row leading in pixels
+        row_leading  = %u_winmetrics(D_ROWLEADING, wnd_id)
+
+        ;adjust for leading (space at top and bottom of window)
+        wnd_height -= (2 * row_leading)
+    end
+    endusing
+
+
+    ;is there a frame/border
+    if(%w_info(WIF_BDRFLG, wnd_id)) then
+    begin
+        ;is there a caption/title
+        if(%w_info(WIF_DRAGBAR, wnd_id)) then
+        begin
+            ;allow room for caption and bottom frame
+            wnd_height -= (%u_winmetrics(D_YCAPTION) + %u_winmetrics(D_YFRAME))
+
+;;          if(not placed at 1,1)
+;;              wnd_height -= ((row_height + %u_winmetrics(D_YORIGIN, wnd_id))
+;;              &  + %u_winmetrics(D_YFRAME))
+
+        end
+        else
+        begin
+            ;allow room for top and bottom frame
+            wnd_height -= (2 * %u_winmetrics(D_YFRAME))
+
+;;          wnd_height -= ((row_height + %u_winmetrics(D_YORIGIN, wnd_id))
+;;          &  + %u_winmetrics(D_YFRAME))
+        end
+
+        ;allow room for left and right frame
+        wnd_width -= (2 * %u_winmetrics(D_XFRAME))
+    end
+    else
+    begin
+        wnd_height -= %u_winmetrics(D_XORIGIN, wnd_id)
+        wnd_width -= %u_winmetrics(D_YORIGIN, wnd_id)
+    end
+
+
+    ;tabset with tabs on top/bottom
+    using tabset_rows select
+    (0),
+        nop
+    (1),
+    begin
+        ;allow room for single-row tabset header
+        wnd_height -= (tabset_height - tabset_ymargin)
+        wnd_width  -= tabset_xmargin
+    end
+    (.gt.1),
+    begin
+        ;allow room for multi-row tabset header
+        wnd_height -= ((tabset_height * tabset_rows) - tabset_ymargin)
+        wnd_width  -= tabset_xmargin
+    end
+    endusing
+
+    ;tabset with tabs on left/right (NOT SUPPORTED)
+    using tabset_cols select
+    (0),
+        nop
+    (1),
+    begin
+        ;allow room for single-column tabset header
+        wnd_height -= tabset_ymargin
+        wnd_width  -= (tabset_width - tabset_xmargin)
+    end
+    (.gt.1),
+    begin
+        ;allow room for multi-column tabset header
+        wnd_height -= tabset_ymargin
+        wnd_width  -= ((tabset_width * tabset_cols) - tabset_xmargin)
+    end
+    endusing
+
+    ;do we have any buttons at bottom
+    using buttons_bottom select
+    (0),
+        nop
+    (1),
+    begin
+        ;allow room for 1 row of buttons
+        wnd_height -= (button_height + button_ymargin + button_ymargin)
+    end
+    (.gt.1),
+    begin
+        ;allow room for more than 1 row of buttons
+        wnd_height -= (((button_height + button_ymargin) * buttons_bottom)
+&           + button_ymargin)
+    end
+    endusing
+
+    ;do we have any buttons on right
+    using buttons_right select
+    (0),
+        nop
+    (1),
+    begin
+        ;allow room for 1 column of buttons
+        wnd_width -= (button_width + button_xmargin + button_xmargin)
+    end
+    (.gt.1),
+    begin
+        ;allow room for more than 1 column of buttons
+        wnd_width -= (((button_width + button_xmargin) * buttons_right)
+&           + button_xmargin)
+    end
+    endusing
+
+    return
+
+;----------------------------------------------------------------------------
+
+end
+

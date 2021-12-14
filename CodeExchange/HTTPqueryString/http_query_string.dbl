@@ -1,0 +1,125 @@
+;-------------------------------------------------------------------------------
+;
+;Routine:       http_query_string
+;
+;Author:        Steve Ives (Synergex Professional Services Group)
+;
+;Platforms:     All Synergy-supported platforms
+;
+;Revisions:     Version Date            Comment
+;               1.0     23 Jan 2002     Original version
+;
+;Diclaimer:     This code is supplied as seen and without warranty or support.
+;               You may use and redistribute this code as you wish, but doing
+;               so is entirely your own risk. Neither the author or Synergex
+;               accept responsability for any loss or damage which may result
+;               from the use of this code.
+;
+;-------------------------------------------------------------------------------
+;
+;When passing form data via the HTTP protocol, field names and values are often
+;passed in the form of a "query string", which is essentially an ampersand (&)
+;delimited string containing field name and value pairs. For example:
+;
+;   firstname=John&lastname=Doe&city=Gold+River&state=CA
+;
+;Query strings are typically used in one of two ways, depending on the HTTP
+;"method" being used.  If you are using a HTTP GET then the query string is
+;appended to the end of the URI, following a question mark (?).  For example:
+;
+;   http://www.domain.com/page.asp?firstname=John&lastname=Doe
+;
+;If you are using an HTTP POST (for example to POST data to an Active Server
+;Pages form) then the querystring is passed in the BODY of the HTTP request.
+;
+;This function accepts an array of field names and an array of field values
+;and then builds and returns a query string in a dynamic memory handle. The
+;arrays you pass in MUST BE REAL ARRAYS (i.e. declared with the [] syntax).
+;An additional optional parameter returns the length of the returned data.
+;
+;An example of using this routine is:
+;
+;   field[1] = "name"
+;   field[2] = "location"
+;
+;   value[1] = "John Doe"
+;   value[2] = "Sacramento, CA"
+;
+;   handle = %http_query_string(field,value)
+;
+;In this instance, the content of the returned memory handle would be:
+;
+;   name=John+Doe&location=Sacramento%2C+CA
+;
+;Notice that data passed through a query string must also be URL Encoded, and
+;this routine uses the URL_ENCODE routine (also available from the Synergy
+;Code Exchange) for that purpose.
+;
+;DEALLOCATION OF THE STATIC DYNAMIC MEMORY ALLOCATED BY THIS ROUTINE IS THE
+;RESPONSIBILITY OF THE CALLING ROUTINE.
+;
+;-------------------------------------------------------------------------------
+;
+.function http_query_string, ^VAL
+
+    ;Required parameters
+    a_name          ,[*]a   ;Array of field names (required, in)
+    a_value         ,[*]a   ;Array of field values (required, in)
+
+    ;Optional parameters
+    a_retlen        ,n      ;Length od query string (optional, out)
+
+    ;End of parameters
+
+stack record
+    elements        ,i4     ;Number of elements in passed arrays
+    values          ,i4     ;Number of values processed into output string
+    count           ,i4     ;Loop counter
+    mh              ,D_HANDLE   ;Memory handle
+    ms              ,i4     ;Max size of memory handle
+
+external function
+    url_encode      ,a
+
+.proc
+
+    elements = ^size(a_name[]) / ^size(a_name)
+    clear values
+
+    ;Figure out the maximum possible size of the return data. This is the maximum
+    ;mength of the name of a variable, plus the maximum size of the value of a
+    ;variable multiplied by three to allow for the possibility that every character
+    ;may need to be replaced with it's escaped (%NN format) value, plus two for the
+    ;equals sign and ampersand, multiplied by the maximum number of variables.
+
+    ms = (elements * (^size(a_name) + (^size(a_value) * 3) + 2))
+
+    ;Allocate dynamic memory
+    mh = %mem_proc(DM_ALLOC+DM_STATIC+DM_BLANK,ms)
+
+    for count from 1 thru elements
+    begin
+        if a_name[count]
+        begin
+            if (values)
+                ^m(mh) = %atrim(^m(mh)) + "&"
+
+            ^m(mh) = %atrim(^m(mh)) + %atrim(a_name[count]) + "="
+
+            if (a_value[count])
+                ^m(mh) = %atrim(^m(mh)) + %url_encode(a_value[count])
+
+            values+=1
+        end
+    end
+
+    ;Trim the allocated memory back down to the size of the actual data
+    mh = %mem_proc(DM_RESIZ,ms=%trim(^m(mh)),mh)
+
+    if ^passed(a_retlen)
+        a_retlen=ms
+
+    freturn mh
+
+.end
+

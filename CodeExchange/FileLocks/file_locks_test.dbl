@@ -1,0 +1,357 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+.main ;file_locks
+
+; version 1.0 initial version
+; version 1.1 support for wildcards
+; version 1.2 has improved support for wildcards and DBLCASE
+; version 1.3 general bug fixes
+; version 1.4 added chklock output file parsing as "test mode"
+; version 1.5 general bug fixes
+; version 1.6 added support for windows - now requires DBLBINDIR folder in path
+; version 1.7 added support for alternate keys
+; version 1.8 bug fix for windows support logic
+; version 1.9 read by RFA to a deleted record logic
+; version 1.10 Synergy for .Net changes
+
+; "test mode" means that the filename entered in the program is the output from
+; chklocks, and is being parsed by the routine, and not generating the current
+; chklock output.  If the first character of the filename is a tilde '~', the
+; rest of the filename is used to open a chklock output file.
+
+    external function
+        add_buff            ,a
+        file_locks          ,^VAL
+        get_ttys_filename   ,a
+
+.define D_MAX_LOCKS     20
+.define D_MAX_KEYLEN    60
+
+.align
+    record
+        tnmbr       ,i8                     ;terminal number
+        error       ,i4                     ;error flag
+        ctr         ,i4                     ;loop counter
+        syscode     ,i4                     ;system code
+        tt_ch       ,i4                     ;TT channel
+        term        ,a40                    ;terminal
+
+        ;file_locks arguments
+        filename    ,a60                    ;filename
+        size        ,i4                     ;number of locks requested
+        keys        ,[ D_MAX_LOCKS ]a D_MAX_KEYLEN    ;primary key
+        keylens     ,[ D_MAX_LOCKS ]i4      ;primary key lengths
+        files       ,[ D_MAX_LOCKS ]a80     ;file name
+        pids        ,[ D_MAX_LOCKS ]a20     ;process id
+        users       ,[ D_MAX_LOCKS ]a40     ;username
+        ttypes      ,[ D_MAX_LOCKS ]a40     ;terminal type
+        altkey      ,i4                     ;alternate key
+        altkeys     ,[ D_MAX_LOCKS ]a D_MAX_KEYLEN     ;alternate keys
+        altkeylens  ,[ D_MAX_LOCKS ]i4      ;alternate key lengths
+
+.align
+    record
+        buff        ,a65535                 ;print buffer
+
+.proc
+
+    xcall flags(7004020, 1)
+
+    xcall envrn(syscode)
+
+    tt_ch = 1
+    open(tt_ch, O, 'TT:')
+
+    forms(tt_ch, 1)
+    writes(tt_ch, "FILE_LOCKS v1.10")
+    forms(tt_ch, 1)
+
+    do  begin
+        forms(tt_ch, 1)
+        display(tt_ch, "Filename : ")
+        reads(tt_ch, filename, eof)
+        if(filename)
+            call check
+    end
+    until(.not.filename)
+eof,
+    forms(tt_ch, 1)
+
+    close tt_ch
+    stop D_EXIT_SUCCESS
+
+;--------------------------------------------------------------------
+
+check,
+
+    ;Don't want alternate keys.  This is only useful when using file_locks
+    ; from within an application, that is checking for conflicting locks,
+    ; and the application is reading the file, using an alternate key.
+    altkey = -1
+
+    size = D_MAX_LOCKS
+    using error = %file_locks(%atrim(filename), size, keys, keylens,
+&       files, pids, users, ttypes, altkey, altkeys, altkeylens) select
+    (0),
+    begin
+        if(size .gt. 0) then
+        begin
+            for ctr from 1 thru size
+            begin
+                clear buff
+
+                ;alternate key info (if required)
+                if(altkey .gt. 0)
+                begin
+                    if(altkeylens[ctr] .gt. 0 .and. altkeylens[ctr] .lt. D_MAX_KEYLEN) then
+                        buff = %add_buff(buff,
+&                           "Key " + %string(altkey) + " [" + altkeys[ctr](1:altkeylens[ctr]) + "]")
+                    else
+                        buff = %add_buff(buff,
+&                           "Key " + %string(altkey) + " [" + %atrim(altkeys[ctr]) + "]")
+                end
+
+                ;primary key info
+                if(keylens[ctr] .gt. 0 .and. keylens[ctr] .lt. D_MAX_KEYLEN) then
+                    buff = %add_buff(buff,
+&                       "Key 0 [" + keys[ctr](1:keylens[ctr]) + "]" )
+                else
+                    buff = %add_buff(buff,
+&                       "Key 0 [" + %atrim(keys[ctr]) + "]")
+
+                ;filename wildcard
+                if(%instr(1, filename, '*') .or. %instr(1, filename, '?'))
+                begin
+                    buff = %add_buff(buff,
+&                       "File [" + %atrim(files[ctr]) + "]")
+                end
+
+                ;process ID
+                if(pids[ctr])
+                begin
+                    buff = %add_buff(buff,
+&                       "PID [" + %atrim(pids[ctr]) + "]")
+                end
+
+                ;user name
+                if(users[ctr])
+                begin
+                    buff = %add_buff(buff,
+&                       "User [" + %atrim(users[ctr]) + "]")
+                end
+
+                ;terminal info
+                if(ttypes[ctr])
+                begin
+                    xcall tt_name_to_number(ttypes[ctr], tnmbr)
+                    if(tnmbr .lt. -1000) then
+                    begin
+                        using tnmbr select
+                        (-1087),
+                            term = "INVALID TERMINAL NAME"
+                        (-1018),
+                            term = "NO FILE " + %get_ttys_filename
+                        (-1001),
+                            term = "CANNOT FIND TERMINAL IN " + %get_ttys_filename
+                        (),
+                            term = "*ERROR:" + %string(tnmbr) + "*"
+                        endusing
+                    end
+                    else
+                    begin
+                        if(tnmbr .ge. 0) then
+                            term = tnmbr [LEFT]
+                        else
+                            term = ""
+                    end
+
+                    buff = %add_buff(buff,
+&                       "Terminal [" + %atrim(ttypes[ctr]) + "]  " +
+&                       "TNMBR [" + %atrim(term) + "]")
+                end
+
+            end
+            writes(tt_ch, buff(1:%trim(buff)))
+        end
+        else
+            writes(tt_ch, "No locks")
+    end
+    (87),
+    begin
+        writes(tt_ch, "Invalid filename")
+    end
+    (33),
+    begin
+        writes(tt_ch, "No free channels to access file")
+    end
+    (29),
+    begin
+        writes(tt_ch, "Unsupported platform")
+    end
+    (18),
+    begin
+        writes(tt_ch, "Cannot open file")
+    end
+    (17),
+    begin
+        writes(tt_ch, "Bad file specification")
+    end
+    (-18),
+    begin
+        using syscode select
+        (8),
+            buff = "make sure $DBLDIR/bin is defined in $PATH"
+        (.gt. 10),
+            buff = "make sure %DBLDIR%\bin is defined in %PATH%"
+        (),
+            buff = "make sure your search path is correct"
+        endusing
+        writes(tt_ch, "Cannot run CHKLOCK - " + %atrim(buff))
+    end
+    (),
+    begin
+        writes(tt_ch, "Unknown error returned [" + %string(error) + "]")
+    end
+    endusing
+
+    forms(tt_ch, 1)
+    return
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+.ifdef DBLv9
+function ADD_BUFF  ,a
+.else
+function ADD_BUFF  ;a
+.endc
+    a_buffer        ,a              ;REQUIRED buffer
+    a_text          ,a              ;REQUIRED append buffer
+
+proc
+
+    if(a_buffer)
+    begin
+        freturn a_buffer(1:%trim(a_buffer)) + "  " + a_text(1:%trim(a_text))
+    end
+
+    freturn a_text(1:%trim(a_text))
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Unix equivalent of the OpenVMS-only Synergy routine
+;
+; -ve terminal number = error (< -1000 unexpected error)
+
+subroutine TT_NAME_TO_NUMBER
+.ifdef DBLv9
+    req in  a_name      ,a              ;terminal name
+    req out a_tnmbr     ,n              ;terminal number
+    endparams
+.else
+    a_name              ,a              ;REQUIRED terminal name
+    a_tnmbr             ,n              ;REQUIRED RETURNED terminal number
+.endc ;DBLv9
+
+    external function
+        get_ttys_filename   ,a
+
+.align
+    record clr
+        buffer              ,a255   ;ps -ef buffer
+        tname               ,a80    ;terminal name
+
+.align
+    record clr_i
+        pos                 ,i4     ;position in buffer
+        chan                ,i4     ;channel
+        recnum              ,i4     ;record number
+        tlen                ,i4     ;length of tname
+
+proc
+
+    xcall envrn(pos)
+    using pos select
+    (8), ;Unix
+    begin
+        ;default return value (assumes error)
+        a_tnmbr = -1
+    end
+    (),
+    begin
+        a_tnmbr = -29
+        xreturn
+    end
+    endusing
+
+    if(.not.a_name)
+    begin
+        a_tnmbr = -1087
+        xreturn
+    end
+
+    clear ^i(clr_i), clr
+
+    ;left justify name
+    pos = 1
+    while(.not.a_name(pos:1) .and. pos .lt. ^size(tname) .and. pos .lt. %trim(a_name))
+        pos += 1
+    tname = a_name(pos, %trim(a_name))
+
+    ; add 1 to length, putting a space on the end
+    ; to make sure we're getting the correct terminal in instr
+    tlen = %trimz(tname) + 1
+
+    open(chan=%syn_freechn, I, %get_ttys_filename) [ERR=open_error]
+
+    recnum = 0
+    repeat
+    begin
+        reads(chan, buffer, eof)
+
+        ;search for terminal name in record
+        if(%instr(1, buffer, tname(1:tlen)))
+            exitloop
+
+        recnum += 1
+    end
+
+    close chan
+
+    ;must have found a match
+    a_tnmbr = recnum
+
+    xreturn
+
+eof,
+    close chan
+
+    a_tnmbr = -1001
+    xreturn
+
+open_error,
+    a_tnmbr = -1000 + %error
+    xreturn
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; this has been made a seperate function, so alternate locations for the
+; /etc/ttys file can be easily implemented in the future
+
+.ifdef DBLv9
+function get_ttys_filename ,a
+    endparams
+.else
+function get_ttys_filename ;a
+.endc
+proc
+
+    ;added a period to force the open statement to open the 'ttys' file in /etc
+    freturn '/etc/ttys.'
+
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

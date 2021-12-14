@@ -1,0 +1,12 @@
+;http_inp_rec.rec
+
+group inp_rec
+    host                ,a40            ;server name
+    port                ,d6             ;server port
+    logging             ,d1             ;logging mode
+    log_file            ,a255           ;log filename
+    hst_file            ,a255           ;server filename
+    clt_file            ,a255           ;client filename
+    clt_opt             ,d1             ;client option (0-get, 1-put)
+endgroup
+

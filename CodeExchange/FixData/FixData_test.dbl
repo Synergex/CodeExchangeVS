@@ -1,0 +1,1149 @@
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+main ;fixdata
+
+.define D_APP       "FIXDATA"
+.define D_VERSION   "1.0.1"
+
+.include 'WND:tools.def'
+.include 'WND:inpctl.def'
+.include 'DBLDIR:windows.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:fixdata_test.rec'
+
+    external function
+        FIX_DATA            ,^val
+        fileDoesNotExist    ,^val
+
+.align
+    literal
+        wnd_rows        ,i4 ,11
+        wnd_cols        ,i4 ,75
+
+.align
+    record clr_i
+        status          ,i4                     ;function return status
+        err             ,i4                     ;error flag
+        chan            ,i4                     ;channel
+        bld_id          ,i4                     ;build window id
+        tab_id          ,i4                     ;tab id
+        tabcolid        ,i4                     ;tab column id
+        wndidx          ,i4                     ;window
+        row             ,i4                     ;row
+
+.align
+    record clr
+        rpsmfile        ,a D_FILENAME_SIZE      ;RPSMAIN
+        rpstfile        ,a D_FILENAME_SIZE      ;RPSTEXT
+        mbuffer         ,a1024                  ;menu buffer build buffer
+
+proc
+
+    flags(7000000,1)
+
+    try
+    begin
+
+.ifdef D_GUI
+        u_start(,,,, wnd_rows+3, wnd_cols+2)
+.else
+        u_start
+.endc
+
+        e_sect("FIXDATA v"+D_VERSION, D_HEADER, D_LEFT, D_CLEAR)
+        u_update
+
+        clear clr, ^i(clr_i)
+
+        ;get logicals
+        getlog('RPSMFIL', rpsmfile, status)
+        getlog('RPSTFIL', rpstfile, status)
+
+        mb_column(mbuffer, 'Options', "File  ", D_GLOBAL)
+        mb_entry(mbuffer, 'O_EXIT', "OK", F4_KEY)
+        mb_entry(mbuffer, 'O_QUIT', "Quit", F3_KEY)
+        mb_entry(mbuffer, 'U_ABOUT', "About", F1_KEY)
+        mb_end(mbuffer, colid(1))
+
+        ;;Load columns, but do not place
+        mb_column(mbuffer, 'input_col', "Cursor  ",, D_NOPLC)
+        mb_entry(mbuffer, 'I_FRST', "First field", CTRL_F_KEY)
+        mb_entry(mbuffer, 'I_LAST', "Last field", CTRL_L_KEY)
+        mb_entry(mbuffer, 'I_NEXT', "Next field", DOWN_KEY)
+        mb_entry(mbuffer, 'I_PREV', "Prev field", UP_KEY)
+        mb_entry(mbuffer, 'E_LEFT', "Left 1 character", LEFT_KEY)
+        mb_entry(mbuffer, 'E_RIGHT', "Right 1 character", RIGHT_KEY)
+        mb_entry(mbuffer, 'E_CDEL', "Delete character", CTRL_H_KEY)
+        mb_end(mbuffer, colid(2))
+
+        mb_column(mbuffer, 'select_col', "Cursor  ",, D_NOPLC)
+        mb_entry(mbuffer, 'S_DOWN', "Next item", DOWN_KEY)
+        mb_entry(mbuffer, 'S_UP', "Prev item", UP_KEY)
+        mb_end(mbuffer, colid(3))
+
+        mb_column(mbuffer, 'list_col', "Cursor  ",, D_NOPLC)
+        mb_entry(mbuffer, 'S_DOWN', "Next item", DOWN_KEY)
+        mb_entry(mbuffer, 'S_UP', "Prev item", UP_KEY)
+        mb_end(mbuffer, colid(4))
+
+        mb_column(mbuffer, 'input_opt', "Options  ",, D_NOPLC)
+        mb_entry(mbuffer, 'I_DRILL', "Lookup", F7_KEY)
+        mb_end(mbuffer, colid(5))
+
+        ;;register toolkit methods
+        e_method(D_METH_UTILS, 'syn_utils',
+&       D_METH_ENTRST, 'syn_entrst')
+
+        e_state(D_VALSTCHG)
+
+        ms_close = %u_wndevents(D_CREATE,, D_EVENT_CLOSE, "close_method")
+
+        ;; create input window
+        ib_input(bld_id, 'IW_FIXDATA', wnd_rows, wnd_cols)
+
+        row = 2
+        ib_field(bld_id, 'rpsmfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(input_rps.rps_main),
+&       D_FLD_INFO, "Enter name and location of Repository main file",
+&       D_FLD_POS, row, 2, D_FLD_FPOS, row, 20,
+&       D_FLD_VIEWLEN, 50,
+&       D_FLD_DRILL, 'RPSMAIN_DRILL',
+&       D_FLD_PROMPT, "RPSMFIL")
+        row += 1
+        ib_field(bld_id, 'rpstfil', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(input_rps.rps_text),
+&       D_FLD_INFO, "Enter name and location of Repository text file",
+&       D_FLD_POS, row, 2, D_FLD_FPOS, row, 20,
+&       D_FLD_VIEWLEN, 50,
+&       D_FLD_DRILL, 'RPSTEXT_DRILL',
+&       D_FLD_PROMPT, "RPSTFIL")
+        row += 1
+        ib_field(bld_id, 'sdbmsfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(input_rps.sdbms_file),
+&       D_FLD_INFO, "Enter SDBMS filename",
+&       D_FLD_POS, row, 2, D_FLD_FPOS, row, 20,
+&       D_FLD_VIEWLEN, 50,
+&       D_FLD_DRILL, 'SDBMSFILENAME_DRILL', D_FLD_CHANGE, 'SDBMSFILENAME_CHANGE',
+&       D_FLD_PROMPT, "SDBMS Filename")
+        row += 1
+        ib_field(bld_id, 'rpsfilname', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(input_rps.rps_fil_name),
+&       D_FLD_INFO, "Enter Repository filename",
+&       D_FLD_POS, row, 2, D_FLD_FPOS, row, 20,
+&       D_FLD_UC,
+&       D_FLD_DRILL, 'FILENAME_DRILL', D_FLD_CHANGE, 'FILENAME_CHANGE',
+&       D_FLD_PROMPT, "RPS Filename")
+        row += 1
+        ib_field(bld_id, 'rpsstrname', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(input_rps.rps_str_name),
+&       D_FLD_INFO, "Enter Repository structure",
+&       D_FLD_POS, row, 2, D_FLD_FPOS, row, 20,
+&       D_FLD_UC,
+&       D_FLD_CHANGE, 'STRNAME_CHANGE',
+&       D_FLD_PROMPT, "RPS Structure")
+        row += 1
+        ib_field(bld_id, 'logfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(input_rps.log_rps),
+&       D_FLD_INFO, "Enter name of log file, or leave blank",
+&       D_FLD_POS, row, 2, D_FLD_FPOS, row, 20,
+&       D_FLD_VIEWLEN, 50,
+&       D_FLD_PROMPT, "Log File")
+        row += 1
+        ib_field(bld_id, 'logChanges', D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(input_rps.logChanges),
+&       D_FLD_INFO, "Log file updates in log file, ignored if log file is blank",
+&       D_FLD_POS, row, 2, D_FLD_FPOS, row, 20,
+&       D_FLD_CHECKBOX,
+&       D_FLD_PROMPT, "Log file updates in log file")
+        row += 1
+        ib_field(bld_id, 'doNotUpdate', D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(input_rps.doNotUpdate),
+&       D_FLD_INFO, "Do not update files, allows generation of pre-update log",
+&       D_FLD_POS, row, 2, D_FLD_FPOS, row, 20,
+&       D_FLD_CHECKBOX,
+&       D_FLD_PROMPT, "Do not update files")
+        row += 1
+        ib_field(bld_id, 'ignoreSpaces', D_FLD_TYPE, D_DECIMAL, D_FLD_SIZE, ^size(input_rps.ignoreSpaces),
+&       D_FLD_INFO, "Decimals that only contain spaces will not be set to zeros",
+&       D_FLD_POS, row, 2, D_FLD_FPOS, row, 20,
+&       D_FLD_CHECKBOX,
+&       D_FLD_PROMPT, "Ignore decimals that only contain spaces")
+
+        ib_button(bld_id, 'O_EXIT', DSB_TEXT, "OK",,, "O")
+        ib_button(bld_id, 'O_QUIT', DSB_TEXT, "Cancel",,, "N")
+
+        ib_end(bld_id, wndidx)
+
+        w_brdr(wndidx, WB_TITLE, "Fix Data")
+
+        ;;create tabset
+        tab_id = %ts_tabset(DTS_CREATE, 'BLD', wnd_rows+1, wnd_cols+1,,, DTS_NONE)
+
+        ts_tabset(DTS_WINDOW, tab_id, wndidx, 'fixSDBMS',,"Fix SDBMS Data")
+
+        ;;create tabset menu column options
+;       mb_column(mbuffer, 'tab_col', "Tab options  ")
+;       mb_entry(mbuffer, 'TS_TABNEXT', "Next tab", F8_KEY)
+;       mb_entry(mbuffer, 'TS_TABPREV', "Prev tab", F9_KEY)
+;       mb_end(mbuffer, tabcolid)
+
+
+        do
+        begin
+            ts_process(tab_id, input_rps)
+            if(g_select)
+            begin
+                using g_entnam select
+                ('O_EXIT'),
+                begin
+                    ;;delete log file
+                    if(input_rps.log_rps)
+                        log_message('~~'+input_rps.log_rps)
+
+                    e_sect(" ", D_INFO, D_LEFT, D_CLEAR)
+                    u_update
+
+                    err = %FIX_DATA(input_rps.sdbms_file, input_rps.rps_str_name, input_rps.rps_fil_name,
+&                   input_rps.rps_main, input_rps.rps_text,
+&                   input_rps.ignoreSpaces, input_rps.logChanges, input_rps.doNotUpdate)
+                    using err select
+                    (0),
+                        u_message("File updated OK")
+                    (1),
+                        u_message("DD_INIT error")
+                    (2),
+                        u_message("Invalid RPS structure")
+                    (3),
+                        u_message("RPS Structure size does not match ISAM record length")
+                    (4),
+                        u_message("Error opening SDBMS file")
+                    (5),
+                        u_message("Error opening RPS filename")
+                    (),
+                        u_message("Error "+%string(err)+" updating file")
+                    endusing
+                end
+                endusing
+
+                ;force program to exit
+                g_entnam = 'O_QUIT'
+            end
+        end
+        until(g_entnam == 'O_QUIT')
+
+        u_finish
+    end
+    catch (excp ,@Exception)
+    begin
+        data ttCh ,i4, %syn_freechn()
+        open(ttCh, O, 'TT:')
+        writes(ttCh, excp.Message)
+        writes(ttCh, excp.StackTrace)
+        close ttCh
+.ifdef DBLNET
+        StopMessage()
+.endc ;DBLNET
+        stop D_EXIT_FAILURE
+    end
+    endtry
+
+    stop D_EXIT_SUCCESS
+
+;;----------------------------------------------------------------------------
+
+endmain
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; initialize global data section in FIXDATA.REC
+
+subroutine fixdata_init
+    endparams
+
+.define GDS_INIT
+.include 'INC:fixdata_test.rec'
+.undefine GDS_INIT
+
+proc
+
+    xreturn
+
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; get parameters
+
+subroutine fixSDBMS
+    req in        wndidp          ,n              ;window ID
+    req inout     a_input_rps     ,a              ;input record
+    endparams
+
+.include 'WND:tools.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:fixdata_test.rec'
+
+    external function
+        fileDoesNotExist     ,^val
+
+.align
+    record
+        status          ,i4                     ;command line status
+        shownMsg1       ,i4                     ;shown message about too many filenames
+        fld             ,a30                    ;field
+        message         ,a200                   ;error message
+
+proc
+
+    input_rps = a_input_rps
+
+    if(%get_rps_filenames(input_rps.rps_main, input_rps.rps_text))
+        clear input_rps.rps_main, input_rps.rps_text
+
+;    if(!input_rps.rps_fil_name)
+;        input_rps.rps_fil_name = ''
+;    if(!input_rps.rps_str_name)
+;        input_rps.rps_str_name = ''
+;    if(!input_rps.log_rps)
+;        input_rps.log_rps = 'TMP:fixdata.log'
+
+    input_rps.logChanges = 1
+    input_rps.doNotUpdate = 0
+    input_rps.ignoreSpaces = 0
+
+    i_display(wndidp,, input_rps)
+
+    if(input_rps.rps_main && input_rps.rps_text) then
+        i_next(wndidp,, 'SDBMSFILE')
+    else
+        i_next(wndidp,, '*FRST*')
+
+    clear shownMsg1
+
+    do
+    begin
+        m_column(D_PLACE, colid(5))
+        i_input(wndidp,, input_rps, colid(2), colid(3),, D_NOTERM,,, dcs)
+        m_column(D_REMOVE, colid(5))
+
+        if (g_select) then
+            call mnu_proc
+        else
+            if(g_setsts) then
+                call set_proc
+            else
+                call brk_proc
+    end
+    until(g_entnam == 'O_QUIT' || g_entnam == 'O_EXIT' || g_entnam == 'TS_')
+
+    u_update
+
+    xreturn
+
+;;----------------------------------------------------------------------------
+
+mnu_proc,
+
+    using g_entnam select
+    ('O_EXIT'),
+    begin
+        call validate_fields
+
+        if(fld) then
+            clear g_entnam
+        else
+            a_input_rps = input_rps
+    end
+    ('O_QUIT'),
+        nop
+    ('O_ABOUT'),
+        u_about(D_APP, D_VERSION, %datecompiled)
+    endusing
+
+    return
+
+;;----------------------------------------------------------------------------
+
+brk_proc,
+
+    return
+
+;;----------------------------------------------------------------------------
+
+set_proc,
+
+    call validate_fields
+
+    return
+
+;;----------------------------------------------------------------------------
+
+validate_fields,
+
+    clear fld, message
+
+    ;; check RPSMFIL exists
+    if(!fld && %fileDoesNotExist(input_rps.rps_main, 'I:I'))
+        fld = 'RPSMFIL'
+    ;; check RPSTFIL exists
+    if(!fld && %fileDoesNotExist(input_rps.rps_text, 'I:I'))
+        fld = 'RPSTFIL'
+
+    if(input_rps.sdbms_file) then
+    begin
+        ;; check file exists
+        if(!fld && %fileDoesNotExist(input_rps.sdbms_file, 'I:I'))
+        begin
+            if(%fileDoesNotExist(input_rps.sdbms_file, 'I'))
+                fld = 'SDBMSFILE'
+        end
+    end
+    else
+    begin
+        ;; check RPS file name
+        if(!fld && !input_rps.rps_fil_name)
+            fld = 'RPSFILNAME'
+    end
+
+    ;; check RPS structure name
+    if(!fld && !input_rps.rps_str_name)
+        fld = 'RPSSTRNAME'
+
+    if(!fld && input_rps.log_rps)
+    begin
+        ;;check log file exists
+        using %fileDoesNotExist(input_rps.log_rps, 'I') select
+        (0, 18),
+            nop
+        (),
+            fld = 'LOGFILE'
+        endusing
+    end
+
+    if(!fld && input_rps.doNotUpdate && !input_rps.logChanges)
+    begin
+        fld = 'LOGCHANGES'
+        message = "Do Not Update and Log Changes : Invalid combination"
+    end
+
+    if(!fld && !input_rps.sdbms_file && !input_rps.rps_fil_name)
+    begin
+        fld = 'SDBMSFILE'
+        message = "Must have SDBMS filename or RPS filename"
+    end
+
+    if(!fld)
+    begin
+        dd_init(dcs, input_rps.rps_main, input_rps.rps_text)
+        using error select
+        (E_OK),
+        begin
+            if(!fld && input_rps.rps_fil_name)
+            begin
+                dd_file(dcs, DDL_INFO, input_rps.rps_fil_name, fl_info)
+                if(error)
+                begin
+                    message = "RPS Filename:" + %atrim(input_rps.rps_fil_name)+' '+%string(error)
+                    fld = 'RPSMFIL'
+                end
+            end
+            if(!fld && input_rps.rps_str_name)
+            begin
+                dd_struct(dcs, DDS_INFO, input_rps.rps_str_name, s_info)
+                if(error)
+                begin
+                    message = "RPS Structure:" + %atrim(input_rps.rps_str_name)+' '+%string(error)
+                    fld = 'RPSMFIL'
+                end
+            end
+            dd_exit(dcs)
+        end
+        (E_NOFIND),
+        begin
+            message = "RPS Structure:" + %atrim(input_rps.rps_str_name)+' '+%string(error)
+            fld = 'RPSMFIL'
+        end
+        (E_OPNERR),
+        begin
+            message = "RPS Structure:" + %atrim(input_rps.rps_str_name)+' '+%string(error)
+            fld = 'RPSMFIL'
+        end
+        (E_INVFNC),
+        begin
+            message = "RPS Structure:" + %atrim(input_rps.rps_str_name)+' '+%string(error)
+            fld = 'RPSMFIL'
+        end
+        (E_OPNERRM),
+        begin
+            message = "Cannot open RPS main file"
+            fld = 'RPSMFIL'
+        end
+        (E_OPNERRT),
+        begin
+            message = "Cannot open RPS text file"
+            fld = 'RPSMFIL'
+        end
+        (E_BADVERS),
+        begin
+            message = "Incompatible Repository version"
+            fld = 'RPSMFIL'
+        end
+        (),
+        begin
+            message = "DD_INIT error "+%string(error)
+            fld = 'RPSMFIL'
+        end
+        endusing
+    end
+
+    if(!fld && input_rps.sdbms_file && input_rps.rps_fil_name && input_rps.rps_str_name)
+    begin
+        if(!shownMsg1)
+        begin
+            message = "Cannot specify SDMS filename, RPS filename and RPS structure\n"
+&           + "RPS filename will be ignored unless you clear SDMS filename or RPS structure"
+            fld = 'RPSFILNAME'
+            shownMsg1 = 1
+        end
+    end
+
+
+    if(fld) then
+    begin
+        i_next(wndidp,, fld)
+        if(message) then
+            u_message(%atrim(message))
+        else
+            u_message("Invalid data")
+    end
+    else
+        i_next(wndidp,, '*FRST*')
+
+    return
+
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine rps_select
+    req out        a_filename      ,a              ;filename
+    opt in         a_default       ,a              ;RPS default filename
+    endparams
+
+.include 'RPSLIB:ddinfo.def'
+.include 'INC:fixdata_test.rec'
+
+proc
+
+    e_enter
+
+    m_column(D_REMOVE, D_LOCAL)
+
+    if(!%u_getfilename(a_filename, "Select Repository file",,,, a_default, 'ism'
+&   , colid(2), colid(3), colid(4),, D_OFN_NONETWORK+D_OFN_NOTRANS))
+&   clear a_filename
+
+    e_exit
+
+    xreturn
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; get_rps_filenames return values
+;; 0 = all ok
+;; 1 = RPSMAIN unknown
+;; 2 = RPSTEXT unknown
+;; 3 = Both unknown
+
+function get_rps_filenames ,^VAL
+    req out        a_rpsmfil       ,a       ;RPSMAIN filename
+    req out        a_rpstfil       ,a       ;RPSTEXT filename
+    opt out        a_opencheck     ,n       ;check if isam exists
+    ; 0 = all ok
+    ; 1 = RPSMAIN missing
+    ; 2 = RPSTEXT missing
+    ; 3 = Both missing
+    endparams
+
+
+.align
+    record clr_i
+        fstatus         ,i4             ;function return status
+        status          ,i4             ;status flag
+        chan            ,i4             ;channel
+
+proc
+
+    clear ^i(clr_i)
+
+    getlog('RPSMFIL', a_rpsmfil, status)
+    if(!status)
+    begin
+        getlog('RPSDAT', a_rpsmfil, status)
+        if(status) then
+            a_rpsmfil = 'RPSDAT:' + 'rpsmain.ism'
+        else
+        begin
+            clear a_rpsmfil
+            fstatus += 1
+        end
+    end
+
+    getlog('RPSTFIL', a_rpstfil, status)
+    if(!status)
+    begin
+        getlog('RPSDAT', a_rpstfil, status)
+        if(status) then
+            a_rpstfil = 'RPSDAT:' + 'rpstext.ism'
+        else
+        begin
+            clear a_rpstfil
+            fstatus += 2
+        end
+    end
+
+    if(^passed(a_opencheck))
+    begin
+        clear a_opencheck
+        if(fileDoesNotExist(a_rpsmfil, 'I:I'))
+            a_opencheck += 1
+        if(fileDoesNotExist(a_rpstfil, 'I:I'))
+            a_opencheck += 2
+    end
+
+    freturn fstatus
+endfunction
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Check if a file exists.  Uses mode to confirm it's the correct file type
+
+function fileDoesNotExist ,^VAL
+    req in        a_file          ,a              ;REQUIRED filename
+    req in        a_mode          ,a              ;REQUIRED open mode
+    endparams
+
+.align
+    record
+        chan            ,i4
+        error           ,i4
+
+proc
+
+    u_open(chan, a_mode, a_file,,, error)
+    if(!error)
+        u_close(chan)
+
+    freturn error
+
+endfunction
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Drill Method
+
+subroutine rpsmain_drill ,reentrant
+.include "WND:inpinf.def"       ; Group argument of input info
+    a_inprec        ,a              ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data ,a              ; Optional method data argument
+
+.include 'RPSLIB:ddinfo.def'
+.include 'INC:fixdata_test.rec'
+
+.align
+    record
+        filename        ,a 255
+
+proc
+
+    input_rps = a_inprec
+    filename = input_rps.rps_main
+    rps_select(filename, 'rpsmain')
+    if(filename)
+    begin
+        input_rps.rps_main = filename
+        a_inprec = input_rps
+    end
+
+    return
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Drill Method
+
+subroutine rpstext_drill ,reentrant
+.include "WND:inpinf.def"       ; Group argument of input info
+    a_inprec        ,a              ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data ,a              ; Optional method data argument
+
+.include 'RPSLIB:ddinfo.def'
+.include 'INC:fixdata_test.rec'
+
+.align
+    record
+        filename        ,a 255
+
+proc
+
+    input_rps = a_inprec
+    filename = input_rps.rps_text
+    rps_select(filename, 'rpstext')
+    if(filename)
+    begin
+        input_rps.rps_text = filename
+        a_inprec = input_rps
+    end
+
+    return
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Change Method for a list of Repository files
+
+function sdbmsfilename_change ,^val ,reentrant
+    a_data_entered      ,a  ; A buffer containg the field data as
+    ; entered by the user.
+    a_data_stored       ,a  ; A buffer for the final storage of the
+    ; data.
+    a_pending_status    ,n  ; The result of Toolkit's field
+    ; validations.
+.include "WND:inpinf.def"   ; Group argument of input info
+    a_inprec            ,a  ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data     ,a  ; Optional method data argument
+
+.include "WND:tools.def"
+.include 'RPSLIB:ddinfo.def'
+
+    record
+        f_ptr           ,i4
+        chan            ,i4
+        count           ,i4
+        filename        ,a256
+
+proc
+
+    filename = a_data_entered
+    locase filename
+    u_open(chan, 'I:I', a_data_entered,,, error)
+    if(error == 56) ;not an ISAM file
+        u_open(chan, 'I', a_data_entered,,, error)
+    if(error) then
+    begin
+        u_message("Cannot open file")
+        a_pending_status = D_EMITTEDERR
+    end
+    else
+        u_close(chan)
+
+    freturn a_pending_status
+endfunction
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Drill Method for a list of Repository files
+
+subroutine sdbmsfilename_drill ,reentrant
+.include "WND:inpinf.def"       ; Group argument of input info
+    a_inprec        ,a              ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data ,a              ; Optional method data argument
+
+.include 'WND:tools.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:fixdata_test.rec'
+
+proc
+
+    e_enter
+
+    m_column(D_REMOVE, D_LOCAL)
+
+    input_rps = a_inprec
+
+    if(%u_getfilename(input_rps.sdbms_file, "Select file",,,,, 'ism'
+&   , colid(2), colid(3), colid(4),, D_OFN_NONETWORK+D_OFN_NOTRANS))
+        a_inprec = input_rps
+
+    e_exit
+
+    xreturn
+
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; change Method for a list of Repository files
+
+function filename_change ,^val ,reentrant
+    a_data_entered      ,a  ; A buffer containg the field data as
+    ; entered by the user.
+    a_data_stored       ,a  ; A buffer for the final storage of the
+    ; data.
+    a_pending_status    ,n  ; The result of Toolkit's field
+    ; validations.
+.include "WND:inpinf.def"   ; Group argument of input info
+    a_inprec            ,a  ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data     ,a  ; Optional method data argument
+
+.include "WND:tools.def"
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:fixdata_test.rec'
+.include 'INC:FixData.rec'
+
+    record
+        f_ptr           ,D_HANDLE
+        chan            ,i4
+        s_ptr           ,D_HANDLE
+
+proc
+
+    if(!a_data_entered)
+    begin
+        freturn a_pending_status
+    end
+
+    a_pending_status = D_EMITTEDERR
+
+    input_rps = a_inprec
+
+    dd_init(dcs, input_rps.rps_main, input_rps.rps_text)
+    using error select
+    (E_OK),
+    begin
+        dd_file(dcs, DDL_INFO, a_data_entered, fl_info)
+        if (error)
+        begin
+            u_message("Cannot find RPS File")
+            freturn a_pending_status
+        end
+
+        using fli_nmstructs select
+        (1),
+        begin
+            input_rps.rps_str_name = fli_struct
+            i_dspfld(inp_wndid, 'RPSSTRNAME', input_rps.rps_str_name)
+            a_inprec = input_rps
+        end
+        (0),
+        begin
+            clear input_rps.rps_str_name
+            i_dspfld(inp_wndid, 'RPSSTRNAME', input_rps.rps_str_name)
+        end
+        (),
+        begin
+            if(!input_rps.rps_str_name)
+            begin
+                s_ptr = %mem_proc(DM_ALLOC, fli_nmstructs*^size(str_names))
+                dd_file(dcs, DDL_STRS, fli_nmstructs, ^m(str_names, s_ptr))
+                if (error)
+                begin
+                    u_message("DD_FILE error "+%string(error))
+                    clear ^m(s_ptr)
+                end
+                input_rps.rps_str_name = ^m(str_names[1], s_ptr)
+                s_ptr = %mem_proc(DM_FREE, s_ptr)
+                i_dspfld(inp_wndid, 'RPSSTRNAME', input_rps.rps_str_name)
+                a_inprec = input_rps
+            end
+        end
+        endusing
+        dd_exit(dcs)
+        a_pending_status = D_OK
+    end
+    (E_NOFIND),
+        u_message("Record not found")
+    (E_OPNERR),
+        u_message("Cannot open RPS")
+    (E_INVFNC),
+        u_message("Invalid Function")
+    (E_OPNERRM),
+        u_message("Cannot open RPS main file")
+    (E_OPNERRT),
+        u_message("Cannot open RPS text file")
+    (E_BADVERS),
+        u_message("Incompatible Repository version")
+    (),
+        u_message("DD_INIT error "+%string(error))
+    endusing
+
+    freturn a_pending_status
+endfunction
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; Drill Method for a list of Repository files
+
+subroutine filename_drill ,reentrant
+.include "WND:inpinf.def"       ; Group argument of input info
+    a_inprec        ,a              ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data ,a              ; Optional method data argument
+
+.include 'WND:tools.def'
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:fixdata_test.rec'
+.include 'INC:fixdata.rec'
+
+.align
+    record
+        count               ,d4
+        file_name           ,a ^size(fil_array)
+
+.align
+    record
+        ctr                 ,i4
+        f_ptr               ,i4
+        bld_id              ,i4
+        wnd_id              ,i4
+        lst_id              ,i4
+        req                 ,i4
+
+proc
+
+    input_rps = a_inprec
+
+    dd_init(dcs, input_rps.rps_main, input_rps.rps_text)
+    using error select
+    (E_OK),
+    begin
+        dd_name(dcs, DDN_COUNT, DDN_FILE, count)
+        if (error)
+        begin
+            u_message("DD_NAME error "+%string(error))
+            clear count
+        end
+
+        if (count > 0) then
+            call build_list
+        else
+            u_message("No Files in Repository")
+
+        dd_exit(dcs)
+    end
+    (E_NOFIND),
+        u_message("Record not found")
+    (E_OPNERR),
+        u_message("Cannot open RPS")
+    (E_INVFNC),
+        u_message("Invalid Function")
+    (E_OPNERRM),
+        u_message("Cannot open RPS main file")
+    (E_OPNERRT),
+        u_message("Cannot open RPS text file")
+    (E_BADVERS),
+        u_message("Incompatible Repository version")
+    (),
+        u_message("DD_INIT error "+%string(error))
+    endusing
+
+    xreturn
+
+;;----------------------------------------------------------------------------
+
+build_list,
+
+    e_enter
+
+    m_column(D_REMOVE, D_LOCAL)
+
+    f_ptr = %mem_proc(DM_ALLOC, count*^size(fil_array))
+
+    dd_name(dcs, DDN_LIST, DDN_FILE, count, ^m(fil_array, f_ptr))
+
+    ib_input(bld_id, 'LIST_RPS', 1, ^size(fil_array))
+
+    ib_field(bld_id, 'rpsfile', D_FLD_TYPE, D_ALPHA, D_FLD_SIZE, ^size(fil_array))
+
+    ib_end(bld_id, wnd_id)
+
+    l_class(bld_id, 'LC_FILENAME', 2, 2,,,,,,,, 'filename_load')
+
+    l_create(lst_id, wnd_id, file_name,, 'LC_FILENAME')
+
+    l_method(lst_id, D_LWNDEVENT, ms_close)
+
+    req = D_LNOP
+
+    do
+    begin
+        l_select(lst_id, req, file_name,,,,,, colid(3),,,,,,, f_ptr, count)
+        if(g_select) then
+        begin
+            using g_entnam select
+            ('EXIT'),
+                i_force(file_name)
+            endusing
+        end
+        else
+        begin
+            l_status(lst_id, D_LCURITM, ctr)
+            if(ctr)
+                i_force(file_name)
+            g_entnam = 'EXIT'
+        end
+    end
+    until(g_entnam == 'EXIT' || g_entnam == 'O_QUIT')
+
+    clear g_entnam
+    e_exit
+
+    return
+
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; List load method for filenames
+
+subroutine filename_load ,stack
+    a_listid        ,n              ; List id
+    a_req           ,n              ; Request flag
+    a_data          ,a              ; Item data
+    a_inpid         ,n              ; Input window id
+    a_disable       ,n              ; (Optional) Disable flag
+    a_index         ,n              ; Loading index
+
+    a_f_ptr         ,n              ; array memory handle
+    a_count         ,n              ; array size
+
+.include "WND:tools.def"
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:fixdata.rec'
+
+proc
+
+    if(a_index < a_count) then
+    begin
+        a_data = ^m(fil_array[a_index], a_f_ptr)
+        i_display(a_inpid,, a_data)
+    end
+    else
+        a_req = D_LEOF
+
+    xreturn
+
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; change Method for a list of Repository files
+
+function strname_change ,^val ,reentrant
+    a_data_entered      ,a  ; A buffer containg the field data as
+    ; entered by the user.
+    a_data_stored       ,a  ; A buffer for the final storage of the
+    ; data.
+    a_pending_status    ,n  ; The result of Toolkit's field
+    ; validations.
+.include "WND:inpinf.def"   ; Group argument of input info
+    a_inprec            ,a  ; The data_area argument passed to the
+    ;  calling input routine.
+    ; a_method_data     ,a  ; Optional method data argument
+
+.include "WND:tools.def"
+.include 'RPSLIB:ddinfo.def'
+
+.include 'INC:fixdata_test.rec'
+
+    record
+        f_ptr           ,i4
+        chan            ,i4
+        count           ,i4
+
+proc
+
+    if(!a_data_entered)
+        freturn a_pending_status
+
+    a_pending_status = D_EMITTEDERR
+
+    input_rps = a_inprec
+
+    dd_init(dcs, input_rps.rps_main, input_rps.rps_text)
+    using error select
+    (E_OK),
+    begin
+        dd_struct(dcs, DDL_INFO, a_data_entered, s_info)
+        if (error) then
+            u_message("Cannot find RPS Structure")
+        else
+            a_pending_status = D_OK
+        dd_exit(dcs)
+    end
+    (E_NOFIND),
+        u_message("Record not found")
+    (E_OPNERR),
+        u_message("Cannot open RPS")
+    (E_INVFNC),
+        u_message("Invalid Function")
+    (E_OPNERRM),
+        u_message("Cannot open RPS main file")
+    (E_OPNERRT),
+        u_message("Cannot open RPS text file")
+    (E_BADVERS),
+        u_message("Incompatible Repository version")
+    (),
+        u_message("DD_INIT error "+%string(error))
+    endusing
+
+    freturn a_pending_status
+endfunction
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;; generic close method
+
+function close_method ,^val ,reentrant
+    reserved1       ,a              ; Reserved by system
+    reserved2       ,a              ; Reserved by system
+    ^val(a_wndid)   ,i              ; Window id receiving event
+    ^val(a_event)   ,i              ; Mouse/window event
+    ^val(a_arg5)    ,i              ; Argument 5
+    ^val(a_arg6)    ,i              ; Argument 6
+    ^val(a_arg7)    ,i              ; Argument 7
+    ^val(a_arg8)    ,i              ; Argument 8
+    ^val(a_arg9)    ,i              ; Argument 9
+
+.include "WND:tools.def"
+
+proc
+
+    using (a_event) select
+    (D_EVENT_CLOSE),
+        m_signal('O_QUIT')
+    endusing
+
+    freturn TRUE
+
+endfunction
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine syn_utils
+
+    a_data              ,a
+
+.include 'WND:tools.def'
+
+proc
+
+    using g_entnam select
+    ('U_ABOUT'),
+        u_about(D_APP, D_VERSION, %datecompiled)
+    endusing
+
+    xreturn
+
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+subroutine syn_entrst
+
+    a_nomod             ,n
+    a_reset             ,n
+
+.include 'WND:tools.def'
+
+proc
+
+    if(!a_nomod)
+        clear a_reset
+
+    xreturn
+
+endsubroutine
+
+;;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+

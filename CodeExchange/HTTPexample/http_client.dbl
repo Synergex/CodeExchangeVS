@@ -1,0 +1,456 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; HTTP_CLIENT.DBL
+;
+; Last revised : 2-Jun-2004
+;
+; Requires : Synergy/DE 8
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+.include 'INC:http.def'
+;
+; Logging routines use the USE_TOOLKIT define.  If defined, will use toolkit
+; window as a logging device, else TT: will be used.
+;
+.define USE_TOOLKIT
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Synergy HTTP Client Get
+
+function HTTP_CLIENT_GET_FILE ,^VAL
+    a_host      ,a          ;REQUIRED HOST name (or TCP/IP address)
+    a_port      ,n          ;OPTIONAL port number
+    a_logging   ,n          ;OPTIONAL logging mode
+    a_logfile   ,a          ;OPTIONAL log file
+    a_hst_file  ,a          ;REQUIRED name of file on host
+    a_clt_file  ,a          ;OPTIONAL name of file on client
+
+.include 'DBLDIR:synxml.def'
+
+    external function
+        URLencode   ,a
+
+    structure bd
+        bdy         ,a1
+
+.align
+    record clr_i
+        recvhdl     ,D_HANDLE   ;Receive message handle
+        recvlen     ,i4         ;Receive message length
+        tt_chan     ,i4         ;Display logging channel
+        status      ,i4         ;Return value
+        PortNo      ,i4         ;Port number to use
+        timeout     ,i4         ;Timeout setting in seconds
+        post_chan   ,i4         ;channel to write data
+        log_mode    ,i4         ;log mode
+        wid         ,i4         ;log window ID
+        fstatus     ,i4         ;return status
+
+.align
+    record clr
+        URI         ,a512       ;URI for the request
+        errmsg      ,a80        ;Error message field
+        group crlf  ,a2         ;Carriage return & line feed
+            cr          ,a1        ;Carriage Return
+            lf          ,a1        ;Line Feed
+        endgroup
+        headers     ,[5]a499    ;HTTP headers
+
+proc
+
+    clear clr, ^i(clr_i)
+
+    ; Set the PortNo to use
+    if(^passed(a_port) .and. a_port) then
+        PortNo = a_port
+    else
+        PortNo = 80
+
+    if(^passed(a_logging)) then
+        log_mode = a_logging
+    else
+        log_mode = D_HTTP_LOG_ERR
+
+    if(log_mode)
+    begin
+        xcall opnlog(tt_chan, a_logfile)
+    end
+
+    xcall ascii(13, cr)
+    xcall ascii(10, lf)
+
+    ;assume error status
+    fstatus = 1
+
+    ;set the URI to use
+    URI = "http://" + %atrim(a_host) + ":" + %string(PortNo) + "/" + %URLEncode(a_hst_file)
+
+    if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_GET_FILE")
+        xcall wrtlog(tt_chan, a_logfile, "URI = " + %atrim(URI))
+    end
+
+    timeout = 0
+
+    ; Only one method needed for a GET request
+    status = %http_client_get(%atrim(URI), timeout, recvhdl, recvlen, errmsg, headers)
+    if (status) then
+    begin
+        if(log_mode)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_GET_FILE"
+&               + " status = " + %string(status) + " " + %atrim(errmsg))
+        end
+.ifdef USE_TOOLKIT
+        if(.not.tt_chan)
+            xcall u_message("status = " + %string(status) + " " + %atrim(errmsg))
+.endc ;USE_TOOLKIT
+    end
+    else
+    begin
+        if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_GET_FILE"
+&               + " no error getting file")
+        end
+
+        ;no error getting file
+        clear fstatus
+    end
+
+    if(log_mode .ge. D_HTTP_LOG_ALL)
+    begin
+        ; Receive body
+        if (recvhdl .and. recvlen) then
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_GET_FILE"
+&               + " msg = " + ^m(bd.bdy(1:recvlen), recvhdl))
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_GET_FILE"
+&               + " length = " + %string(recvlen))
+        end
+        else
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_GET_FILE"
+&               + " No Receive message ")
+        end
+    end
+
+    if (recvhdl .and. recvlen)
+    begin
+        post_chan = %syn_freechn
+        open (post_chan, O:S, a_clt_file, OPTIONS:'/stream', TEMPFILE) [ERR=badfile]
+
+        display(post_chan, ^m(bd.bdy(1:recvlen), recvhdl))
+
+        ;add CR/LF for text messages
+        display(post_chan, crlf)
+
+        close post_chan
+
+        if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_GET_FILE"
+&               + " created file [" + %atrim(a_clt_file) + "]")
+        if(0)
+        begin
+badfile,
+            if(log_mode)
+            begin
+                status = %error
+                xcall ertxt(status, errmsg)
+                xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_GET_FILE"
+&                   + " [" + %atrim(a_clt_file) + "]"
+&                   + " status = " + %string(status) + " " + %atrim(errmsg))
+            end
+            ;error writing file
+            fstatus = -1
+        end
+    end
+
+    ; Make sure any memory resources are released
+    if (recvhdl)
+        recvhdl = %mem_proc(DM_FREE, recvhdl)
+    clear recvlen
+
+    if(log_mode)
+        xcall clslog(tt_chan)
+
+    freturn fstatus
+end
+
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Synergy HTTP Client Post
+
+function HTTP_CLIENT_PUT_FILE ,^VAL
+    a_host      ,a          ;REQUIRED HOST name (or TCP/IP address)
+    a_port      ,n          ;OPTIONAL port number
+    a_logging   ,n          ;OPTIONAL logging mode
+    a_logfile   ,a          ;OPTIONAL log file
+    a_hst_file  ,a          ;REQUIRED name of file on host
+    a_clt_file  ,a          ;OPTIONAL name of file on client
+
+.include 'DBLDIR:synxml.def'
+
+    external function
+        URLencode   ,a
+
+    structure bd
+        bdy         ,a1
+
+.align
+    record clr_i
+        count       ,i8         ;Counter variable
+        numchrs     ,i8         ;Size of input line
+        recvhdl     ,D_HANDLE   ;Receive message handle
+        sendhdl     ,D_HANDLE   ;Send message handle
+        recvlen     ,i4         ;Receive message length
+        sendlen     ,i4         ;Send message length
+        tt_chan     ,i4         ;File logging channel
+        status      ,i4         ;Return value
+        PortNo      ,i4         ;Port number to use
+        timeout     ,i4         ;Timeout setting in seconds
+        get_chan    ,i4         ;channel to read xml file
+        log_mode    ,i4         ;logging mode
+        wid         ,i4         ;log window ID
+        fstatus     ,i4         ;return status
+
+.align
+    record clr
+        URI         ,a512       ;URI for the request
+        errmsg      ,a80        ;Error message field
+        group crlf  ,a2         ;Carriage return & line feed
+            cr          ,a1        ;Carriage Return
+            lf          ,a1        ;Line Feed
+        endgroup
+        headers     ,[5]a499    ;HTTP headers
+
+.align
+    record
+        msg         ,a D_SIZ_RECV_MSG ;For displaying buffer
+
+proc
+
+    clear clr, ^i(clr_i), msg
+
+    ; Set the PortNo to use
+    if(^passed(a_port) .and. a_port) then
+        PortNo = a_port
+    else
+        PortNo = 80
+
+    if(^passed(a_logging)) then
+        log_mode = a_logging
+    else
+        log_mode = D_HTTP_LOG_ERR
+
+    if(log_mode)
+    begin
+        xcall opnlog(tt_chan, a_logfile)
+    end
+
+    xcall ascii(13, cr)
+    xcall ascii(10, lf)
+
+    ;assume error status
+    fstatus = 1
+
+    ;set the URI to use
+    URI = "http://" + %atrim(a_host) + ":" + %string(PortNo) + "/" + %URLencode(a_hst_file)
+
+    if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE")
+        xcall wrtlog(tt_chan, a_logfile, "URI = " + %atrim(URI))
+    end
+
+    call get_file_to_send
+    if(status) then
+    begin
+        if(log_mode)
+        begin
+            if(^passed(a_clt_file) .and. a_clt_file) then
+                xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&                   + " Cannot open file "+%atrim(a_clt_file))
+            else
+                xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&                   + " Cannot open file "+%atrim(a_hst_file))
+        end
+    end
+    else
+        call post_method
+
+    if(log_mode)
+    begin
+        xcall clslog(tt_chan)
+    end
+
+    freturn fstatus
+
+;----------------------------------------------------------------------------
+; send (post) a file to the server
+
+post_method,
+
+    timeout = 0
+
+    headers[1] = ''
+    headers[2] = ''
+    headers[3] = ''
+    headers[4] = ''
+    headers[5] = ''
+
+    ; HTTP post request
+    status = %http_client_post(%atrim(URI), timeout, sendhdl, sendlen, recvhdl, recvlen, errmsg, headers)
+    if (status) then
+    begin
+        if(log_mode)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&               + " [" + %atrim(URI) + "]"
+&               + " status = " + %string(status) + " " + %atrim(errmsg))
+        end
+.ifdef USE_TOOLKIT
+        if(.not.tt_chan)
+            xcall u_message("status = " + %string(status) + " " + %atrim(errmsg))
+.endc ;USE_TOOLKIT
+    end
+    else
+    begin
+        if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&               + " [" + %atrim(URI) + "]"
+&               + " No errors ")
+        end
+        ;no error
+        clear fstatus
+    end
+
+    if(log_mode .ge. D_HTTP_LOG_ALL)
+    begin
+        ; Send body
+        if (sendhdl .and. sendlen) then
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&               + " Send msg = " + ^m(bd.bdy(1:sendlen), sendhdl))
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&               + " Send length = " + %string(sendlen))
+        end
+        else
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&               + " No send message ")
+        end
+    end
+
+    if(log_mode .ge. D_HTTP_LOG_ALL)
+    begin
+        ; Receive body
+        if (recvhdl .and. recvlen) then
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&               + " Recv msg = " + ^m(bd.bdy(1:recvlen), recvhdl))
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&               + " Recv length = " + %string(recvlen))
+        end
+        else
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_CLIENT_PUT_FILE"
+&               + " No receive message ")
+        end
+    end
+
+    ; Make sure any memory resources are releases
+    if (recvhdl)
+        recvhdl = %mem_proc(DM_FREE, recvhdl)
+    clear recvlen
+
+    if (sendhdl)
+        xcall mem_proc(DM_FREE, sendhdl)
+    clear sendlen
+
+    return
+
+;----------------------------------------------------------------------------
+get_file_to_send,
+
+    get_chan = %syn_freechn
+    if(^passed(a_clt_file) .and. a_clt_file) then
+        open (get_chan, I, a_clt_file) [ERR=nofile]
+    else
+        open (get_chan, I, a_hst_file) [ERR=nofile]
+
+    sendlen = D_SIZ_SEND_MSG
+    sendhdl = %mem_proc(DM_ALLOC+DM_STATIC, sendlen)
+    clear ^m(sendhdl)
+
+    count = 1
+    ;read file and add contents to buffer
+
+.ifdef D_VMS
+
+    repeat
+    begin
+        reads(get_chan, msg, thatsall)
+        numchrs = %rdlen
+        if (numchrs)
+            call add_msg
+    end
+
+.else
+
+    repeat
+    begin
+        gets(get_chan, msg, thatsall)
+        numchrs = %rdlen
+        if (numchrs)
+            call add_msg
+    end
+
+.endc ;D_VMS
+
+thatsall,
+
+    numchrs = %rdlen
+    if (numchrs)
+        call add_msg
+
+    if (count .lt. sendlen)
+    begin
+        sendhdl = %mem_proc(DM_RESIZ, count, sendhdl)
+        sendlen = count
+    end
+
+    clear status
+    return
+
+;----------------------------------------------------------------------------
+add_msg,
+    ;resize memory buffer (if required)
+    if (count+numchrs .gt. sendlen)
+    begin
+        while (count+numchrs .gt. sendlen)
+            sendlen += D_SIZ_SEND_MSG
+        sendhdl = %mem_proc(DM_RESIZ, sendlen, sendhdl)
+    end
+
+    ^m(bd.bdy(count:numchrs), sendhdl) = msg
+    count += numchrs
+
+    return
+
+;----------------------------------------------------------------------------
+;cannot find required file
+nofile,
+
+    ; Move the contents of the required file into dynamic memory array
+    if(sendhdl)
+        sendhdl = %mem_proc(DM_FREE, sendlen)
+    clear sendlen
+
+    status = 1
+
+    return
+
+end
+

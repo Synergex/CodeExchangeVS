@@ -1,0 +1,479 @@
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; HTTP_SERVER.DBL
+;
+; Last revised : 2-Jun-2004
+;
+; Requires : Synergy/DE 8
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+;
+.ifndef DBLNET
+;
+.include 'INC:http.def'
+;
+; Logging routines use the USE_TOOLKIT define.  If defined, will use toolkit
+; window as a logging device, else TT: will be used.
+;
+.define USE_TOOLKIT
+;
+;++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+; Synergy HTTP Server
+
+subroutine HTTP_SERVER
+    a_port      ,n          ;OPTIONAL server port
+    a_logging   ,n          ;OPTIONAL logging mode
+    a_logfile   ,a          ;OPTIONAL log file
+
+.include 'DBLDIR:synxml.def'
+
+    external function
+        parseURI    ,^val
+        URLdecode   ,a
+
+    structure bd
+        bdy         ,a1
+
+.align
+    record clr_i
+        httpsvr     ,HTTPSERVER_TYPE
+        count       ,i8         ;Counter variable
+        numchrs     ,i8         ;Size of input line
+        recvhdl     ,D_HANDLE   ;Receive message handle
+        sendhdl     ,D_HANDLE   ;Send message handle
+        recvlen     ,i4         ;Receive message length
+        sendlen     ,i4         ;Send message length
+        tt_chan     ,i4         ;Display logging channel
+        cur         ,i4         ;Current position in buffer
+        dsp         ,i4         ;Display position in buffer
+        left        ,i4         ;Bytes remaining in buffer
+        status      ,i4         ;Return value
+        http_status ,i4         ;HTTP status code
+        get_chan    ,i4         ;File channel to read
+        post_chan   ,i4         ;File channel to write
+        usePort     ,i4         ;Server port to use
+        timeout     ,i4         ;Timeout setting in seconds
+        log_mode    ,i4         ;log mode (0=none,1=error,2=main info,3=all)
+        wid         ,i4         ;server TT log window id
+
+.align
+    record clr
+        errortext   ,a80        ;Error text message
+        group crlf  ,a2         ;Carriage return & line feed
+            cr          ,a1        ;Carriage Return
+            lf          ,a1        ;Line Feed
+        endgroup
+        reason      ,a80        ;HTTP reason code
+        method      ,a20        ;HTTP method
+        URI         ,a512       ;URI for request
+        filenme     ,a255       ;Filename
+        headers     ,[5]a499    ;http headers
+
+.align
+    record
+        msg         ,a D_SIZ_SEND_MSG ;Holds send XML document
+
+proc
+
+    clear clr, ^i(clr_i), msg
+
+    if(^passed(a_port) .and. a_port) then
+        usePort = a_port
+    else
+        usePort = 80
+
+    if(^passed(a_logging)) then
+        log_mode = a_logging
+    else
+        log_mode = D_HTTP_LOG_NONE
+
+    xcall ascii(13, cr)
+    xcall ascii(10, lf)
+
+    if(log_mode)
+    begin
+        xcall opnlog(tt_chan, a_logfile)
+    end
+
+    ; Create the http class
+    status = %http_server_create(httpsvr, usePort, errortext)
+    if (status)
+    begin
+        if(log_mode)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "http_server_create"
+&               + " status = " + %string(status) + " " + %atrim(errortext))
+        end
+        goto createError
+    end
+
+    ; The loop waits for a clients request, handles the HTTP method and
+    ; creates the response to be sent back to the client. The loop is
+    ; terminated when client sends a URI containing D_SHUTDOWN_MSG text
+
+    do  begin
+        if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER Waiting for client")
+
+        timeout = 0
+        ; Get the Request message
+        status = %http_server_receive(httpsvr, URI, method, timeout,
+&           recvhdl, recvlen, errortext, headers)
+        if(status)
+        begin
+            if(log_mode)
+            begin
+                xcall wrtlog(tt_chan, a_logfile, "http_server_receive"
+&                   + " status = " + %string(status) + " " + %atrim(errortext))
+                xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER "
+&                   + "Method = " + %atrim(method) + " URI = " + %atrim(URI))
+            end
+            goto receiveError
+        end
+
+        if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER Method = " + %atrim(method) + " URI = " + %atrim(URI))
+        end
+
+        if(log_mode .ge. D_HTTP_LOG_ALL)
+        begin
+            if (recvhdl .and. recvlen) then
+            begin
+                xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER msg = "
+&                   + ^m(bd.bdy(1:recvlen),recvhdl))
+                xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER recvlen = " + %string(recvlen))
+            end
+            else
+                xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER No message received")
+        end
+
+        upcase method
+        ; See what type of request we recieved
+        using method select
+        ("HEAD"),
+        call OK_response
+        ("GET"),
+        call get_method
+        ("POST"),
+        call post_method
+        (),
+        call badRequest
+        endusing
+
+        if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, " ")
+            xcall wrtlog(tt_chan, a_logfile, " *********************************** ")
+            xcall wrtlog(tt_chan, a_logfile, " ")
+        end
+
+        ; Make sure any memory resources are released
+        if (recvhdl)
+            recvhdl = %mem_proc(DM_FREE, recvhdl)
+        clear recvlen
+    end
+    until (%instr(1, URI, D_SHUTDOWN_MSG))
+
+    ; Delete the http class
+    status = %http_server_delete(httpsvr)
+
+    if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER ended OK")
+    end
+
+stop,
+
+    if(log_mode)
+    begin
+        xcall clslog(tt_chan)
+    end
+
+    xreturn
+
+;----------------------------------------------------------------------------
+
+receiveError,
+    ; Delete the http class
+    status = %http_server_delete(httpsvr)
+
+createError,
+
+    if(log_mode)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER  errortext = " + errortext)
+    end
+
+    goto stop
+
+;----------------------------------------------------------------------------
+;get - read file from disk and construct message
+get_method,
+
+    ; Look for termination string in the URI sent by the client http process
+    if (%instr(1, URI, D_SHUTDOWN_MSG))
+    begin
+        call OK_response
+        return
+    end
+
+    ;get filename from URI
+    status = %parseURI(URI, filenme)
+    if(status)
+        goto get_nofile1
+
+    filenme = %URLdecode(filenme)
+
+    ;open file
+    get_chan = %syn_freechn
+    open (get_chan, I, filenme) [ERR=get_nofile]
+
+    sendlen = D_SIZ_SEND_MSG
+    sendhdl = %mem_proc(DM_ALLOC+DM_STATIC, sendlen)
+    clear ^m(sendhdl)
+
+    count = 1
+    ;read file and add contents to buffer
+
+.ifdef D_VMS
+
+    repeat
+    begin
+        reads(get_chan, msg, thatsall)
+        numchrs = %rdlen
+        if (numchrs)
+            call add_msg
+    end
+
+.else
+
+    repeat
+    begin
+        gets(get_chan, msg, thatsall)
+        numchrs = %rdlen
+        if (numchrs)
+            call add_msg
+    end
+
+.endc ;D_VMS
+
+thatsall,
+
+    ;any characters still in read buffer
+    numchrs = %rdlen
+    if (numchrs)
+        call add_msg
+
+    close get_chan
+
+    ;must ensure that there's a trailing CR/LF for text documents
+    if(count.gt.1)
+    begin
+        ^m(bd.bdy(count:2), sendhdl) = crlf
+        count += 2
+    end
+
+    ;resize memory buffer to correct size
+    if (count .lt. sendlen)
+    begin
+        sendhdl = %mem_proc(DM_RESIZ, count, sendhdl)
+        sendlen = count
+    end
+
+    http_status = 200
+    reason = "OK"
+
+    headers[1] = ''
+    headers[2] = ''
+    headers[3] = ''
+    headers[4] = ''
+    headers[5] = ''
+
+    ;send document
+    status = %http_server_send(httpsvr, http_status, reason, sendhdl, sendlen, errortext, headers)
+
+    if(status) then
+    begin
+        if(log_mode)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "http_server_send [" + %atrim(filenme) + "]"
+&               + " status = " + %string(status) + " " + %atrim(errortext))
+        end
+    end
+    else
+    begin
+        if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+        begin
+            xcall wrtlog(tt_chan, a_logfile, "http_server_send [" + %atrim(filenme) + "]")
+        end
+    end
+
+    sendhdl = %mem_proc(DM_FREE, sendhdl)
+    clear sendlen
+
+    return
+
+get_nofile,
+
+    if(log_mode)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER Filename = "+%atrim(filenme)
+&           +"  status = "+%string(%error))
+    end
+
+get_nofile1,
+
+    call FileNotfound
+
+    return
+
+;----------------------------------------------------------------------------
+; add contents of msg buffer to memory buffer
+add_msg,
+
+    ;resize memory buffer (if required)
+    if (count+numchrs .gt. sendlen)
+    begin
+        while (count+numchrs .gt. sendlen)
+            sendlen += D_SIZ_SEND_MSG
+        sendhdl = %mem_proc(DM_RESIZ, sendlen, sendhdl)
+    end
+
+    ^m(bd.bdy(count:numchrs), sendhdl) = msg
+    count += numchrs
+
+    return
+
+;----------------------------------------------------------------------------
+;Post - get data from message and store on disk
+post_method,
+
+    status = %parseURI(URI, filenme)
+    if(status)
+        goto post_nofile1
+
+    filenme = %URLdecode(filenme)
+
+    if (recvhdl .and. recvlen)
+    begin
+        post_chan = %syn_freechn
+        open (post_chan, O:S, filenme, OPTIONS:'/stream', TEMPFILE) [ERR=post_nofile]
+
+        display(post_chan, ^m(bd.bdy(1:recvlen), recvhdl))
+
+        ;add CR/LF for text messages
+        display(post_chan, crlf)
+
+        close post_chan
+    end
+
+    if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, "http_server_receive [" + %atrim(filenme) + "]")
+    end
+
+    call OK_response
+
+    return
+
+post_nofile,
+
+    if(log_mode)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER Filename = "+%atrim(filenme)
+&           +"  status = "+%string(%error))
+    end
+
+post_nofile1,
+
+    call badRequest
+
+    return
+
+;----------------------------------------------------------------------------
+;Build and send a generic OK response
+OK_response,
+
+    http_status = 200
+    reason = "OK"
+
+    if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, " ")
+        xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER "+%atrim(reason)+" Response Message")
+    end
+
+    if(sendhdl)
+        sendhdl = %mem_proc(DM_FREE, sendhdl)
+
+    msg = "<HTML>" + crlf
+&       + "<BODY>" + crlf
+&       + " Generic OK Response Message " + crlf
+&       + "</BODY>" + crlf
+&       + "</HTML>" + crlf
+    sendlen = %trim(msg)
+    sendhdl = %mem_proc(DM_ALLOC+DM_STATIC, sendlen)
+    ^m(sendhdl) = msg
+
+    status = %http_server_send(httpsvr, http_status, reason, sendhdl, sendlen, errortext, headers)
+
+    if(status .and. log_mode)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, "http_server_send [" + %atrim(reason) + "]"
+&           + " status = " + %string(status) + " " + %atrim(errortext))
+    end
+
+    sendhdl = %mem_proc(DM_FREE, sendhdl)
+    clear sendlen
+    return
+
+;----------------------------------------------------------------------------
+;Build and send a status 400 bad request
+badRequest,
+
+    http_status = 400
+    reason = "Bad Request"
+
+    call send_error
+
+    return
+
+;----------------------------------------------------------------------------
+;Build and send a status 404 file not found response
+FileNotFound,
+
+    http_status = 404
+    reason = "File Not Found"
+
+    call send_error
+
+    return
+
+;----------------------------------------------------------------------------
+; generic "send an error" to HTTP server
+
+send_error,
+
+    if(log_mode .ge. D_HTTP_LOG_SUCCESS)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, " ")
+        xcall wrtlog(tt_chan, a_logfile, "HTTP_SERVER "+%atrim(reason)+" Response Message")
+    end
+
+    if(sendhdl)
+        sendhdl = %mem_proc(DM_FREE, sendhdl)
+    clear sendlen
+
+    status = %http_server_send(httpsvr, http_status, reason, sendhdl, sendlen, errortext)
+
+    if(status .and. log_mode)
+    begin
+        xcall wrtlog(tt_chan, a_logfile, "http_server_send [" + %atrim(reason) + "]"
+&           + " status = " + %string(status) + " " + %atrim(errortext))
+    end
+
+    return
+
+end
+
+.endc ;DBLNET

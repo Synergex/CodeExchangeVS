@@ -1,0 +1,142 @@
+function fixDecimal ,d
+req in  aFld            ,d              ;number
+endparams
+record
+    pos                 ,i4     ,0
+    decFld              ,d18    ,0
+proc
+    onerror notNumber
+    decFld = aFld
+    for pos from 1 thru %size(decFld)
+    begin
+        using ^a(decFld(pos:1)) select
+        ('0' thru '9'),
+            nop
+        ('p' thru 'y'),
+        begin
+            if(pos != %size(decFld))
+                goto notNumber
+        end
+        (' '),
+            ^a(decFld(pos:1)) = '0'
+        (),
+            goto notNumber
+        endusing
+    end
+    offerror
+    freturn decFld
+notNumber,
+    offerror
+    freturn 0
+endfunction
+
+
+function fixFloat ,d.
+req in  aFld            ,d.             ;number
+endparams
+record
+    pos                 ,i4     ,0
+    decFld              ,d28.10 ,0
+proc
+    onerror notNumber
+    decFld = aFld
+    for pos from 1 thru %size(decFld)
+    begin
+        using ^a(aFld(pos:1)) select
+        ('0' thru '9'),
+            nop
+        ('p' thru 'y'),
+        begin
+            if(pos != %size(decFld))
+                goto notNumber
+        end
+        (' '),
+            ^a(decFld(pos:1)) = '0'
+        (),
+            goto notNumber
+        endusing
+    end
+    offerror
+    freturn decFld
+notNumber,
+    offerror
+    freturn 0
+endfunction
+
+
+function fixDate ,d
+req in mismatch  aFld   ,n              ;date YYYYMMDD
+opt in  aFix            ,n              ;fix bad day in month
+endparams
+record
+    pos                 ,i4
+    maxDay              ,i4
+    group yyyymmdd      ,d
+        cc              ,d2
+        group yymmdd    ,d
+            yy          ,d2
+            mm          ,d2
+            dd          ,d2
+        endgroup
+    endgroup
+proc
+    onerror notDate
+    freturn %ndate(%jperiod(aFld))
+notDate,
+    if(^passed(aFix) && aFix)
+    begin
+        onerror badDate
+        yyyymmdd = aFld
+        if(cc && cc < 19)
+            goto badDate
+        using mm select
+        (01, 03, 05, 07, 08, 10, 12),
+        begin
+            using dd select
+            (1 thru 31),
+                maxDay = dd
+            (),
+                maxDay = 31
+            endusing
+        end
+        (04, 06, 09, 11),
+        begin
+            using dd select
+            (1 thru 30),
+                maxDay = dd
+            (),
+                maxDay = 30
+            endusing
+        end
+        (02),
+            using dd select
+            (01 thru 28),
+                maxDay = dd
+            (29),
+            begin
+                maxDay = 29
+                if(yy != (yy / 4) * 4)
+                    maxDay = 28
+                if(!yy && (cc != (cc / 4) * 4))
+                    maxDay = 28
+            end
+            (),
+                maxDay = 28
+            endusing
+        (),
+            goto badDate
+        endusing
+        if(dd < 1)
+            goto badDate
+        if(dd > 31)
+            goto badDate
+        if(dd > maxDay)
+            dd = maxDay
+        offerror
+        freturn yyyymmdd
+    end
+badDate,
+    offerror
+    freturn 0
+endfunction
+
